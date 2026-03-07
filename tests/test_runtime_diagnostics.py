@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import subprocess
-import sys
+from dataclasses import dataclass
 from typing import Any
 
-from pycomfy.runtime import check_runtime
 import pycomfy.runtime as runtime_module
+from pycomfy.runtime import check_runtime
 
 
 @dataclass

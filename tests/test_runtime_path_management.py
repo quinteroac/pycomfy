@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
 import subprocess
 import sys
+from pathlib import Path
 
 
 def _repo_root() -> Path:
@@ -56,7 +56,8 @@ def test_path_insertion_is_minimal_and_not_duplicated() -> None:
             "importlib.reload(pycomfy)\n"
             "matches = [p for p in sys.path if p == expected]\n"
             "vendor_entries = [p for p in sys.path if '/vendor/' in p.replace('\\\\\\\\', '/')]\n"
-            "print(json.dumps({'expected': expected, 'matches': len(matches), 'vendor_entries': vendor_entries}))\n"
+            "print(json.dumps({'expected': expected, 'matches': len(matches),"
+            " 'vendor_entries': vendor_entries}))\n"
         ),
         cwd=_repo_root(),
     )
@@ -74,8 +75,10 @@ def test_import_works_from_any_working_directory(tmp_path: Path) -> None:
             "import json\n"
             "import pycomfy\n"
             "import sys\n"
-            "comfyui_path = str(Path(pycomfy.__file__).resolve().parents[1] / 'vendor' / 'ComfyUI')\n"
-            "print(json.dumps({'cwd': str(Path.cwd()), 'comfyui_path': comfyui_path, 'on_path': comfyui_path in sys.path}))\n"
+            "comfyui_path = str("
+            "Path(pycomfy.__file__).resolve().parents[1] / 'vendor' / 'ComfyUI')\n"
+            "print(json.dumps({'cwd': str(Path.cwd()), 'comfyui_path': comfyui_path,"
+            " 'on_path': comfyui_path in sys.path}))\n"
         ),
         cwd=tmp_path,
     )

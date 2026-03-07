@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import subprocess
-import tomllib
 import sys
+import tomllib
 from pathlib import Path
 
 
