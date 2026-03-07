@@ -20,12 +20,15 @@ from pycomfy.sampling import (
     cfg_guider,
     disable_noise,
     flux2_scheduler,
+    get_sampler,
     karras_scheduler,
     ltxv_scheduler,
     random_noise,
     sample,
     sample_advanced,
     sample_custom,
+    split_sigmas,
+    split_sigmas_denoise,
 )
 
 
@@ -62,6 +65,9 @@ def test_sampling_public_api_exports_all_entrypoints() -> None:
     assert ays_scheduler.__name__ == "ays_scheduler"
     assert flux2_scheduler.__name__ == "flux2_scheduler"
     assert ltxv_scheduler.__name__ == "ltxv_scheduler"
+    assert split_sigmas.__name__ == "split_sigmas"
+    assert split_sigmas_denoise.__name__ == "split_sigmas_denoise"
+    assert get_sampler.__name__ == "get_sampler"
     assert sampling_module.__all__ == [
         "sample",
         "sample_advanced",
@@ -75,6 +81,9 @@ def test_sampling_public_api_exports_all_entrypoints() -> None:
         "ays_scheduler",
         "flux2_scheduler",
         "ltxv_scheduler",
+        "split_sigmas",
+        "split_sigmas_denoise",
+        "get_sampler",
     ]
 
 
@@ -173,6 +182,24 @@ def test_ltxv_scheduler_signature_matches_contract() -> None:
         "(steps: 'int', max_shift: 'float', base_shift: 'float', *, "
         "stretch: 'bool' = True, terminal: 'float' = 0.1, latent: 'Any' = None) -> 'Any'"
     )
+
+
+def test_split_sigmas_signature_matches_contract() -> None:
+    signature = inspect.signature(split_sigmas)
+
+    assert str(signature) == "(sigmas: 'Any', step: 'int') -> 'tuple[Any, Any]'"
+
+
+def test_split_sigmas_denoise_signature_matches_contract() -> None:
+    signature = inspect.signature(split_sigmas_denoise)
+
+    assert str(signature) == "(sigmas: 'Any', denoise: 'float') -> 'tuple[Any, Any]'"
+
+
+def test_get_sampler_signature_matches_contract() -> None:
+    signature = inspect.signature(get_sampler)
+
+    assert str(signature) == "(sampler_name: 'str') -> 'Any'"
 
 
 def test_basic_guider_wraps_basic_guider_type(
@@ -458,6 +485,118 @@ def test_scheduler_wrappers_extract_from_nodeoutput_result(
     assert ays_scheduler("SD1", 10) is ays_value
     assert flux2_scheduler(10, 1024, 1024) is flux2_value
     assert ltxv_scheduler(10, 2.05, 0.95) is ltxv_value
+
+
+def test_split_sigmas_wraps_split_sigmas_execute(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sigmas = object()
+    high_sigmas = object()
+    low_sigmas = object()
+    recorded: dict[str, Any] = {}
+
+    class FakeSplitSigmas:
+        @classmethod
+        def execute(cls, received_sigmas: Any, received_step: int) -> tuple[Any, Any]:
+            recorded["args"] = (received_sigmas, received_step)
+            return high_sigmas, low_sigmas
+
+    monkeypatch.setattr(sampling_module, "_get_split_sigmas_type", lambda: FakeSplitSigmas)
+    first, second = split_sigmas(sigmas, 6)
+
+    assert recorded["args"] == (sigmas, 6)
+    assert first is high_sigmas
+    assert second is low_sigmas
+
+
+def test_split_sigmas_denoise_wraps_split_sigmas_denoise_execute(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sigmas = object()
+    high_sigmas = object()
+    low_sigmas = object()
+    recorded: dict[str, Any] = {}
+
+    class FakeSplitSigmasDenoise:
+        @classmethod
+        def execute(cls, received_sigmas: Any, received_denoise: float) -> tuple[Any, Any]:
+            recorded["args"] = (received_sigmas, received_denoise)
+            return high_sigmas, low_sigmas
+
+    monkeypatch.setattr(
+        sampling_module,
+        "_get_split_sigmas_denoise_type",
+        lambda: FakeSplitSigmasDenoise,
+    )
+    first, second = split_sigmas_denoise(sigmas, 0.55)
+
+    assert recorded["args"] == (sigmas, 0.55)
+    assert first is high_sigmas
+    assert second is low_sigmas
+
+
+def test_get_sampler_wraps_ksampler_select_execute(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sampler = object()
+    recorded: dict[str, Any] = {}
+
+    class FakeKSamplerSelect:
+        @classmethod
+        def execute(cls, received_sampler_name: str) -> tuple[Any]:
+            recorded["args"] = (received_sampler_name,)
+            return (sampler,)
+
+    monkeypatch.setattr(
+        sampling_module,
+        "_get_ksampler_select_type",
+        lambda: FakeKSamplerSelect,
+    )
+    result = get_sampler("dpmpp_2m")
+
+    assert recorded["args"] == ("dpmpp_2m",)
+    assert result is sampler
+
+
+def test_split_and_sampler_wrappers_extract_from_nodeoutput_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    split_first = object()
+    split_second = object()
+    denoise_first = object()
+    denoise_second = object()
+    sampler = object()
+
+    class FakeNodeOutput:
+        def __init__(self, *values: Any) -> None:
+            self.result = values
+
+    class FakeSplitSigmas:
+        @classmethod
+        def execute(cls, *args: Any) -> FakeNodeOutput:
+            return FakeNodeOutput(split_first, split_second)
+
+    class FakeSplitSigmasDenoise:
+        @classmethod
+        def execute(cls, *args: Any) -> FakeNodeOutput:
+            return FakeNodeOutput(denoise_first, denoise_second)
+
+    class FakeKSamplerSelect:
+        @classmethod
+        def execute(cls, *args: Any) -> FakeNodeOutput:
+            return FakeNodeOutput(sampler)
+
+    monkeypatch.setattr(sampling_module, "_get_split_sigmas_type", lambda: FakeSplitSigmas)
+    monkeypatch.setattr(
+        sampling_module,
+        "_get_split_sigmas_denoise_type",
+        lambda: FakeSplitSigmasDenoise,
+    )
+    monkeypatch.setattr(sampling_module, "_get_ksampler_select_type", lambda: FakeKSamplerSelect)
+
+    assert split_sigmas(object(), 3) == (split_first, split_second)
+    assert split_sigmas_denoise(object(), 0.8) == (denoise_first, denoise_second)
+    assert get_sampler("euler") is sampler
 
 
 def test_sample_returns_raw_denoised_latent_without_transformation(
@@ -1101,6 +1240,66 @@ def test_uv_run_python_imports_ltxv_scheduler_on_cpu_only_machine_smoke() -> Non
     assert result.stdout.strip() == "ok"
 
 
+def test_uv_run_python_imports_split_sigmas_on_cpu_only_machine_smoke() -> None:
+    result = subprocess.run(
+        [
+            "uv",
+            "run",
+            "python",
+            "-c",
+            "from pycomfy.sampling import split_sigmas; print('ok')",
+        ],
+        cwd=_repo_root(),
+        env=os.environ.copy(),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert result.stdout.strip() == "ok"
+
+
+def test_uv_run_python_imports_split_sigmas_denoise_on_cpu_only_machine_smoke() -> None:
+    result = subprocess.run(
+        [
+            "uv",
+            "run",
+            "python",
+            "-c",
+            "from pycomfy.sampling import split_sigmas_denoise; print('ok')",
+        ],
+        cwd=_repo_root(),
+        env=os.environ.copy(),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert result.stdout.strip() == "ok"
+
+
+def test_uv_run_python_imports_get_sampler_on_cpu_only_machine_smoke() -> None:
+    result = subprocess.run(
+        [
+            "uv",
+            "run",
+            "python",
+            "-c",
+            "from pycomfy.sampling import get_sampler; print('ok')",
+        ],
+        cwd=_repo_root(),
+        env=os.environ.copy(),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert result.stdout.strip() == "ok"
+
+
 def test_import_pycomfy_sampling_has_no_additional_heavy_side_effects() -> None:
     result = _run_python(
         "import json\n"
@@ -1110,8 +1309,8 @@ def test_import_pycomfy_sampling_has_no_additional_heavy_side_effects() -> None:
         "baseline_modules = set(sys.modules)\n"
         "from pycomfy.sampling import "
         "ays_scheduler, basic_guider, basic_scheduler, cfg_guider, disable_noise, "
-        "flux2_scheduler, karras_scheduler, ltxv_scheduler, random_noise, "
-        "sample, sample_advanced, sample_custom\n"
+        "flux2_scheduler, get_sampler, karras_scheduler, ltxv_scheduler, random_noise, "
+        "sample, sample_advanced, sample_custom, split_sigmas, split_sigmas_denoise\n"
         "post_modules = set(sys.modules)\n"
         "new_modules = sorted(post_modules - baseline_modules)\n"
         "payload = {\n"
@@ -1125,6 +1324,9 @@ def test_import_pycomfy_sampling_has_no_additional_heavy_side_effects() -> None:
         "  'cfg_name': cfg_guider.__name__,\n"
         "  'karras_name': karras_scheduler.__name__,\n"
         "  'ltxv_name': ltxv_scheduler.__name__,\n"
+        "  'split_name': split_sigmas.__name__,\n"
+        "  'split_denoise_name': split_sigmas_denoise.__name__,\n"
+        "  'sampler_name': get_sampler.__name__,\n"
         "  'random_name': random_noise.__name__,\n"
         "  'disable_name': disable_noise.__name__,\n"
         "  'path_unchanged': baseline_path == list(sys.path),\n"
@@ -1147,6 +1349,9 @@ def test_import_pycomfy_sampling_has_no_additional_heavy_side_effects() -> None:
     assert payload["cfg_name"] == "cfg_guider"
     assert payload["karras_name"] == "karras_scheduler"
     assert payload["ltxv_name"] == "ltxv_scheduler"
+    assert payload["split_name"] == "split_sigmas"
+    assert payload["split_denoise_name"] == "split_sigmas_denoise"
+    assert payload["sampler_name"] == "get_sampler"
     assert payload["random_name"] == "random_noise"
     assert payload["disable_name"] == "disable_noise"
     assert payload["path_unchanged"] is True

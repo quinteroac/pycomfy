@@ -115,6 +115,36 @@ def _get_sampler_custom_advanced_type() -> Any:
     return SamplerCustomAdvanced
 
 
+def _get_split_sigmas_type() -> Any:
+    """Resolve ComfyUI SplitSigmas implementation at call time."""
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    from comfy_extras.nodes_custom_sampler import SplitSigmas
+
+    return SplitSigmas
+
+
+def _get_split_sigmas_denoise_type() -> Any:
+    """Resolve ComfyUI SplitSigmasDenoise implementation at call time."""
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    from comfy_extras.nodes_custom_sampler import SplitSigmasDenoise
+
+    return SplitSigmasDenoise
+
+
+def _get_ksampler_select_type() -> Any:
+    """Resolve ComfyUI KSamplerSelect implementation at call time."""
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    from comfy_extras.nodes_custom_sampler import KSamplerSelect
+
+    return KSamplerSelect
+
+
 def _unwrap_node_output(output: Any) -> Any:
     """Return the first node output value from ComfyUI V3 or tuple-style APIs."""
     result = getattr(output, "result", output)
@@ -209,6 +239,28 @@ def ltxv_scheduler(
             latent,
         )
     )
+
+
+def split_sigmas(sigmas: Any, step: int) -> tuple[Any, Any]:
+    """Split SIGMAS by step index using ComfyUI SplitSigmas."""
+    split_sigmas_type = _get_split_sigmas_type()
+    output = split_sigmas_type.execute(sigmas, step)
+    result = getattr(output, "result", output)
+    return result[0], result[1]
+
+
+def split_sigmas_denoise(sigmas: Any, denoise: float) -> tuple[Any, Any]:
+    """Split SIGMAS by denoise percent using ComfyUI SplitSigmasDenoise."""
+    split_sigmas_denoise_type = _get_split_sigmas_denoise_type()
+    output = split_sigmas_denoise_type.execute(sigmas, denoise)
+    result = getattr(output, "result", output)
+    return result[0], result[1]
+
+
+def get_sampler(sampler_name: str) -> Any:
+    """Build a SAMPLER object using ComfyUI KSamplerSelect."""
+    ksampler_select_type = _get_ksampler_select_type()
+    return _unwrap_node_output(ksampler_select_type.execute(sampler_name))
 
 
 def sample(
@@ -325,4 +377,7 @@ __all__ = [
     "ays_scheduler",
     "flux2_scheduler",
     "ltxv_scheduler",
+    "split_sigmas",
+    "split_sigmas_denoise",
+    "get_sampler",
 ]
