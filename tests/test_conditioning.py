@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import json
 import os
+import inspect
 import subprocess
 import sys
 from pathlib import Path
 
+import pycomfy.conditioning as conditioning
 from pycomfy.conditioning import encode_prompt
 
 
@@ -67,6 +69,33 @@ def test_encode_prompt_returns_raw_clip_conditioning_output() -> None:
     assert result is sentinel_conditioning
     assert clip.tokenize_calls == ["a portrait of a woman, studio lighting"]
     assert clip.encode_calls == [expected_tokens]
+
+
+def test_encode_prompt_supports_negative_prompt_text() -> None:
+    sentinel_conditioning = object()
+    expected_tokens = {"tokenized": "ugly, blurry"}
+
+    class FakeClip:
+        def tokenize(self, text: str) -> object:
+            assert text == "ugly, blurry"
+            return expected_tokens
+
+        def encode_from_tokens_scheduled(self, tokens: object) -> object:
+            assert tokens is expected_tokens
+            return sentinel_conditioning
+
+    result = encode_prompt(FakeClip(), "ugly, blurry")
+
+    assert result is not None
+    assert result is sentinel_conditioning
+
+
+def test_conditioning_public_api_has_single_encode_prompt_entrypoint() -> None:
+    signature = inspect.signature(encode_prompt)
+
+    assert "is_negative" not in signature.parameters
+    assert not hasattr(conditioning, "encode_negative_prompt")
+    assert conditioning.__all__ == ["encode_prompt"]
 
 
 def test_import_pycomfy_conditioning_has_no_torch_or_loader_side_effects() -> None:

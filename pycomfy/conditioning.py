@@ -12,7 +12,11 @@ class _ClipTextEncoder(Protocol):
 
 
 def encode_prompt(clip: _ClipTextEncoder, text: str) -> Any:
-    """Encode prompt text with a ComfyUI-compatible CLIP object."""
+    """Encode prompt text with a ComfyUI-compatible CLIP object.
+
+    Positive and negative prompts use the same encoding path; prompt
+    semantics are owned by the caller.
+    """
     tokens = clip.tokenize(text)
     return clip.encode_from_tokens_scheduled(tokens)
 
