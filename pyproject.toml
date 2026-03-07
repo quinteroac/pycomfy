@@ -15,7 +15,7 @@ cpu = ["torch"]
 cuda = ["torch"]
 
 [dependency-groups]
-dev = ["pytest>=8.0"]
+dev = ["pytest>=8.0", "ruff>=0.4", "mypy>=1.10"]
 
 [tool.setuptools.packages.find]
 include = ["pycomfy*"]
@@ -38,6 +38,18 @@ explicit = true
 name = "pytorch-cuda"
 url = "https://download.pytorch.org/whl/cu124"
 explicit = true
+
+[tool.ruff]
+target-version = "py312"
+line-length = 99
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

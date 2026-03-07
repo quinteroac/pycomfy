@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import importlib
-from typing import Any
 import sys
+from typing import Any
 
 
 def _python_version() -> str:
@@ -34,7 +34,7 @@ def _runtime_not_responsive(python_version: str, message: str) -> dict[str, Any]
 
 
 def _bytes_to_mb(value: int) -> int:
-    return int(value / (1024 * 1024))
+    return value // (1024 * 1024)
 
 
 def check_runtime() -> dict[str, Any]:
@@ -49,27 +49,30 @@ def check_runtime() -> dict[str, Any]:
 
     try:
         device = model_management.get_torch_device()
-        total_memory_bytes = model_management.get_total_memory(device)
-        free_memory_bytes = model_management.get_free_memory(device)
     except Exception as exc:
         return _runtime_not_responsive(python_version, str(exc))
 
+    comfyui_version = str(getattr(comfyui_version_module, "__version__", "unknown"))
     device_str = str(device)
     device_type = getattr(device, "type", "")
 
     if device_type == "cpu" or device_str == "cpu":
         return {
-            "comfyui_version": str(
-                getattr(comfyui_version_module, "__version__", "unknown")
-            ),
+            "comfyui_version": comfyui_version,
             "device": "cpu",
             "vram_total_mb": 0,
             "vram_free_mb": 0,
             "python_version": python_version,
         }
 
+    try:
+        total_memory_bytes = model_management.get_total_memory(device)
+        free_memory_bytes = model_management.get_free_memory(device)
+    except Exception as exc:
+        return _runtime_not_responsive(python_version, str(exc))
+
     return {
-        "comfyui_version": str(getattr(comfyui_version_module, "__version__", "unknown")),
+        "comfyui_version": comfyui_version,
         "device": device_str,
         "vram_total_mb": _bytes_to_mb(int(total_memory_bytes)),
         "vram_free_mb": _bytes_to_mb(int(free_memory_bytes)),
