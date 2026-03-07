@@ -18,7 +18,13 @@ import pycomfy
 import pycomfy.vae as vae_module
 from pycomfy import vae_decode, vae_decode_tiled, vae_encode_tiled
 from pycomfy.models import CheckpointResult
-from pycomfy.vae import vae_decode_batch, vae_decode_batch_tiled, vae_encode, vae_encode_batch
+from pycomfy.vae import (
+    vae_decode_batch,
+    vae_decode_batch_tiled,
+    vae_encode,
+    vae_encode_batch,
+    vae_encode_batch_tiled,
+)
 from pycomfy.vae import vae_encode_tiled as vae_encode_tiled_from_module
 
 
@@ -89,6 +95,7 @@ def test_vae_module_exports_decode_and_encode() -> None:
         "vae_encode",
         "vae_encode_batch",
         "vae_encode_tiled",
+        "vae_encode_batch_tiled",
     ]
 
 
@@ -655,6 +662,76 @@ def test_vae_encode_tiled_has_expected_type_signature() -> None:
         "(vae: '_VaeEncoderTiled', image: 'Image.Image', tile_size: 'int' = 512, "
         "overlap: 'int' = 64) -> 'dict[str, Any]'"
     )
+
+
+def test_vae_encode_batch_tiled_has_expected_type_signature() -> None:
+    fn_signature = signature(vae_module.vae_encode_batch_tiled)
+
+    assert str(fn_signature) == (
+        "(vae: '_VaeEncoderTiled', images: 'list[Image.Image]', tile_size: 'int' = 512, "
+        "overlap: 'int' = 64) -> 'dict[str, Any]'"
+    )
+
+
+def test_vae_encode_batch_tiled_encodes_each_image_and_concatenates_samples() -> None:
+    calls: list[tuple[Any, int, int, int]] = []
+    encoded_batches = [
+        _FakeTensor([[[[1.0, 2.0]]]]),
+        _FakeTensor([[[[3.0, 4.0]]]]),
+    ]
+
+    class _MockVae:
+        def __init__(self) -> None:
+            self._index = 0
+
+        def encode_tiled(
+            self,
+            pixel_samples: Any,
+            *,
+            tile_x: int,
+            tile_y: int,
+            overlap: int,
+        ) -> _FakeTensor:
+            calls.append((pixel_samples, tile_x, tile_y, overlap))
+            batch = encoded_batches[self._index]
+            self._index += 1
+            return batch
+
+    images = [
+        Image.new("RGB", (1, 1), color=(1, 2, 3)),
+        Image.new("RGB", (1, 1), color=(4, 5, 6)),
+    ]
+
+    result = vae_encode_batch_tiled(_MockVae(), images, tile_size=64, overlap=8)
+
+    assert len(calls) == 2
+    assert all(call[1:] == (64, 64, 8) for call in calls)
+    assert calls[0][0].tolist() == vae_module._image_to_tensor_like(images[0]).tolist()
+    assert calls[1][0].tolist() == vae_module._image_to_tensor_like(images[1]).tolist()
+    assert result["samples"].tolist() == [[[[1.0, 2.0]]], [[[3.0, 4.0]]]]
+
+
+def test_vae_encode_batch_tiled_raises_value_error_for_empty_images() -> None:
+    class _MockVae:
+        def encode_tiled(
+            self,
+            pixel_samples: Any,
+            *,
+            tile_x: int,
+            tile_y: int,
+            overlap: int,
+        ) -> str:
+            raise AssertionError(
+                "encode_tiled should not be called: "
+                f"{pixel_samples}, {tile_x}, {tile_y}, {overlap}"
+            )
+
+    try:
+        vae_encode_batch_tiled(_MockVae(), [])
+    except ValueError as exc:
+        assert str(exc) == "images must not be empty"
+    else:
+        raise AssertionError("Expected ValueError for empty images")
 
 
 def test_vae_decode_outputs_uint8_pixels_in_0_to_255_range() -> None:
