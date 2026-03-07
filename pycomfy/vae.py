@@ -169,6 +169,40 @@ def vae_decode_tiled(
     return _tensor_like_to_pil(image)
 
 
+def vae_decode_batch(vae: _VaeDecoder, latent: Mapping[str, Any]) -> list[Image.Image]:
+    """Decode a ComfyUI LATENT dict into a flat list of PIL images."""
+    samples = latent["samples"]
+    if getattr(samples, "is_nested", False):
+        samples = samples.unbind()[0]
+
+    sample_dims = len(samples.shape)
+    if sample_dims not in (4, 5):
+        raise ValueError("latent samples must be 4D or 5D")
+
+    images = vae.decode(samples)
+    image_dims = len(images.shape)
+    if image_dims == 5:
+        images = images.reshape(-1, images.shape[-3], images.shape[-2], images.shape[-1])
+    elif image_dims != 4:
+        raise ValueError("unsupported decoded image shape")
+
+    if images.shape[0] == 0:
+        raise ValueError("decoded image tensor is empty")
+
+    result: list[Image.Image] = []
+    for index in range(images.shape[0]):
+        image = images[index]
+        if hasattr(image, "detach"):
+            image = image.detach()
+        if hasattr(image, "cpu"):
+            image = image.cpu()
+        result.append(_tensor_like_to_pil(image))
+
+    if not result:
+        raise ValueError("decoded image tensor is empty")
+    return result
+
+
 def _pil_to_batched_hwc(image: Image.Image) -> list[list[list[list[float]]]]:
     rgb = image.convert("RGB")
     width, height = rgb.size
@@ -226,4 +260,4 @@ def vae_encode_tiled(
     return {"samples": samples}
 
 
-__all__ = ["vae_decode", "vae_decode_tiled", "vae_encode", "vae_encode_tiled"]
+__all__ = ["vae_decode", "vae_decode_tiled", "vae_decode_batch", "vae_encode", "vae_encode_tiled"]

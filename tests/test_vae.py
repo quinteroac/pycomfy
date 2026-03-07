@@ -16,7 +16,7 @@ import pycomfy
 import pycomfy.vae as vae_module
 from pycomfy import vae_decode, vae_decode_tiled, vae_encode_tiled
 from pycomfy.models import CheckpointResult
-from pycomfy.vae import vae_encode
+from pycomfy.vae import vae_decode_batch, vae_encode
 from pycomfy.vae import vae_encode_tiled as vae_encode_tiled_from_module
 
 
@@ -82,6 +82,7 @@ def test_vae_module_exports_decode_and_encode() -> None:
     assert vae_module.__all__ == [
         "vae_decode",
         "vae_decode_tiled",
+        "vae_decode_batch",
         "vae_encode",
         "vae_encode_tiled",
     ]
@@ -222,6 +223,141 @@ def test_vae_decode_tiled_has_expected_type_signature() -> None:
     )
 
 
+def test_vae_decode_batch_with_4d_samples_returns_flat_pil_list() -> None:
+    samples = _FakeTensor([[[[0.0, 0.0, 0.0]]], [[[0.0, 0.0, 0.0]]]])
+    decoded = _FakeTensor(
+        [
+            [[[0.1, 0.2, 0.3]]],
+            [[[0.4, 0.5, 0.6]]],
+        ]
+    )
+
+    class _FakeVae:
+        def decode(self, value: object) -> _FakeTensor:
+            assert value is samples
+            return decoded
+
+    images = vae_decode_batch(_FakeVae(), {"samples": samples})
+
+    assert isinstance(images, list)
+    assert len(images) == 2
+    assert all(isinstance(image, Image.Image) for image in images)
+
+
+def test_vae_decode_batch_with_5d_samples_flattens_batch_and_time() -> None:
+    samples = _FakeTensor(
+        [
+            [[[[0.0, 0.0, 0.0]]]],
+            [[[[0.0, 0.0, 0.0]]]],
+        ]
+    )
+    decoded = _FakeTensor(
+        [
+            [
+                [[[0.1, 0.2, 0.3]]],
+                [[[0.4, 0.5, 0.6]]],
+            ],
+            [
+                [[[0.7, 0.8, 0.9]]],
+                [[[0.2, 0.3, 0.4]]],
+            ],
+        ]
+    )
+
+    class _FakeVae:
+        def decode(self, value: object) -> _FakeTensor:
+            assert value is samples
+            return decoded
+
+    images = vae_decode_batch(_FakeVae(), {"samples": samples})
+    assert len(images) == 4
+    assert all(isinstance(image, Image.Image) for image in images)
+
+
+def test_vae_decode_batch_uses_shape_autodetection_and_has_no_mode_argument() -> None:
+    seen_sample_dims: list[int] = []
+
+    class _FakeVae:
+        def decode(self, value: _FakeTensor) -> _FakeTensor:
+            seen_sample_dims.append(len(value.shape))
+            return _FakeTensor([[[[0.1, 0.2, 0.3]]]])
+
+    vae_decode_batch(_FakeVae(), {"samples": _FakeTensor([[[[0.0, 0.0, 0.0]]]])})
+    vae_decode_batch(_FakeVae(), {"samples": _FakeTensor([[[[[0.0, 0.0, 0.0]]]]])})
+
+    assert seen_sample_dims == [4, 5]
+    assert "mode" not in signature(vae_decode_batch).parameters
+
+
+def test_vae_decode_batch_unbinds_nested_samples_before_decode() -> None:
+    unbound = _FakeTensor([[[[0.0, 0.0, 0.0]]]])
+    nested_samples = _FakeTensor([unbound.tolist()], is_nested=True)
+    decode_calls: list[_FakeTensor] = []
+
+    class _FakeVae:
+        def decode(self, value: _FakeTensor) -> _FakeTensor:
+            decode_calls.append(value)
+            return _FakeTensor([[[[0.1, 0.2, 0.3]]]])
+
+    images = vae_decode_batch(_FakeVae(), {"samples": nested_samples})
+
+    assert len(images) == 1
+    assert len(decode_calls) == 1
+    assert decode_calls[0].tolist() == unbound.tolist()
+
+
+def test_vae_decode_batch_calls_detach_and_cpu_for_each_frame(monkeypatch: Any) -> None:
+    expected = Image.new("RGB", (1, 1), color=(1, 2, 3))
+
+    class _Frame:
+        def __init__(self) -> None:
+            self.detach_calls = 0
+            self.cpu_calls = 0
+
+        def detach(self) -> _Frame:
+            self.detach_calls += 1
+            return self
+
+        def cpu(self) -> _Frame:
+            self.cpu_calls += 1
+            return self
+
+    class _DecodedFrames:
+        def __init__(self, frames: list[_Frame]) -> None:
+            self._frames = frames
+            self.shape = (len(frames), 1, 1, 3)
+
+        def __getitem__(self, index: int) -> _Frame:
+            return self._frames[index]
+
+    frames = [_Frame(), _Frame(), _Frame()]
+    helper_calls: list[_Frame] = []
+
+    class _FakeVae:
+        def decode(self, _value: object) -> _DecodedFrames:
+            return _DecodedFrames(frames)
+
+    def _fake_helper(image: _Frame) -> Image.Image:
+        helper_calls.append(image)
+        return expected
+
+    monkeypatch.setattr(vae_module, "_tensor_like_to_pil", _fake_helper)
+
+    images = vae_decode_batch(_FakeVae(), {"samples": _FakeTensor([[[[0.0]]]])})
+
+    assert len(images) == 3
+    assert helper_calls == frames
+    assert all(frame.detach_calls == 1 for frame in frames)
+    assert all(frame.cpu_calls == 1 for frame in frames)
+
+
+def test_vae_decode_batch_has_expected_type_signature() -> None:
+    fn_signature = signature(vae_module.vae_decode_batch)
+    assert str(fn_signature) == (
+        "(vae: '_VaeDecoder', latent: 'Mapping[str, Any]') -> 'list[Image.Image]'"
+    )
+
+
 def test_vae_encode_then_decode_round_trip_returns_pil_image() -> None:
     class _MockVae:
         def encode(self, pixel_samples: Any) -> _FakeTensor:
@@ -356,11 +492,13 @@ def test_import_pycomfy_vae_has_no_heavy_import_side_effects() -> None:
         "import pycomfy\n"
         "baseline_modules = set(sys.modules)\n"
         "baseline_torch_loaded = 'torch' in sys.modules\n"
-        "from pycomfy.vae import vae_decode, vae_decode_tiled, vae_encode, vae_encode_tiled\n"
+        "from pycomfy.vae import "
+        "vae_decode, vae_decode_batch, vae_decode_tiled, vae_encode, vae_encode_tiled\n"
         "post_modules = set(sys.modules)\n"
         "new_modules = sorted(post_modules - baseline_modules)\n"
         "payload = {\n"
         "  'func_name': vae_decode.__name__,\n"
+        "  'batch_func_name': vae_decode_batch.__name__,\n"
         "  'encode_func_name': vae_encode.__name__,\n"
         "  'encode_tiled_func_name': vae_encode_tiled.__name__,\n"
         "  'tiled_func_name': vae_decode_tiled.__name__,\n"
@@ -376,6 +514,7 @@ def test_import_pycomfy_vae_has_no_heavy_import_side_effects() -> None:
 
     payload = json.loads(result.stdout)
     assert payload["func_name"] == "vae_decode"
+    assert payload["batch_func_name"] == "vae_decode_batch"
     assert payload["tiled_func_name"] == "vae_decode_tiled"
     assert payload["encode_func_name"] == "vae_encode"
     assert payload["encode_tiled_func_name"] == "vae_encode_tiled"
