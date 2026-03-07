@@ -26,6 +26,7 @@ node_modules/
 
 # Project
 schemas/
+docs/nvst-flow/
 
 # Environment and secrets
 .env
