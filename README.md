@@ -66,11 +66,11 @@ Early development. Built iteratively, one capability block at a time.
 
 | Iteration | Module | Status |
 |-----------|--------|--------|
-| 01 | Package foundation + `check_runtime()` | 🔨 In progress |
-| 02 | Model loading (checkpoint, VAE, CLIP) | ⬜ Planned |
-| 03 | Conditioning (CLIP encode, prompt weighting) | ⬜ Planned |
-| 04 | Sampling (KSampler, schedulers) | ⬜ Planned |
-| 05 | VAE encode / decode | ⬜ Planned |
+| 01 | Package foundation + `check_runtime()` | ✅ Done |
+| 02 | Model loading (checkpoint, VAE, CLIP) | ✅ Done |
+| 03 | Conditioning (CLIP encode, prompt weighting) | ✅ Done |
+| 04 | Sampling (KSampler, schedulers) | ✅ Done |
+| 05 | VAE encode / decode | 🔨 In progress |
 | 06 | LoRA loading and stacking | ⬜ Planned |
 | 07 | High-level `ImagePipeline` API | ⬜ Planned |
 | 08 | Async / asyncio / progress callbacks | ⬜ Planned |
