@@ -16,7 +16,7 @@ def sample(
     cfg: Any,
     sampler_name: str,
     scheduler: str,
-    seed: Any,
+    seed: int,
     *,
     denoise: float = 1.0,
 ) -> Any:

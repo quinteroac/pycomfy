@@ -24,7 +24,7 @@ def test_sample_signature_matches_contract() -> None:
     assert str(signature) == (
         "(model: 'Any', positive: 'Any', negative: 'Any', latent: 'Any', "
         "steps: 'Any', cfg: 'Any', sampler_name: 'str', scheduler: 'str', "
-        "seed: 'Any', *, denoise: 'float' = 1.0) -> 'Any'"
+        "seed: 'int', *, denoise: 'float' = 1.0) -> 'Any'"
     )
 
 
@@ -137,3 +137,34 @@ def test_sample_passes_sampler_and_scheduler_strings_through_unchanged(
 
     assert recorded["args"][4] == sampler_name
     assert recorded["args"][5] == scheduler
+
+
+def test_sample_passes_seed_to_common_ksampler_unchanged(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    recorded: dict[str, Any] = {}
+    seed = 4_294_967_295
+
+    nodes_module = ModuleType("nodes")
+
+    def common_ksampler(*args: Any, **kwargs: Any) -> tuple[Any]:
+        recorded["args"] = args
+        return (object(),)
+
+    setattr(nodes_module, "common_ksampler", common_ksampler)
+    monkeypatch.setitem(sys.modules, "nodes", nodes_module)
+    monkeypatch.setattr(sampling_module, "ensure_comfyui_on_path", lambda: None)
+
+    sample(
+        model=object(),
+        positive=object(),
+        negative=object(),
+        latent={"samples": object()},
+        steps=20,
+        cfg=6.5,
+        sampler_name="euler",
+        scheduler="normal",
+        seed=seed,
+    )
+
+    assert recorded["args"][1] == seed
