@@ -134,6 +134,31 @@ def test_encode_prompt_does_not_raise_for_valid_weighted_prompt_syntax() -> None
     assert result == {"conditioning": ("tokens", weighted_prompt)}
 
 
+def test_encode_prompt_accepts_empty_string_without_crashing() -> None:
+    sentinel_conditioning = object()
+
+    class FakeClip:
+        def __init__(self) -> None:
+            self.tokenize_calls: list[str] = []
+
+        def tokenize(self, text: str) -> object:
+            self.tokenize_calls.append(text)
+            if text == "":
+                raise AssertionError("empty prompt should be normalized before tokenization")
+            return ("tokens", text)
+
+        def encode_from_tokens_scheduled(self, tokens: object) -> object:
+            assert tokens == ("tokens", " ")
+            return sentinel_conditioning
+
+    clip = FakeClip()
+    result = encode_prompt(clip, "")
+
+    assert result is not None
+    assert result is sentinel_conditioning
+    assert clip.tokenize_calls == [" "]
+
+
 def test_conditioning_public_api_has_single_encode_prompt_entrypoint() -> None:
     signature = inspect.signature(encode_prompt)
 

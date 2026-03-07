@@ -17,7 +17,8 @@ def encode_prompt(clip: _ClipTextEncoder, text: str) -> Any:
     Positive and negative prompts use the same encoding path; prompt
     semantics are owned by the caller.
     """
-    tokens = clip.tokenize(text)
+    normalized_text = " " if text == "" else text
+    tokens = clip.tokenize(normalized_text)
     return clip.encode_from_tokens_scheduled(tokens)
 
 
