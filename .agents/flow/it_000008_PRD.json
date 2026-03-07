@@ -1,0 +1,126 @@
+{
+  "goals": [
+    "Expose `vae_decode_tiled(vae, latent, tile_size=512, overlap=64) -> PIL.Image.Image` as a public pycomfy function.",
+    "Expose `vae_encode_tiled(vae, image, tile_size=512, overlap=64) -> dict[str, Any]` as a public pycomfy function.",
+    "Both functions re-exported from `pycomfy.__init__` alongside `vae_decode` and `vae_encode`.",
+    "All tests pass on CPU-only environments (no GPU required in CI)."
+  ],
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Tiled VAE Decode",
+      "description": "As a Python developer using pycomfy, I want to call `vae_decode_tiled(vae, latent, tile_size, overlap)` so that I can decode large latents into PIL images without running out of GPU memory.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-001-AC01",
+          "text": "`vae_decode_tiled` is importable directly from `pycomfy` (`from pycomfy import vae_decode_tiled`)."
+        },
+        {
+          "id": "US-001-AC02",
+          "text": "`vae_decode_tiled` is importable from `pycomfy.vae` (`from pycomfy.vae import vae_decode_tiled`)."
+        },
+        {
+          "id": "US-001-AC03",
+          "text": "Calling `vae_decode_tiled(vae, latent)` with default parameters returns a valid `PIL.Image.Image`."
+        },
+        {
+          "id": "US-001-AC04",
+          "text": "Calling `vae_decode_tiled(vae, latent, tile_size=64, overlap=8)` on a CPU-compatible mock VAE returns a `PIL.Image.Image` without error."
+        },
+        {
+          "id": "US-001-AC05",
+          "text": "The function delegates to `vae.decode_tiled(samples, tile_x=tile_size, tile_y=tile_size, overlap=overlap)`."
+        },
+        {
+          "id": "US-001-AC06",
+          "text": "PIL↔tensor conversion reuses existing internal helpers (`_tensor_like_to_pil`)."
+        },
+        {
+          "id": "US-001-AC07",
+          "text": "No `torch` or `comfy.*` imports at module top level (lazy import pattern respected)."
+        },
+        {
+          "id": "US-001-AC08",
+          "text": "Type hint signature: `def vae_decode_tiled(vae: _VaeDecoderTiled, latent: Mapping[str, Any], tile_size: int = 512, overlap: int = 64) -> Image.Image`."
+        },
+        {
+          "id": "US-001-AC09",
+          "text": "Typecheck / lint passes."
+        }
+      ]
+    },
+    {
+      "id": "US-002",
+      "title": "Tiled VAE Encode",
+      "description": "As a Python developer using pycomfy, I want to call `vae_encode_tiled(vae, image, tile_size, overlap)` so that I can encode large PIL images into latent dicts without running out of GPU memory.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-002-AC01",
+          "text": "`vae_encode_tiled` is importable directly from `pycomfy` (`from pycomfy import vae_encode_tiled`)."
+        },
+        {
+          "id": "US-002-AC02",
+          "text": "`vae_encode_tiled` is importable from `pycomfy.vae` (`from pycomfy.vae import vae_encode_tiled`)."
+        },
+        {
+          "id": "US-002-AC03",
+          "text": "Calling `vae_encode_tiled(vae, image, tile_size=64, overlap=8)` on a CPU-compatible mock VAE returns a `dict` with a `\"samples\"` key."
+        },
+        {
+          "id": "US-002-AC04",
+          "text": "The function delegates to `vae.encode_tiled(pixels, tile_x=tile_size, tile_y=tile_size, overlap=overlap)`."
+        },
+        {
+          "id": "US-002-AC05",
+          "text": "PIL→tensor conversion reuses existing internal helper (`_image_to_tensor_like`)."
+        },
+        {
+          "id": "US-002-AC06",
+          "text": "No `torch` or `comfy.*` imports at module top level."
+        },
+        {
+          "id": "US-002-AC07",
+          "text": "Type hint signature: `def vae_encode_tiled(vae: _VaeEncoderTiled, image: Image.Image, tile_size: int = 512, overlap: int = 64) -> dict[str, Any]`."
+        },
+        {
+          "id": "US-002-AC08",
+          "text": "Typecheck / lint passes."
+        }
+      ]
+    }
+  ],
+  "functionalRequirements": [
+    {
+      "id": "FR-1",
+      "description": "`vae_decode_tiled` must accept the same `latent` dict shape as `vae_decode` (`{\"samples\": tensor}`)."
+    },
+    {
+      "id": "FR-2",
+      "description": "For 2D VAE (standard still images — the only target of this iteration), `vae.decode_tiled` returns the same `(batch, H, W, C)` shape as `vae.decode` (confirmed in `comfy/sd.py` — both end with `.movedim(1, -1)`). `vae_decode_tiled` must therefore apply the same `detach`, `cpu`, and `[0]` batch-index extraction as `vae_decode`. The 5D reshape guard present in `vae_decode` (for 3D/video VAE) is **not required** in `vae_decode_tiled` for this iteration, as 3D VAE support is deferred to it_009."
+    },
+    {
+      "id": "FR-3",
+      "description": "`vae_encode_tiled` must return a dict `{\"samples\": ...}` identical in shape to `vae_encode`'s return value."
+    },
+    {
+      "id": "FR-4",
+      "description": "Both functions must be added to `pycomfy/vae.py`'s `__all__`."
+    },
+    {
+      "id": "FR-5",
+      "description": "Both functions must be added to `pycomfy/__init__.py`'s imports and `__all__`."
+    },
+    {
+      "id": "FR-6",
+      "description": "New Protocol classes `_VaeDecoderTiled` and `_VaeEncoderTiled` must be defined in `pycomfy/vae.py` with `decode_tiled` and `encode_tiled` method stubs respectively, following the duck-typing pattern of existing `_VaeDecoder` / `_VaeEncoder`."
+    },
+    {
+      "id": "FR-7",
+      "description": "Tests must use a reduced `tile_size` (e.g. `64`) and small test image so they run without GPU."
+    },
+    {
+      "id": "FR-8",
+      "description": "`tile_size` and `overlap` parameters must have documented defaults (`512` and `64` respectively) in the function docstring."
+    }
+  ]
+}
