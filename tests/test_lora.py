@@ -1,0 +1,145 @@
+"""Tests for LoRA helpers."""
+
+from __future__ import annotations
+
+import inspect
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+from typing import Any
+
+import pycomfy
+import pycomfy.lora as lora_module
+from pycomfy import apply_lora
+
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
+def _run_python(code: str) -> subprocess.CompletedProcess[str]:
+    env = os.environ.copy()
+    existing = env.get("PYTHONPATH")
+    repo_root = str(_repo_root())
+    env["PYTHONPATH"] = repo_root if not existing else f"{repo_root}{os.pathsep}{existing}"
+
+    return subprocess.run(
+        [sys.executable, "-c", code],
+        check=True,
+        text=True,
+        capture_output=True,
+        env=env,
+        cwd=_repo_root(),
+    )
+
+
+def test_lora_module_exports_only_apply_lora() -> None:
+    assert lora_module.__all__ == ["apply_lora"]
+
+
+def test_apply_lora_signature_matches_contract() -> None:
+    signature = inspect.signature(apply_lora)
+    assert str(signature) == (
+        "(model: 'Any', clip: 'Any', path: 'str | Path', "
+        "strength_model: 'float', strength_clip: 'float') -> 'tuple[Any, Any]'"
+    )
+
+
+def test_apply_lora_returns_patched_model_and_clip_tuple(
+    monkeypatch: Any,
+) -> None:
+    model = object()
+    clip = object()
+    patched_model = object()
+    patched_clip = object()
+
+    loaded_lora = object()
+    calls: dict[str, Any] = {}
+
+    def fake_load_torch_file(path: str, *, safe_load: bool) -> object:
+        calls["load_torch_file"] = {"path": path, "safe_load": safe_load}
+        return loaded_lora
+
+    def fake_load_lora_for_models(
+        model_arg: object,
+        clip_arg: object,
+        lora_arg: object,
+        strength_model_arg: float,
+        strength_clip_arg: float,
+    ) -> tuple[object, object]:
+        calls["load_lora_for_models"] = {
+            "model": model_arg,
+            "clip": clip_arg,
+            "lora": lora_arg,
+            "strength_model": strength_model_arg,
+            "strength_clip": strength_clip_arg,
+        }
+        return (patched_model, patched_clip)
+
+    import types
+
+    comfy_module = types.ModuleType("comfy")
+    comfy_utils_module = types.ModuleType("comfy.utils")
+    comfy_sd_module = types.ModuleType("comfy.sd")
+
+    comfy_utils_module.load_torch_file = fake_load_torch_file
+    comfy_sd_module.load_lora_for_models = fake_load_lora_for_models
+
+    comfy_module.utils = comfy_utils_module
+    comfy_module.sd = comfy_sd_module
+
+    monkeypatch.setitem(sys.modules, "comfy", comfy_module)
+    monkeypatch.setitem(sys.modules, "comfy.utils", comfy_utils_module)
+    monkeypatch.setitem(sys.modules, "comfy.sd", comfy_sd_module)
+    result = lora_module.apply_lora(model, clip, "/tmp/my_lora.safetensors", 0.8, 0.8)
+
+    assert isinstance(result, tuple)
+    assert result == (patched_model, patched_clip)
+    assert result[0] is not model
+    assert result[1] is not clip
+    assert calls["load_torch_file"] == {"path": "/tmp/my_lora.safetensors", "safe_load": True}
+    assert calls["load_lora_for_models"] == {
+        "model": model,
+        "clip": clip,
+        "lora": loaded_lora,
+        "strength_model": 0.8,
+        "strength_clip": 0.8,
+    }
+
+
+def test_apply_lora_is_re_exported_from_package_root() -> None:
+    assert callable(apply_lora)
+    assert pycomfy.apply_lora is apply_lora
+    assert "apply_lora" in pycomfy.__all__
+
+
+def test_import_pycomfy_lora_has_no_heavy_import_side_effects() -> None:
+    result = _run_python(
+        "import json\n"
+        "import sys\n"
+        "import pycomfy\n"
+        "baseline_modules = set(sys.modules)\n"
+        "from pycomfy.lora import apply_lora\n"
+        "post_modules = set(sys.modules)\n"
+        "new_modules = sorted(post_modules - baseline_modules)\n"
+        "payload = {\n"
+        "  'func_name': apply_lora.__name__,\n"
+        "  'comfy_sd_loaded': 'comfy.sd' in sys.modules,\n"
+        "  'comfy_utils_loaded': 'comfy.utils' in sys.modules,\n"
+        "  'new_modules': new_modules,\n"
+        "}\n"
+        "print(json.dumps(payload))\n"
+    )
+
+    payload = json.loads(result.stdout)
+    assert payload["func_name"] == "apply_lora"
+    assert payload["comfy_sd_loaded"] is False
+    assert payload["comfy_utils_loaded"] is False
+    heavy = [
+        module
+        for module in payload["new_modules"]
+        if module.startswith(("comfy.sd", "comfy.utils"))
+    ]
+    assert heavy == [], f"Unexpected heavy modules loaded on import: {heavy}"
