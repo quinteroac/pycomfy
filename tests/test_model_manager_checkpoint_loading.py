@@ -84,6 +84,7 @@ def test_load_checkpoint_resolves_filename_and_returns_typed_result(
     embeddings_dir.mkdir(parents=True)
 
     checkpoint_filename = "animagine-xl.safetensors"
+    (checkpoints_dir / checkpoint_filename).write_text("stub checkpoint")
     resolved_path = str(checkpoints_dir / checkpoint_filename)
     embeddings_paths = [str(embeddings_dir)]
 
@@ -125,6 +126,7 @@ def test_load_checkpoint_allows_optional_clip_and_vae(
     (models_dir / "embeddings").mkdir(parents=True)
 
     model = object()
+    (models_dir / "checkpoints" / "model.safetensors").write_text("stub checkpoint")
     _install_fake_loader_modules(
         monkeypatch,
         resolved_checkpoint_path="/resolved/model.safetensors",
@@ -143,3 +145,29 @@ def test_load_checkpoint_allows_optional_clip_and_vae(
 def test_checkpoint_result_is_publicly_importable() -> None:
     assert CheckpointResult.__name__ == "CheckpointResult"
     assert "CheckpointResult" in models_module.__all__
+
+
+def test_load_checkpoint_raises_file_not_found_before_comfy_loader(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    models_dir = tmp_path / "models"
+    (models_dir / "checkpoints").mkdir(parents=True)
+    (models_dir / "embeddings").mkdir(parents=True)
+
+    calls = _install_fake_loader_modules(
+        monkeypatch,
+        resolved_checkpoint_path="/unused/path.safetensors",
+        embeddings_paths=["/unused/embeddings"],
+        loader_result=(object(), object(), object()),
+    )
+
+    missing_filename = "nonexistent.safetensors"
+    expected_path = str((models_dir / "checkpoints" / missing_filename).resolve())
+
+    with pytest.raises(FileNotFoundError, match="checkpoint file not found") as exc_info:
+        ModelManager(models_dir=models_dir).load_checkpoint(missing_filename)
+
+    assert expected_path in str(exc_info.value)
+    assert calls["get_full_path_or_raise"] == []
+    assert calls["load_checkpoint_guess_config"] == []

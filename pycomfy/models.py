@@ -58,7 +58,13 @@ class ModelManager:
     def load_checkpoint(self, filename: str) -> CheckpointResult:
         """Load a checkpoint by filename from the configured checkpoints directory."""
         ensure_comfyui_on_path()
+
+        requested_path = (self.models_dir / "checkpoints" / filename).resolve()
+        if not requested_path.is_file():
+            raise FileNotFoundError(f"checkpoint file not found: {requested_path}")
+
         import folder_paths
+
         from comfy import sd as comfy_sd
 
         checkpoint_path = folder_paths.get_full_path_or_raise("checkpoints", filename)
