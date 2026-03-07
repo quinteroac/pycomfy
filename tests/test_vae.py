@@ -6,6 +6,7 @@ import json
 import os
 import subprocess
 import sys
+from inspect import signature
 from pathlib import Path
 from typing import Any
 
@@ -13,7 +14,7 @@ from PIL import Image
 
 import pycomfy
 import pycomfy.vae as vae_module
-from pycomfy import vae_decode
+from pycomfy import vae_decode, vae_decode_tiled
 from pycomfy.models import CheckpointResult
 from pycomfy.vae import vae_encode
 
@@ -77,13 +78,19 @@ class _FakeTensor:
 
 
 def test_vae_module_exports_decode_and_encode() -> None:
-    assert vae_module.__all__ == ["vae_decode", "vae_encode"]
+    assert vae_module.__all__ == ["vae_decode", "vae_decode_tiled", "vae_encode"]
 
 
 def test_vae_decode_is_re_exported_from_package_root() -> None:
     assert callable(vae_decode)
     assert pycomfy.vae_decode is vae_decode
     assert "vae_decode" in pycomfy.__all__
+
+
+def test_vae_decode_tiled_is_re_exported_from_package_root() -> None:
+    assert callable(vae_decode_tiled)
+    assert pycomfy.vae_decode_tiled is vae_decode_tiled
+    assert "vae_decode_tiled" in pycomfy.__all__
 
 
 def test_vae_encode_is_re_exported_from_package_root() -> None:
@@ -103,11 +110,102 @@ def test_vae_decode_accepts_checkpoint_result_vae_and_returns_pil_image() -> Non
             return decoded
 
     checkpoint = CheckpointResult(model=object(), clip=None, vae=_FakeVae())
+    assert checkpoint.vae is not None
 
     image = vae_decode(checkpoint.vae, {"samples": samples})
 
     assert isinstance(image, Image.Image)
     assert calls == [samples]
+
+
+def test_vae_decode_tiled_with_default_parameters_returns_pil_image() -> None:
+    samples = _FakeTensor([[[[0.0, 0.0, 0.0]]]])
+    decoded = _FakeTensor([[[[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]]]])
+
+    class _FakeVae:
+        def decode_tiled(
+            self,
+            value: object,
+            *,
+            tile_x: int,
+            tile_y: int,
+            overlap: int,
+        ) -> _FakeTensor:
+            assert value is samples
+            assert tile_x == 512
+            assert tile_y == 512
+            assert overlap == 64
+            return decoded
+
+    image = vae_decode_tiled(_FakeVae(), {"samples": samples})
+    assert isinstance(image, Image.Image)
+
+
+def test_vae_decode_tiled_accepts_custom_tile_size_and_overlap_on_cpu_mock() -> None:
+    calls: list[tuple[object, int, int, int]] = []
+    samples = _FakeTensor([[[[0.0, 0.0, 0.0]]]])
+    decoded = _FakeTensor([[[[0.8, 0.2, 0.4]]]])
+
+    class _FakeVae:
+        def decode_tiled(
+            self,
+            value: object,
+            *,
+            tile_x: int,
+            tile_y: int,
+            overlap: int,
+        ) -> _FakeTensor:
+            calls.append((value, tile_x, tile_y, overlap))
+            return decoded
+
+    image = vae_decode_tiled(_FakeVae(), {"samples": samples}, tile_size=64, overlap=8)
+
+    assert isinstance(image, Image.Image)
+    assert calls == [(samples, 64, 64, 8)]
+
+
+def test_vae_decode_tiled_reuses_tensor_like_to_pil_helper(
+    monkeypatch: Any,
+) -> None:
+    samples = _FakeTensor([[[[0.0, 0.0, 0.0]]]])
+    decoded = _FakeTensor([[[[0.1, 0.2, 0.3]]]])
+    expected = Image.new("RGB", (1, 1), color=(1, 2, 3))
+    helper_calls: list[Any] = []
+
+    class _FakeVae:
+        def decode_tiled(
+            self,
+            _value: object,
+            *,
+            tile_x: int,
+            tile_y: int,
+            overlap: int,
+        ) -> _FakeTensor:
+            assert tile_x == 16
+            assert tile_y == 16
+            assert overlap == 4
+            return decoded
+
+    def _fake_helper(image: Any) -> Image.Image:
+        helper_calls.append(image)
+        return expected
+
+    monkeypatch.setattr(vae_module, "_tensor_like_to_pil", _fake_helper)
+
+    result = vae_decode_tiled(_FakeVae(), {"samples": samples}, tile_size=16, overlap=4)
+
+    assert result is expected
+    assert len(helper_calls) == 1
+    assert helper_calls[0].tolist() == decoded[0].tolist()
+
+
+def test_vae_decode_tiled_has_expected_type_signature() -> None:
+    fn_signature = signature(vae_module.vae_decode_tiled)
+
+    assert str(fn_signature) == (
+        "(vae: '_VaeDecoderTiled', latent: 'Mapping[str, Any]', tile_size: 'int' = 512, "
+        "overlap: 'int' = 64) -> 'Image.Image'"
+    )
 
 
 def test_vae_encode_then_decode_round_trip_returns_pil_image() -> None:
@@ -157,12 +255,13 @@ def test_import_pycomfy_vae_has_no_heavy_import_side_effects() -> None:
         "import pycomfy\n"
         "baseline_modules = set(sys.modules)\n"
         "baseline_torch_loaded = 'torch' in sys.modules\n"
-        "from pycomfy.vae import vae_decode, vae_encode\n"
+        "from pycomfy.vae import vae_decode, vae_decode_tiled, vae_encode\n"
         "post_modules = set(sys.modules)\n"
         "new_modules = sorted(post_modules - baseline_modules)\n"
         "payload = {\n"
         "  'func_name': vae_decode.__name__,\n"
         "  'encode_func_name': vae_encode.__name__,\n"
+        "  'tiled_func_name': vae_decode_tiled.__name__,\n"
         "  'baseline_torch_loaded': baseline_torch_loaded,\n"
         "  'torch_loaded': 'torch' in sys.modules,\n"
         "  'nodes_loaded': 'nodes' in sys.modules,\n"
@@ -175,6 +274,7 @@ def test_import_pycomfy_vae_has_no_heavy_import_side_effects() -> None:
 
     payload = json.loads(result.stdout)
     assert payload["func_name"] == "vae_decode"
+    assert payload["tiled_func_name"] == "vae_decode_tiled"
     assert payload["encode_func_name"] == "vae_encode"
     assert payload["torch_loaded"] == payload["baseline_torch_loaded"]
     assert payload["nodes_loaded"] is False

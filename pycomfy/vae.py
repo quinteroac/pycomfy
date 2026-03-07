@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 from PIL import Image
 
@@ -14,6 +14,17 @@ class _VaeDecoder(Protocol):
 
 class _VaeEncoder(Protocol):
     def encode(self, pixel_samples: Any) -> Any: ...
+
+
+class _VaeDecoderTiled(Protocol):
+    def decode_tiled(
+        self,
+        samples: Any,
+        *,
+        tile_x: int,
+        tile_y: int,
+        overlap: int,
+    ) -> Any: ...
 
 
 class _ListTensor:
@@ -114,16 +125,41 @@ def vae_decode(vae: _VaeDecoder, latent: Mapping[str, Any]) -> Image.Image:
     return _tensor_like_to_pil(image)
 
 
+def vae_decode_tiled(
+    vae: _VaeDecoderTiled,
+    latent: Mapping[str, Any],
+    tile_size: int = 512,
+    overlap: int = 64,
+) -> Image.Image:
+    """Decode a ComfyUI LATENT dict into a PIL image using tiled decode."""
+    samples = latent["samples"]
+    if getattr(samples, "is_nested", False):
+        samples = samples.unbind()[0]
+
+    images = vae.decode_tiled(samples, tile_x=tile_size, tile_y=tile_size, overlap=overlap)
+    if len(images.shape) == 5:
+        images = images.reshape(-1, images.shape[-3], images.shape[-2], images.shape[-1])
+
+    image = images[0]
+    if hasattr(image, "detach"):
+        image = image.detach()
+    if hasattr(image, "cpu"):
+        image = image.cpu()
+    return _tensor_like_to_pil(image)
+
+
 def _pil_to_batched_hwc(image: Image.Image) -> list[list[list[list[float]]]]:
     rgb = image.convert("RGB")
     width, height = rgb.size
     pixels = rgb.load()
+    if pixels is None:
+        raise ValueError("unable to access image pixels")
 
     rows: list[list[list[float]]] = []
     for y in range(height):
         row: list[list[float]] = []
         for x in range(width):
-            r, g, b = pixels[x, y]
+            r, g, b = cast(tuple[int, int, int], pixels[x, y])
             row.append([r / 255.0, g / 255.0, b / 255.0])
         rows.append(row)
 
@@ -147,4 +183,4 @@ def vae_encode(vae: _VaeEncoder, image: Image.Image) -> dict[str, Any]:
     return {"samples": samples}
 
 
-__all__ = ["vae_decode", "vae_encode"]
+__all__ = ["vae_decode", "vae_decode_tiled", "vae_encode"]
