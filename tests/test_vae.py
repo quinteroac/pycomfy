@@ -18,7 +18,7 @@ import pycomfy
 import pycomfy.vae as vae_module
 from pycomfy import vae_decode, vae_decode_tiled, vae_encode_tiled
 from pycomfy.models import CheckpointResult
-from pycomfy.vae import vae_decode_batch, vae_encode, vae_encode_batch
+from pycomfy.vae import vae_decode_batch, vae_decode_batch_tiled, vae_encode, vae_encode_batch
 from pycomfy.vae import vae_encode_tiled as vae_encode_tiled_from_module
 
 
@@ -85,6 +85,7 @@ def test_vae_module_exports_decode_and_encode() -> None:
         "vae_decode",
         "vae_decode_tiled",
         "vae_decode_batch",
+        "vae_decode_batch_tiled",
         "vae_encode",
         "vae_encode_batch",
         "vae_encode_tiled",
@@ -358,6 +359,80 @@ def test_vae_decode_batch_has_expected_type_signature() -> None:
     fn_signature = signature(vae_module.vae_decode_batch)
     assert str(fn_signature) == (
         "(vae: '_VaeDecoder', latent: 'Mapping[str, Any]') -> 'list[Image.Image]'"
+    )
+
+
+def test_vae_decode_batch_tiled_with_4d_samples_calls_decode_tiled_per_frame() -> None:
+    samples = _FakeTensor([[[[0.0, 0.0, 0.0]]], [[[0.0, 0.0, 0.0]]]])
+    calls: list[tuple[Any, int, int, int]] = []
+
+    class _FakeVae:
+        def decode_tiled(
+            self,
+            value: _FakeTensor,
+            *,
+            tile_x: int,
+            tile_y: int,
+            overlap: int,
+        ) -> _FakeTensor:
+            calls.append((value.tolist(), tile_x, tile_y, overlap))
+            return _FakeTensor([[[[0.1, 0.2, 0.3]]]])
+
+    images = vae_decode_batch_tiled(_FakeVae(), {"samples": samples})
+
+    assert len(images) == 2
+    assert calls == [
+        ([[[[0.0, 0.0, 0.0]]]], 512, 512, 64),
+        ([[[[0.0, 0.0, 0.0]]]], 512, 512, 64),
+    ]
+    assert all(isinstance(image, Image.Image) for image in images)
+
+
+def test_vae_decode_batch_tiled_with_5d_samples_flattens_batch_and_time() -> None:
+    samples = _FakeTensor(
+        [
+            [
+                [[[0.0, 0.0, 0.0]]],
+                [[[0.0, 0.0, 0.0]]],
+            ],
+            [
+                [[[0.0, 0.0, 0.0]]],
+                [[[0.0, 0.0, 0.0]]],
+            ],
+        ]
+    )
+    calls: list[tuple[Any, int, int, int]] = []
+
+    class _FakeVae:
+        def decode_tiled(
+            self,
+            value: _FakeTensor,
+            *,
+            tile_x: int,
+            tile_y: int,
+            overlap: int,
+        ) -> _FakeTensor:
+            calls.append((value.tolist(), tile_x, tile_y, overlap))
+            return _FakeTensor([[[[0.2, 0.4, 0.6]]]])
+
+    images = vae_decode_batch_tiled(_FakeVae(), {"samples": samples}, tile_size=128, overlap=16)
+
+    assert len(images) == 4
+    assert len(calls) == 4
+    assert all(call[1:] == (128, 128, 16) for call in calls)
+
+
+def test_vae_decode_batch_tiled_uses_decode_tiled_protocol_signature() -> None:
+    protocol_methods = set(vae_module._VaeDecoderTiled.__dict__.keys())
+    assert "decode_tiled" in protocol_methods
+    assert "_VaeDecoderBatchTiled" not in vars(vae_module)
+
+
+def test_vae_decode_batch_tiled_has_expected_type_signature() -> None:
+    fn_signature = signature(vae_module.vae_decode_batch_tiled)
+    assert str(fn_signature) == (
+        "(vae: '_VaeDecoderTiled', latent: 'Mapping[str, Any]', tile_size: 'int' = 512, "
+        "overlap: 'int' = 64) -> 'list[Image.Image]'"
     )
 
 

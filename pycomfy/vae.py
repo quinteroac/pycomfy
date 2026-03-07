@@ -203,6 +203,55 @@ def vae_decode_batch(vae: _VaeDecoder, latent: Mapping[str, Any]) -> list[Image.
     return result
 
 
+def vae_decode_batch_tiled(
+    vae: _VaeDecoderTiled,
+    latent: Mapping[str, Any],
+    tile_size: int = 512,
+    overlap: int = 64,
+) -> list[Image.Image]:
+    """Decode a ComfyUI LATENT dict into a flat list of PIL images using tiled decode."""
+    samples = latent["samples"]
+    if getattr(samples, "is_nested", False):
+        samples = samples.unbind()[0]
+
+    sample_dims = len(samples.shape)
+    if sample_dims == 5:
+        samples = samples.reshape(-1, samples.shape[-3], samples.shape[-2], samples.shape[-1])
+    elif sample_dims != 4:
+        raise ValueError("latent samples must be 4D or 5D")
+
+    if samples.shape[0] == 0:
+        raise ValueError("latent samples must not be empty")
+
+    result: list[Image.Image] = []
+    for index in range(samples.shape[0]):
+        frame_samples = samples[index : index + 1]
+        images = vae.decode_tiled(
+            frame_samples,
+            tile_x=tile_size,
+            tile_y=tile_size,
+            overlap=overlap,
+        )
+
+        image_dims = len(images.shape)
+        if image_dims == 5:
+            images = images.reshape(-1, images.shape[-3], images.shape[-2], images.shape[-1])
+        elif image_dims != 4:
+            raise ValueError("unsupported decoded image shape")
+
+        if images.shape[0] == 0:
+            raise ValueError("decoded image tensor is empty")
+
+        image = images[0]
+        if hasattr(image, "detach"):
+            image = image.detach()
+        if hasattr(image, "cpu"):
+            image = image.cpu()
+        result.append(_tensor_like_to_pil(image))
+
+    return result
+
+
 def _pil_to_batched_hwc(image: Image.Image) -> list[list[list[list[float]]]]:
     rgb = image.convert("RGB")
     width, height = rgb.size
@@ -287,6 +336,7 @@ __all__ = [
     "vae_decode",
     "vae_decode_tiled",
     "vae_decode_batch",
+    "vae_decode_batch_tiled",
     "vae_encode",
     "vae_encode_batch",
     "vae_encode_tiled",
