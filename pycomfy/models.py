@@ -59,7 +59,6 @@ class ModelManager:
             raise FileNotFoundError(f"checkpoint file not found: {requested_path}")
 
         import folder_paths
-
         from comfy import sd as comfy_sd
 
         checkpoint_path = folder_paths.get_full_path_or_raise("checkpoints", filename)

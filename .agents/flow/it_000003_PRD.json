@@ -1,0 +1,132 @@
+{
+  "goals": [
+    "Expose a single `encode_prompt(clip, text)` function that wraps ComfyUI's native CLIP encoder without",
+    "Ensure prompt-weighting syntax (`(word:1.3)`) is passed through unmodified and handled by ComfyUI",
+    "Keep the module import-safe on CPU-only environments with no model files present.",
+    "Return the raw conditioning object produced by ComfyUI (no wrapping), so it is directly passable to",
+    "Keep static analysis (ruff, mypy) green with no regressions."
+  ],
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Encode a text prompt to a conditioning tensor",
+      "description": "As a library consumer (or an internal pycomfy module), I want to call `encode_prompt(clip, text)` so that I receive a conditioning object ready to pass directly to ComfyUI's sampler.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-001-AC01",
+          "text": "`from pycomfy.conditioning import encode_prompt` imports without error on CPU with no model files."
+        },
+        {
+          "id": "US-001-AC02",
+          "text": "`encode_prompt(clip, \"a portrait of a woman, studio lighting\")` returns a non-`None` value."
+        },
+        {
+          "id": "US-001-AC03",
+          "text": "The returned object is the raw conditioning output from ComfyUI's CLIP encoder (no additional wrapping)."
+        },
+        {
+          "id": "US-001-AC04",
+          "text": "No ComfyUI loaders or `torch` are imported as a side effect of `import pycomfy.conditioning`."
+        },
+        {
+          "id": "US-001-AC05",
+          "text": "`ruff check .` and `mypy pycomfy/` pass with no new errors."
+        }
+      ]
+    },
+    {
+      "id": "US-002",
+      "title": "Positive and negative prompts share the same function",
+      "description": "As a library consumer, I want `encode_prompt` to work identically for both positive and negative prompts so that I am responsible for the distinction and the API stays minimal.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-002-AC01",
+          "text": "Calling `encode_prompt(clip, \"ugly, blurry\")` (negative) returns a non-`None` value using the same"
+        },
+        {
+          "id": "US-002-AC02",
+          "text": "No separate `encode_negative_prompt` function or `is_negative` parameter is added to the public API."
+        }
+      ]
+    },
+    {
+      "id": "US-003",
+      "title": "Prompt weighting syntax passes through unchanged",
+      "description": "As a library consumer, I want weighted prompts like `\"a portrait of a woman, (studio lighting:1.3)\"` to be accepted by `encode_prompt` without modification so that ComfyUI's native weighting logic applies.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-003-AC01",
+          "text": "`encode_prompt(clip, \"a portrait of a woman, (studio lighting:1.3)\")` returns a non-`None` value."
+        },
+        {
+          "id": "US-003-AC02",
+          "text": "pycomfy does not parse, strip, or transform the prompt string before passing it to the ComfyUI encoder."
+        },
+        {
+          "id": "US-003-AC03",
+          "text": "No exception is raised for valid ComfyUI weighting syntax."
+        }
+      ]
+    },
+    {
+      "id": "US-004",
+      "title": "Empty string encodes without crashing",
+      "description": "As a library consumer, I want `encode_prompt(clip, \"\")` to succeed so that the common unconditional / empty negative prompt case works without special-casing.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-004-AC01",
+          "text": "`encode_prompt(clip, \"\")` returns a non-`None` value."
+        },
+        {
+          "id": "US-004-AC02",
+          "text": "No exception is raised for an empty string input."
+        }
+      ]
+    },
+    {
+      "id": "US-005",
+      "title": "CPU-only import never crashes",
+      "description": "As a developer running CI (CPU-only, no model files), I want `from pycomfy.conditioning import encode_prompt` to succeed so that the module can be tested and linted in CI without GPU or model files.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-005-AC01",
+          "text": "Running `uv run python -c \"from pycomfy.conditioning import encode_prompt; print('ok')\"` exits with"
+        },
+        {
+          "id": "US-005-AC02",
+          "text": "No `torch`, `comfy.sd`, or any heavy loader is imported at module import time."
+        }
+      ]
+    }
+  ],
+  "functionalRequirements": [
+    {
+      "id": "FR-1",
+      "description": "`pycomfy/conditioning.py` exposes a public function `encode_prompt(clip: Any, text: str) -> Any`."
+    },
+    {
+      "id": "FR-2",
+      "description": "`encode_prompt` calls ComfyUI's CLIP encoder using the two-call pattern from `CLIPTextEncode`"
+    },
+    {
+      "id": "FR-3",
+      "description": "The prompt string is passed to the ComfyUI encoder unchanged — no pre-processing, stripping, or"
+    },
+    {
+      "id": "FR-4",
+      "description": "`encode_prompt` accepts an empty string (`\"\"`) and returns a valid conditioning object."
+    },
+    {
+      "id": "FR-5",
+      "description": "`pycomfy/conditioning.py` must not import `torch`, `comfy.sd`, or any model loader at module level."
+    },
+    {
+      "id": "FR-6",
+      "description": "`encode_prompt` is exported from `pycomfy/conditioning.py` and optionally re-exported from"
+    },
+    {
+      "id": "FR-7",
+      "description": "Type hints use `Any` for `clip` and the return type, consistent with the pattern established in"
+    }
+  ]
+}
