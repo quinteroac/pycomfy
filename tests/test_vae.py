@@ -16,7 +16,23 @@ from PIL import Image
 
 import pycomfy
 import pycomfy.vae as vae_module
-from pycomfy import vae_decode, vae_decode_tiled, vae_encode_tiled
+from pycomfy import (
+    vae_decode,
+    vae_decode_tiled,
+    vae_encode_tiled,
+)
+from pycomfy import (
+    vae_decode_batch as vae_decode_batch_from_root,
+)
+from pycomfy import (
+    vae_decode_batch_tiled as vae_decode_batch_tiled_from_root,
+)
+from pycomfy import (
+    vae_encode_batch as vae_encode_batch_from_root,
+)
+from pycomfy import (
+    vae_encode_batch_tiled as vae_encode_batch_tiled_from_root,
+)
 from pycomfy.models import CheckpointResult
 from pycomfy.vae import (
     vae_decode_batch,
@@ -123,6 +139,17 @@ def test_vae_encode_tiled_is_exported_from_module_and_package_root() -> None:
     assert pycomfy.vae_encode_tiled is vae_encode_tiled
     assert vae_module.vae_encode_tiled is vae_encode_tiled_from_module
     assert "vae_encode_tiled" in pycomfy.__all__
+
+
+def test_vae_batch_functions_are_re_exported_from_package_root() -> None:
+    assert pycomfy.vae_decode_batch is vae_decode_batch_from_root
+    assert pycomfy.vae_decode_batch_tiled is vae_decode_batch_tiled_from_root
+    assert pycomfy.vae_encode_batch is vae_encode_batch_from_root
+    assert pycomfy.vae_encode_batch_tiled is vae_encode_batch_tiled_from_root
+    assert "vae_decode_batch" in pycomfy.__all__
+    assert "vae_decode_batch_tiled" in pycomfy.__all__
+    assert "vae_encode_batch" in pycomfy.__all__
+    assert "vae_encode_batch_tiled" in pycomfy.__all__
 
 
 def test_vae_decode_accepts_checkpoint_result_vae_and_returns_pil_image() -> None:
@@ -766,15 +793,17 @@ def test_import_pycomfy_vae_has_no_heavy_import_side_effects() -> None:
         "baseline_modules = set(sys.modules)\n"
         "baseline_torch_loaded = 'torch' in sys.modules\n"
         "from pycomfy.vae import "
-        "vae_decode, vae_decode_batch, vae_decode_tiled, vae_encode, vae_encode_batch, "
-        "vae_encode_tiled\n"
+        "vae_decode, vae_decode_batch, vae_decode_batch_tiled, vae_decode_tiled, "
+        "vae_encode, vae_encode_batch, vae_encode_batch_tiled, vae_encode_tiled\n"
         "post_modules = set(sys.modules)\n"
         "new_modules = sorted(post_modules - baseline_modules)\n"
         "payload = {\n"
         "  'func_name': vae_decode.__name__,\n"
         "  'batch_func_name': vae_decode_batch.__name__,\n"
+        "  'batch_tiled_func_name': vae_decode_batch_tiled.__name__,\n"
         "  'encode_func_name': vae_encode.__name__,\n"
         "  'encode_batch_func_name': vae_encode_batch.__name__,\n"
+        "  'encode_batch_tiled_func_name': vae_encode_batch_tiled.__name__,\n"
         "  'encode_tiled_func_name': vae_encode_tiled.__name__,\n"
         "  'tiled_func_name': vae_decode_tiled.__name__,\n"
         "  'baseline_torch_loaded': baseline_torch_loaded,\n"
@@ -790,9 +819,11 @@ def test_import_pycomfy_vae_has_no_heavy_import_side_effects() -> None:
     payload = json.loads(result.stdout)
     assert payload["func_name"] == "vae_decode"
     assert payload["batch_func_name"] == "vae_decode_batch"
+    assert payload["batch_tiled_func_name"] == "vae_decode_batch_tiled"
     assert payload["tiled_func_name"] == "vae_decode_tiled"
     assert payload["encode_func_name"] == "vae_encode"
     assert payload["encode_batch_func_name"] == "vae_encode_batch"
+    assert payload["encode_batch_tiled_func_name"] == "vae_encode_batch_tiled"
     assert payload["encode_tiled_func_name"] == "vae_encode_tiled"
     assert payload["torch_loaded"] == payload["baseline_torch_loaded"]
     assert payload["nodes_loaded"] is False
