@@ -12,6 +12,20 @@ class _VaeDecoder(Protocol):
     def decode(self, samples: Any) -> Any: ...
 
 
+class _VaeEncoder(Protocol):
+    def encode(self, pixel_samples: Any) -> Any: ...
+
+
+class _ListTensor:
+    """Minimal tensor-like wrapper used when torch is unavailable."""
+
+    def __init__(self, data: list[list[list[list[float]]]]) -> None:
+        self._data = data
+
+    def tolist(self) -> list[list[list[list[float]]]]:
+        return self._data
+
+
 def _clip_to_uint8(value: float) -> int:
     scaled = int(value * 255.0)
     if scaled < 0:
@@ -100,4 +114,37 @@ def vae_decode(vae: _VaeDecoder, latent: Mapping[str, Any]) -> Image.Image:
     return _tensor_like_to_pil(image)
 
 
-__all__ = ["vae_decode"]
+def _pil_to_batched_hwc(image: Image.Image) -> list[list[list[list[float]]]]:
+    rgb = image.convert("RGB")
+    width, height = rgb.size
+    pixels = rgb.load()
+
+    rows: list[list[list[float]]] = []
+    for y in range(height):
+        row: list[list[float]] = []
+        for x in range(width):
+            r, g, b = pixels[x, y]
+            row.append([r / 255.0, g / 255.0, b / 255.0])
+        rows.append(row)
+
+    return [rows]
+
+
+def _image_to_tensor_like(image: Image.Image) -> Any:
+    batched_hwc = _pil_to_batched_hwc(image)
+    try:
+        import torch
+    except ModuleNotFoundError:
+        return _ListTensor(batched_hwc)
+
+    return torch.tensor(batched_hwc, dtype=torch.float32)
+
+
+def vae_encode(vae: _VaeEncoder, image: Image.Image) -> dict[str, Any]:
+    """Encode a PIL image into a ComfyUI LATENT dict."""
+    pixel_samples = _image_to_tensor_like(image)
+    samples = vae.encode(pixel_samples)
+    return {"samples": samples}
+
+
+__all__ = ["vae_decode", "vae_encode"]
