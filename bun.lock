@@ -1,0 +1,18 @@
+{
+  "lockfileVersion": 1,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "dependencies": {
+        "@quinteroac/agents-coding-toolkit": "^0.4.0",
+      },
+    },
+  },
+  "packages": {
+    "@quinteroac/agents-coding-toolkit": ["@quinteroac/agents-coding-toolkit@0.4.0", "", { "dependencies": { "@quinteroac/agents-coding-toolkit": "^0.2.0", "zod": "^3.23.8" }, "bin": { "nvst": "src/cli.ts" } }, "sha512-ycWGvnzOOur6rFKgPeDd7EhX82hDiY6g8Ww58yqlwM2E7f3hvvEpbJSq7QXrAG90lmvsWy0xs90RmYVA1uS6QQ=="],
+
+    "zod": ["zod@3.25.76", "", {}, "sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ=="],
+
+    "@quinteroac/agents-coding-toolkit/@quinteroac/agents-coding-toolkit": ["@quinteroac/agents-coding-toolkit@0.2.0", "", { "dependencies": { "zod": "^3.23.8" }, "bin": { "nvst": "src/cli.ts" } }, "sha512-qcjP6p/kRbvwsvLbJscrrAbm8MezUGtSbw+7ZiACOEjcd1zAAs9Zk1Knq05vo8XjFUUbT3yOBH4wJG3c2Kr5JQ=="],
+  }
+}

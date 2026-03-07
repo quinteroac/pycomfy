@@ -1,0 +1,171 @@
+{
+  "goals": [
+    "Establish pycomfy as a standard, installable Python package consumable by downstream projects",
+    "Vendor ComfyUI as a git submodule pinned to a stable release tag",
+    "Provide a first public function (`check_runtime()`) that returns structured diagnostics proving the ComfyUI runtime is importable and responsive",
+    "Ensure the project works on both CUDA and CPU-only environments (critical for CI)"
+  ],
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Python Package Structure",
+      "description": "As a Python developer, I want pycomfy to be a proper Python package with `__init__.py` and standard layout so that I can `import pycomfy` like any other library.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-001-AC01",
+          "text": "`pycomfy/` directory exists as the package root with `__init__.py`"
+        },
+        {
+          "id": "US-001-AC02",
+          "text": "`pycomfy/__init__.py` exports `check_runtime` as a public symbol"
+        },
+        {
+          "id": "US-001-AC03",
+          "text": "Package follows standard src-less layout (package dir at repo root)"
+        },
+        {
+          "id": "US-001-AC04",
+          "text": "Typecheck / lint passes"
+        }
+      ]
+    },
+    {
+      "id": "US-002",
+      "title": "ComfyUI as Git Submodule",
+      "description": "As a developer cloning the repo, I want ComfyUI vendored as a git submodule at `vendor/ComfyUI` pinned to the latest stable release tag so that I get a reproducible, controlled dependency without floating on master.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-002-AC01",
+          "text": "`vendor/ComfyUI` is a git submodule pointing to a specific stable release tag of ComfyUI"
+        },
+        {
+          "id": "US-002-AC02",
+          "text": "`.gitmodules` correctly references the ComfyUI repository"
+        },
+        {
+          "id": "US-002-AC03",
+          "text": "`git submodule update --init` from a fresh clone brings ComfyUI in at the pinned tag — no manual steps"
+        },
+        {
+          "id": "US-002-AC04",
+          "text": "The pinned tag is documented (in pyproject.toml metadata or a comment in `.gitmodules`)"
+        }
+      ]
+    },
+    {
+      "id": "US-003",
+      "title": "pyproject.toml and Editable Install",
+      "description": "As a developer, I want `pyproject.toml` fully configured so that `uv pip install -e .` works from a fresh clone without manual path manipulation so that I can consume pycomfy as a real dependency in my own projects.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-003-AC01",
+          "text": "`pyproject.toml` declares package metadata (name, version, description, python `>=3.12`)"
+        },
+        {
+          "id": "US-003-AC02",
+          "text": "`torch` is declared as an optional dependency with extras: `pycomfy[cuda]` and `pycomfy[cpu]`"
+        },
+        {
+          "id": "US-003-AC03",
+          "text": "`uv pip install -e .` succeeds from a fresh clone (after submodule init)"
+        },
+        {
+          "id": "US-003-AC04",
+          "text": "No hardcoded torch version — extras only declare the appropriate torch index/variant"
+        },
+        {
+          "id": "US-003-AC05",
+          "text": "Typecheck / lint passes"
+        }
+      ]
+    },
+    {
+      "id": "US-004",
+      "title": "Runtime Path Management",
+      "description": "As a developer importing pycomfy, I want the library to internally manage `sys.path` so that ComfyUI internals (e.g. `comfy.model_management`) are importable so that I never have to manually manipulate paths or set environment variables.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-004-AC01",
+          "text": "Importing `pycomfy` makes `vendor/ComfyUI` internals importable transparently"
+        },
+        {
+          "id": "US-004-AC02",
+          "text": "Path manipulation is encapsulated inside pycomfy — no leaking into the consumer's `sys.path` beyond what is necessary"
+        },
+        {
+          "id": "US-004-AC03",
+          "text": "Works regardless of the working directory the consumer runs from (uses absolute paths derived from the package location)"
+        },
+        {
+          "id": "US-004-AC04",
+          "text": "Typecheck / lint passes"
+        }
+      ]
+    },
+    {
+      "id": "US-005",
+      "title": "`check_runtime()` — Structured Diagnostic Function",
+      "description": "As a Python developer, I want to call `pycomfy.check_runtime()` and receive a structured dict with runtime diagnostics so that I can verify the ComfyUI engine is accessible and inspect the environment programmatically.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-005-AC01",
+          "text": "`check_runtime()` returns a dict with keys: `comfyui_version` (str), `device` (str, e.g. `\"cuda:0\"` or `\"cpu\"`), `vram_total_mb` (int), `vram_free_mb` (int), `python_version` (str)"
+        },
+        {
+          "id": "US-005-AC02",
+          "text": "On CUDA environments, reports actual device and VRAM stats via `comfy.model_management`"
+        },
+        {
+          "id": "US-005-AC03",
+          "text": "On CPU-only environments, returns `\"device\": \"cpu\"`, `vram_total_mb: 0`, `vram_free_mb: 0` without crashing"
+        },
+        {
+          "id": "US-005-AC04",
+          "text": "Validates that `comfy.model_management` is importable and responsive — not just that the import didn't error"
+        },
+        {
+          "id": "US-005-AC05",
+          "text": "`uv run python -c \"from pycomfy import check_runtime; print(check_runtime())\"` succeeds as a one-liner smoke test"
+        },
+        {
+          "id": "US-005-AC06",
+          "text": "Typecheck / lint passes"
+        }
+      ]
+    }
+  ],
+  "functionalRequirements": [
+    {
+      "id": "FR-1",
+      "description": "Package directory is `pycomfy/` at repo root with `__init__.py` exporting public API"
+    },
+    {
+      "id": "FR-2",
+      "description": "ComfyUI is vendored at `vendor/ComfyUI` as a git submodule pinned to the latest stable release tag (not master)"
+    },
+    {
+      "id": "FR-3",
+      "description": "`pyproject.toml` declares `requires-python = \">=3.12\"`, package metadata, and optional `[cuda]`/`[cpu]` extras for torch"
+    },
+    {
+      "id": "FR-4",
+      "description": "On import, pycomfy adds `vendor/ComfyUI` to the Python path using absolute paths derived from the package's own `__file__` location"
+    },
+    {
+      "id": "FR-5",
+      "description": "`check_runtime()` returns `{\"comfyui_version\": str, \"device\": str, \"vram_total_mb\": int, \"vram_free_mb\": int, \"python_version\": str}`"
+    },
+    {
+      "id": "FR-6",
+      "description": "`check_runtime()` gracefully handles CPU-only environments (no crash, reports `\"cpu\"` and zero VRAM)"
+    },
+    {
+      "id": "FR-7",
+      "description": "`check_runtime()` returns an error dict (not raise) when ComfyUI runtime is unavailable (e.g. submodule not initialized), with `\"error\"` key describing the issue and `python_version` always populated"
+    },
+    {
+      "id": "FR-8",
+      "description": "`uv pip install -e .` works from a fresh clone after `git submodule update --init`"
+    }
+  ]
+}

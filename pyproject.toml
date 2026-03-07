@@ -1,0 +1,10 @@
+[project]
+name = "pycomfy"
+version = "0.1.0"
+description = "ComfyUI inference engine as a standalone Python library (no server, no UI)."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
+
+[tool.uv]
+# This project uses uv for install, lock, and run. See README and AGENTS.md.
