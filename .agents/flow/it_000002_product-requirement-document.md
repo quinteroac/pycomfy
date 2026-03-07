@@ -59,7 +59,7 @@ directly to sampling and conditioning APIs.
 
 **Acceptance Criteria:**
 - [ ] `load_checkpoint(filename)` accepts a filename (not a full path); the full path is resolved
-  as `models_dir / filename`.
+  as `models_dir / "checkpoints" / filename`.
 - [ ] Returns a `CheckpointResult` dataclass (or equivalent typed container) with three
   attributes: `.model`, `.clip`, `.vae`.
 - [ ] The three attributes hold the native objects returned by
@@ -105,10 +105,20 @@ CPU-only machine **so that** automated tests remain green without GPU hardware.
 - **FR-1** `pycomfy/models.py` (or `pycomfy/models/__init__.py`) exposes `ModelManager` and
   `CheckpointResult` as public names.
 - **FR-2** `ModelManager.__init__(models_dir: str | pathlib.Path)` validates that the directory
-  exists; raises `ValueError` if not.
+  exists; raises `ValueError` if not. The constructor also registers the following subdirectories
+  with ComfyUI's `folder_paths` system (creating them is **not** required — registration is
+  unconditional):
+  ```
+  models_dir/
+    checkpoints/   ← load_checkpoint resolves filenames here
+    embeddings/    ← registered for embedding lookup during checkpoint load
+    vae/           ← reserved for future it-02b (standalone VAE loading)
+    loras/         ← reserved for future it-006 (LoRA loading)
+  ```
+  This mirrors the directory layout that ComfyUI itself uses and that ecosystem users expect.
 - **FR-3** `ModelManager.load_checkpoint(filename: str) -> CheckpointResult` resolves the full
-  path as `models_dir / filename`, raises `FileNotFoundError` before invoking comfy if the file
-  does not exist.
+  path as `models_dir / "checkpoints" / filename`, raises `FileNotFoundError` before invoking
+  comfy if the file does not exist.
 - **FR-4** Internally, `load_checkpoint` calls `comfy.sd.load_checkpoint_guess_config()` (or the
   equivalent comfy loader) — pycomfy must not reimplement checkpoint parsing.
 - **FR-5** `CheckpointResult` is a `dataclass` with attributes `.model: Any`, `.clip: Any | None`,
@@ -133,9 +143,10 @@ CPU-only machine **so that** automated tests remain green without GPU hardware.
 
 ## Open Questions
 
-- **Q1 (resolved):** `load_checkpoint` accepts **filename only** — `models_dir / filename` is the
-  strict contract. Absolute path overrides are not supported. If a caller needs a different base
-  directory, they instantiate a new `ModelManager`. No special cases.
+- **Q1 (resolved):** `load_checkpoint` accepts **filename only** — `models_dir / "checkpoints" /
+  filename` is the strict contract. This mirrors ComfyUI's own directory layout (`models/checkpoints/`)
+  and is what ecosystem users expect. Absolute path overrides are not supported. If a caller needs
+  a different base directory, they instantiate a new `ModelManager`. No special cases.
 - **Q2 (resolved):** `CheckpointResult` allows `None` for `.clip` and `.vae`:
   ```python
   @dataclass
