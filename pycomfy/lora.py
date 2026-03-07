@@ -13,7 +13,11 @@ def apply_lora(
     strength_model: float,
     strength_clip: float,
 ) -> tuple[Any, Any]:
-    """Apply a LoRA file to a model/CLIP pair and return patched copies."""
+    """Apply a LoRA file to a model/CLIP pair and return patched copies.
+
+    The returned pair can be passed back into ``apply_lora`` to stack
+    multiple LoRAs by chaining calls.
+    """
     from ._runtime import ensure_comfyui_on_path
 
     ensure_comfyui_on_path()

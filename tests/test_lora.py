@@ -115,6 +115,104 @@ def test_apply_lora_is_re_exported_from_package_root() -> None:
     assert "apply_lora" in pycomfy.__all__
 
 
+def test_apply_lora_supports_chaining_without_additional_api(
+    monkeypatch: Any,
+) -> None:
+    base_model = object()
+    base_clip = object()
+    first_patched_model = object()
+    first_patched_clip = object()
+    second_patched_model = object()
+    second_patched_clip = object()
+
+    loaded_loras: list[dict[str, Any]] = []
+    patch_calls: list[dict[str, Any]] = []
+
+    def fake_load_torch_file(path: str, *, safe_load: bool) -> dict[str, Any]:
+        loaded = {"path": path, "safe_load": safe_load}
+        loaded_loras.append(loaded)
+        return loaded
+
+    def fake_load_lora_for_models(
+        model_arg: object,
+        clip_arg: object,
+        lora_arg: dict[str, Any],
+        strength_model_arg: float,
+        strength_clip_arg: float,
+    ) -> tuple[object, object]:
+        patch_calls.append(
+            {
+                "model": model_arg,
+                "clip": clip_arg,
+                "lora": lora_arg,
+                "strength_model": strength_model_arg,
+                "strength_clip": strength_clip_arg,
+            }
+        )
+        if len(patch_calls) == 1:
+            return (first_patched_model, first_patched_clip)
+        return (second_patched_model, second_patched_clip)
+
+    import types
+
+    comfy_module = types.ModuleType("comfy")
+    comfy_utils_module = types.ModuleType("comfy.utils")
+    comfy_sd_module = types.ModuleType("comfy.sd")
+
+    comfy_utils_module.load_torch_file = fake_load_torch_file
+    comfy_sd_module.load_lora_for_models = fake_load_lora_for_models
+
+    comfy_module.utils = comfy_utils_module
+    comfy_module.sd = comfy_sd_module
+
+    monkeypatch.setitem(sys.modules, "comfy", comfy_module)
+    monkeypatch.setitem(sys.modules, "comfy.utils", comfy_utils_module)
+    monkeypatch.setitem(sys.modules, "comfy.sd", comfy_sd_module)
+
+    first_model, first_clip = lora_module.apply_lora(
+        base_model,
+        base_clip,
+        "/tmp/lora_a.safetensors",
+        0.7,
+        0.5,
+    )
+    second_model, second_clip = lora_module.apply_lora(
+        first_model,
+        first_clip,
+        "/tmp/lora_b.safetensors",
+        0.3,
+        0.2,
+    )
+
+    # AC01: chaining two calls yields a double-patched model+CLIP pair.
+    assert (first_model, first_clip) == (first_patched_model, first_patched_clip)
+    assert (second_model, second_clip) == (second_patched_model, second_patched_clip)
+    assert patch_calls[0] == {
+        "model": base_model,
+        "clip": base_clip,
+        "lora": loaded_loras[0],
+        "strength_model": 0.7,
+        "strength_clip": 0.5,
+    }
+    assert patch_calls[1] == {
+        "model": first_model,
+        "clip": first_clip,
+        "lora": loaded_loras[1],
+        "strength_model": 0.3,
+        "strength_clip": 0.2,
+    }
+
+    # AC02: intermediate result remains independent from later patched output.
+    assert first_model is first_patched_model
+    assert first_clip is first_patched_clip
+    assert second_model is not first_model
+    assert second_clip is not first_clip
+
+    # AC03: chaining uses only apply_lora; no new multi-LoRA API was added.
+    assert not hasattr(lora_module, "apply_loras")
+    assert not hasattr(pycomfy, "apply_loras")
+
+
 def test_import_pycomfy_lora_has_no_heavy_import_side_effects() -> None:
     result = _run_python(
         "import json\n"
