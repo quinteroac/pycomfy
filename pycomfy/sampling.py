@@ -105,6 +105,16 @@ def _get_ltxv_scheduler_type() -> Any:
     return LTXVScheduler
 
 
+def _get_sampler_custom_advanced_type() -> Any:
+    """Resolve ComfyUI SamplerCustomAdvanced implementation at call time."""
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    from comfy_extras.nodes_custom_sampler import SamplerCustomAdvanced
+
+    return SamplerCustomAdvanced
+
+
 def _unwrap_node_output(output: Any) -> Any:
     """Return the first node output value from ComfyUI V3 or tuple-style APIs."""
     result = getattr(output, "result", output)
@@ -278,9 +288,34 @@ def sample_advanced(
     )[0]
 
 
+def sample_custom(
+    noise: Any,
+    guider: Any,
+    sampler: Any,
+    sigmas: Any,
+    latent_image: Any,
+) -> tuple[Any, Any]:
+    """Run custom sampling with explicit noise/guider/sampler/sigmas inputs.
+
+    The `model` is not a direct argument here: it is already embedded in the
+    provided `guider` object (for example from `basic_guider()` or `cfg_guider()`).
+    """
+    sampler_custom_advanced_type = _get_sampler_custom_advanced_type()
+    output = sampler_custom_advanced_type.execute(
+        noise,
+        guider,
+        sampler,
+        sigmas,
+        latent_image,
+    )
+    result = getattr(output, "result", output)
+    return result[0], result[1]
+
+
 __all__ = [
     "sample",
     "sample_advanced",
+    "sample_custom",
     "basic_guider",
     "cfg_guider",
     "random_noise",

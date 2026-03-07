@@ -25,6 +25,7 @@ from pycomfy.sampling import (
     random_noise,
     sample,
     sample_advanced,
+    sample_custom,
 )
 
 
@@ -51,6 +52,7 @@ def _run_python(code: str) -> subprocess.CompletedProcess[str]:
 def test_sampling_public_api_exports_all_entrypoints() -> None:
     assert sample.__name__ == "sample"
     assert sample_advanced.__name__ == "sample_advanced"
+    assert sample_custom.__name__ == "sample_custom"
     assert basic_guider.__name__ == "basic_guider"
     assert cfg_guider.__name__ == "cfg_guider"
     assert random_noise.__name__ == "random_noise"
@@ -63,6 +65,7 @@ def test_sampling_public_api_exports_all_entrypoints() -> None:
     assert sampling_module.__all__ == [
         "sample",
         "sample_advanced",
+        "sample_custom",
         "basic_guider",
         "cfg_guider",
         "random_noise",
@@ -94,6 +97,15 @@ def test_sample_advanced_signature_matches_contract() -> None:
         "noise_seed: 'int', *, add_noise: 'bool' = True, "
         "return_with_leftover_noise: 'bool' = False, denoise: 'float' = 1.0, "
         "start_at_step: 'int' = 0, end_at_step: 'int' = 10000) -> 'Any'"
+    )
+
+
+def test_sample_custom_signature_matches_contract() -> None:
+    signature = inspect.signature(sample_custom)
+
+    assert str(signature) == (
+        "(noise: 'Any', guider: 'Any', sampler: 'Any', sigmas: 'Any', "
+        "latent_image: 'Any') -> 'tuple[Any, Any]'"
     )
 
 
@@ -650,6 +662,149 @@ def test_sample_advanced_returns_with_leftover_noise_when_requested(
     assert recorded["kwargs"]["force_full_denoise"] is False
 
 
+def test_sample_custom_wraps_sampler_custom_advanced_execute(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    noise = object()
+    guider = object()
+    sampler = object()
+    sigmas = object()
+    latent_image = {"samples": object()}
+    output_latent = {"samples": object()}
+    denoised_latent = {"samples": object()}
+    recorded: dict[str, Any] = {}
+
+    class FakeSamplerCustomAdvanced:
+        @classmethod
+        def execute(
+            cls,
+            received_noise: Any,
+            received_guider: Any,
+            received_sampler: Any,
+            received_sigmas: Any,
+            received_latent_image: Any,
+        ) -> tuple[Any, Any]:
+            recorded["args"] = (
+                received_noise,
+                received_guider,
+                received_sampler,
+                received_sigmas,
+                received_latent_image,
+            )
+            return output_latent, denoised_latent
+
+    monkeypatch.setattr(
+        sampling_module,
+        "_get_sampler_custom_advanced_type",
+        lambda: FakeSamplerCustomAdvanced,
+    )
+
+    output, denoised = sample_custom(noise, guider, sampler, sigmas, latent_image)
+
+    assert recorded["args"] == (noise, guider, sampler, sigmas, latent_image)
+    assert output is output_latent
+    assert denoised is denoised_latent
+    assert isinstance(output, dict)
+    assert isinstance(denoised, dict)
+
+
+def test_sample_custom_extracts_from_nodeoutput_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output_latent = {"samples": object()}
+    denoised_latent = {"samples": object()}
+
+    class FakeNodeOutput:
+        def __init__(self) -> None:
+            self.result = (output_latent, denoised_latent)
+
+    class FakeSamplerCustomAdvanced:
+        @classmethod
+        def execute(cls, *args: Any) -> FakeNodeOutput:
+            return FakeNodeOutput()
+
+    monkeypatch.setattr(
+        sampling_module,
+        "_get_sampler_custom_advanced_type",
+        lambda: FakeSamplerCustomAdvanced,
+    )
+
+    output, denoised = sample_custom(object(), object(), object(), object(), object())
+
+    assert output is output_latent
+    assert denoised is denoised_latent
+
+
+def test_sample_custom_end_to_end_dummy_latent_basic_guider_basic_scheduler(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeRandomNoise:
+        def __init__(self, noise_seed: int) -> None:
+            self.seed = noise_seed
+
+    class FakeBasicGuider:
+        def __init__(self, model: Any) -> None:
+            self.model = model
+            self.conditioning: Any = None
+
+        def set_conds(self, conditioning: Any) -> None:
+            self.conditioning = conditioning
+
+    class FakeBasicScheduler:
+        @classmethod
+        def execute(
+            cls, model: Any, scheduler_name: str, steps: int, denoise: float
+        ) -> tuple[list[float]]:
+            return ([1.0, 0.5, 0.0],)
+
+    class FakeSamplerCustomAdvanced:
+        @classmethod
+        def execute(
+            cls, noise: Any, guider: Any, sampler: Any, sigmas: Any, latent_image: Any
+        ) -> tuple[dict[str, Any], dict[str, Any]]:
+            output_latent = dict(latent_image)
+            denoised_latent = dict(latent_image)
+            output_latent["noise_seed"] = noise.seed
+            output_latent["sigmas"] = sigmas
+            output_latent["guider_model"] = guider.model
+            output_latent["sampler"] = sampler
+            denoised_latent["samples"] = latent_image["samples"]
+            return output_latent, denoised_latent
+
+    monkeypatch.setattr(sampling_module, "_get_random_noise_type", lambda: FakeRandomNoise)
+    monkeypatch.setattr(sampling_module, "_get_basic_guider_type", lambda: FakeBasicGuider)
+    monkeypatch.setattr(sampling_module, "_get_basic_scheduler_type", lambda: FakeBasicScheduler)
+    monkeypatch.setattr(
+        sampling_module,
+        "_get_sampler_custom_advanced_type",
+        lambda: FakeSamplerCustomAdvanced,
+    )
+
+    model = object()
+    conditioning = object()
+    sampler = object()
+    latent_image = {"samples": object(), "batch_index": [0]}
+    noise = random_noise(1234)
+    guider = basic_guider(model, conditioning)
+    sigmas = basic_scheduler(model, "normal", 3)
+
+    output_latent, denoised_latent = sample_custom(
+        noise=noise,
+        guider=guider,
+        sampler=sampler,
+        sigmas=sigmas,
+        latent_image=latent_image,
+    )
+
+    assert isinstance(output_latent, dict)
+    assert isinstance(denoised_latent, dict)
+    assert output_latent["noise_seed"] == 1234
+    assert output_latent["sigmas"] == [1.0, 0.5, 0.0]
+    assert output_latent["guider_model"] is model
+    assert output_latent["sampler"] is sampler
+    assert denoised_latent["samples"] is latent_image["samples"]
+
+
 def test_sample_passes_sampler_and_scheduler_strings_through_unchanged(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -734,6 +889,26 @@ def test_uv_run_python_imports_sample_advanced_on_cpu_only_machine_smoke() -> No
             "python",
             "-c",
             "from pycomfy.sampling import sample_advanced; print('ok')",
+        ],
+        cwd=_repo_root(),
+        env=os.environ.copy(),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert result.stdout.strip() == "ok"
+
+
+def test_uv_run_python_imports_sample_custom_on_cpu_only_machine_smoke() -> None:
+    result = subprocess.run(
+        [
+            "uv",
+            "run",
+            "python",
+            "-c",
+            "from pycomfy.sampling import sample_custom; print('ok')",
         ],
         cwd=_repo_root(),
         env=os.environ.copy(),
@@ -936,7 +1111,7 @@ def test_import_pycomfy_sampling_has_no_additional_heavy_side_effects() -> None:
         "from pycomfy.sampling import "
         "ays_scheduler, basic_guider, basic_scheduler, cfg_guider, disable_noise, "
         "flux2_scheduler, karras_scheduler, ltxv_scheduler, random_noise, "
-        "sample, sample_advanced\n"
+        "sample, sample_advanced, sample_custom\n"
         "post_modules = set(sys.modules)\n"
         "new_modules = sorted(post_modules - baseline_modules)\n"
         "payload = {\n"
@@ -945,6 +1120,7 @@ def test_import_pycomfy_sampling_has_no_additional_heavy_side_effects() -> None:
         "  'flux2_name': flux2_scheduler.__name__,\n"
         "  'func_name': sample.__name__,\n"
         "  'advanced_name': sample_advanced.__name__,\n"
+        "  'custom_name': sample_custom.__name__,\n"
         "  'basic_name': basic_guider.__name__,\n"
         "  'cfg_name': cfg_guider.__name__,\n"
         "  'karras_name': karras_scheduler.__name__,\n"
@@ -966,6 +1142,7 @@ def test_import_pycomfy_sampling_has_no_additional_heavy_side_effects() -> None:
     assert payload["flux2_name"] == "flux2_scheduler"
     assert payload["func_name"] == "sample"
     assert payload["advanced_name"] == "sample_advanced"
+    assert payload["custom_name"] == "sample_custom"
     assert payload["basic_name"] == "basic_guider"
     assert payload["cfg_name"] == "cfg_guider"
     assert payload["karras_name"] == "karras_scheduler"
