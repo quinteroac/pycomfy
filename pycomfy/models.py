@@ -71,5 +71,21 @@ class ModelManager:
         model, clip, vae = loaded[:3]
         return CheckpointResult(model=model, clip=clip, vae=vae)
 
+    def load_vae(self, path: str | Path) -> Any:
+        """Load a standalone VAE file and return the raw ComfyUI VAE object."""
+        ensure_comfyui_on_path()
+
+        vae_path = Path(path).resolve()
+        if not vae_path.is_file():
+            raise FileNotFoundError(f"vae file not found: {vae_path}")
+
+        from comfy import sd as comfy_sd
+        from comfy import utils as comfy_utils
+
+        state_dict, metadata = comfy_utils.load_torch_file(
+            str(vae_path), return_metadata=True
+        )
+        return comfy_sd.VAE(sd=state_dict, metadata=metadata)
+
 
 __all__ = ["CheckpointResult", "ModelManager"]
