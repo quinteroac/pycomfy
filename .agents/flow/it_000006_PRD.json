@@ -1,0 +1,130 @@
+{
+  "goals": [
+    "Expose `apply_lora(model, clip, path, strength_model, strength_clip) -> tuple[Any, Any]`",
+    "Return patched copies of model and CLIP — originals are never mutated.",
+    "Match the lazy-import and CPU-safe patterns of every prior pycomfy module.",
+    "Support LoRA stacking via simple call chaining (no extra API needed).",
+    "Be directly consumable by `it_07 (ImagePipeline)` with no adapter code."
+  ],
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Apply a single LoRA to a model+CLIP pair",
+      "description": "As a Python developer (or a higher-level pycomfy module), I want to call `apply_lora(model, clip, \"/path/to/lora.safetensors\", 0.8, 0.8)`, so that I receive patched `(model, clip)` copies with the LoRA weights applied and the originals unchanged.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-001-AC01",
+          "text": "`pycomfy/lora.py` exists and exports `apply_lora` via `__all__ = [\"apply_lora\"]`."
+        },
+        {
+          "id": "US-001-AC02",
+          "text": "`apply_lora(model, clip, path, strength_model, strength_clip)` accepts:"
+        },
+        {
+          "id": "US-001-AC03",
+          "text": "The function returns a `tuple[Any, Any]` of `(patched_model, patched_clip)`."
+        },
+        {
+          "id": "US-001-AC04",
+          "text": "The original `model` and `clip` objects are not mutated (ComfyUI's internal `.clone()`"
+        },
+        {
+          "id": "US-001-AC05",
+          "text": "`apply_lora` is importable as `from pycomfy import apply_lora`"
+        },
+        {
+          "id": "US-001-AC06",
+          "text": "No `comfy.*` or `torch` import occurs at module level — all ComfyUI imports deferred"
+        },
+        {
+          "id": "US-001-AC07",
+          "text": "Typecheck / lint passes (`ruff check .` and `mypy pycomfy/` produce no new violations)."
+        }
+      ]
+    },
+    {
+      "id": "US-002",
+      "title": "Stack multiple LoRAs via chaining",
+      "description": "As a Python developer, I want to chain multiple `apply_lora` calls using the output of one as the input to the next, so that I can compose any number of LoRA weights without a special multi-LoRA API.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-002-AC01",
+          "text": "The following pattern produces a correctly double-patched model+CLIP:"
+        },
+        {
+          "id": "US-002-AC02",
+          "text": "Each intermediate result is independent — applying the second LoRA does not"
+        },
+        {
+          "id": "US-002-AC03",
+          "text": "No additional API surface is required; the test demonstrates the chaining pattern."
+        }
+      ]
+    },
+    {
+      "id": "US-003",
+      "title": "pytest coverage for apply_lora",
+      "description": "As a developer maintaining pycomfy, I want pytest tests that validate `apply_lora` behavior without GPU or real checkpoints, so that regressions are caught in CPU-only CI.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-003-AC01",
+          "text": "`tests/test_lora.py` exists."
+        },
+        {
+          "id": "US-003-AC02",
+          "text": "The test imports `apply_lora` from `pycomfy` (public surface only, not internals)."
+        },
+        {
+          "id": "US-003-AC03",
+          "text": "A mock test verifies that `comfy.sd.load_lora_for_models` is called with the correct"
+        },
+        {
+          "id": "US-003-AC04",
+          "text": "A mock test verifies that `comfy.utils.load_torch_file` is called with the given"
+        },
+        {
+          "id": "US-003-AC05",
+          "text": "A mock test verifies that chaining two `apply_lora` calls results in"
+        },
+        {
+          "id": "US-003-AC06",
+          "text": "All existing tests continue to pass (`uv run pytest`)."
+        },
+        {
+          "id": "US-003-AC07",
+          "text": "Tests run on CPU without loading any real checkpoint or LoRA file."
+        }
+      ]
+    }
+  ],
+  "functionalRequirements": [
+    {
+      "id": "FR-1",
+      "description": "** `apply_lora(model: Any, clip: Any, path: str | Path, strength_model: float, strength_clip: float) -> tuple[Any, Any]` — public function in `pycomfy/lora.py`."
+    },
+    {
+      "id": "FR-2",
+      "description": "** The function must call `ensure_comfyui_on_path()` (from `pycomfy._runtime`) and"
+    },
+    {
+      "id": "FR-3",
+      "description": "** The LoRA state dict is loaded via `comfy.utils.load_torch_file(path, safe_load=True)`,"
+    },
+    {
+      "id": "FR-4",
+      "description": "** The patching is performed via `comfy.sd.load_lora_for_models(model, clip, lora, strength_model, strength_clip)`"
+    },
+    {
+      "id": "FR-5",
+      "description": "** The function returns `(model_lora, clip_lora)` — the tuple returned directly by"
+    },
+    {
+      "id": "FR-6",
+      "description": "** `pycomfy/__init__.py` must re-export `apply_lora`"
+    },
+    {
+      "id": "FR-7",
+      "description": "** The module must declare `__all__ = [\"apply_lora\"]`."
+    }
+  ]
+}

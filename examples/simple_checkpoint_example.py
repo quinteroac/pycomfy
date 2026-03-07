@@ -16,7 +16,7 @@ Usage:
   export PYCOMFY_MODELS_DIR=/path/to/models
   export PYCOMFY_CHECKPOINT=your_checkpoint.safetensors
   uv run python examples/simple_checkpoint_example.py
-  uv run python examples/simple_checkpoint_example.py --width 768 --steps 25 --output out.png
+  uv run python examples/simple_checkpoint_example.py --lora path/to/lora.safetensors --lora-strength-model 0.8
 
 If you see "ComfyUI runtime not found", the message will include the missing
 module (e.g. psutil, torch, safetensors); install ComfyUI's requirements as above.
@@ -115,6 +115,23 @@ def main() -> int:
         default="output.png",
         help="Output image path.",
     )
+    parser.add_argument(
+        "--lora",
+        default="",
+        help="Path to LoRA file (.safetensors). If relative and not found, tries <models-dir>/loras/<value>. Omit to skip LoRA.",
+    )
+    parser.add_argument(
+        "--lora-strength-model",
+        type=float,
+        default=1.0,
+        help="LoRA strength for model (default 1.0).",
+    )
+    parser.add_argument(
+        "--lora-strength-clip",
+        type=float,
+        default=1.0,
+        help="LoRA strength for CLIP (default 1.0).",
+    )
     args = parser.parse_args()
 
     if not args.models_dir or not Path(args.models_dir).is_dir():
@@ -130,8 +147,29 @@ def main() -> int:
         )
         return 1
 
+    # Resolve optional LoRA path
+    lora_path: str | None = None
+    if args.lora.strip():
+        p = Path(args.lora.strip())
+        if p.is_absolute() and p.is_file():
+            lora_path = str(p)
+        elif p.is_file():
+            lora_path = str(p.resolve())
+        elif args.models_dir:
+            fallback = Path(args.models_dir) / "loras" / p.name
+            if fallback.is_file():
+                lora_path = str(fallback)
+        if lora_path is None:
+            print(
+                "error: LoRA file not found:",
+                args.lora,
+                "(tried cwd and <models-dir>/loras/)",
+                file=sys.stderr,
+            )
+            return 1
+
     # 1) Runtime check
-    from pycomfy import check_runtime, vae_decode
+    from pycomfy import check_runtime, vae_decode, apply_lora
     from pycomfy.conditioning import encode_prompt
     from pycomfy.models import ModelManager
     from pycomfy.sampling import sample
@@ -154,16 +192,31 @@ def main() -> int:
         print("error: checkpoint has no VAE (cannot decode latent)", file=sys.stderr)
         return 1
 
+    # 2b) Apply LoRA if requested
+    model = checkpoint.model
+    clip = checkpoint.clip
+    if lora_path is not None:
+        model, clip = apply_lora(
+            checkpoint.model,
+            checkpoint.clip,
+            lora_path,
+            args.lora_strength_model,
+            args.lora_strength_clip,
+        )
+        print("applied LoRA:", lora_path, f"(model={args.lora_strength_model}, clip={args.lora_strength_clip})")
+    if clip is None:
+        clip = checkpoint.clip
+
     # 3) Encode prompts
-    positive = encode_prompt(checkpoint.clip, args.prompt)
-    negative = encode_prompt(checkpoint.clip, args.negative_prompt)
+    positive = encode_prompt(clip, args.prompt)
+    negative = encode_prompt(clip, args.negative_prompt)
 
     # 4) Empty latent
     latent = _empty_latent(args.width, args.height, batch_size=1)
 
     # 5) Sample
     denoised = sample(
-        checkpoint.model,
+        model,
         positive,
         negative,
         latent,
