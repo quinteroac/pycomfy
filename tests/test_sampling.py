@@ -14,9 +14,14 @@ import pytest
 
 import pycomfy.sampling as sampling_module
 from pycomfy.sampling import (
+    ays_scheduler,
     basic_guider,
+    basic_scheduler,
     cfg_guider,
     disable_noise,
+    flux2_scheduler,
+    karras_scheduler,
+    ltxv_scheduler,
     random_noise,
     sample,
     sample_advanced,
@@ -50,6 +55,11 @@ def test_sampling_public_api_exports_all_entrypoints() -> None:
     assert cfg_guider.__name__ == "cfg_guider"
     assert random_noise.__name__ == "random_noise"
     assert disable_noise.__name__ == "disable_noise"
+    assert basic_scheduler.__name__ == "basic_scheduler"
+    assert karras_scheduler.__name__ == "karras_scheduler"
+    assert ays_scheduler.__name__ == "ays_scheduler"
+    assert flux2_scheduler.__name__ == "flux2_scheduler"
+    assert ltxv_scheduler.__name__ == "ltxv_scheduler"
     assert sampling_module.__all__ == [
         "sample",
         "sample_advanced",
@@ -57,6 +67,11 @@ def test_sampling_public_api_exports_all_entrypoints() -> None:
         "cfg_guider",
         "random_noise",
         "disable_noise",
+        "basic_scheduler",
+        "karras_scheduler",
+        "ays_scheduler",
+        "flux2_scheduler",
+        "ltxv_scheduler",
     ]
 
 
@@ -106,6 +121,46 @@ def test_disable_noise_signature_matches_contract() -> None:
     signature = inspect.signature(disable_noise)
 
     assert str(signature) == "() -> 'Any'"
+
+
+def test_basic_scheduler_signature_matches_contract() -> None:
+    signature = inspect.signature(basic_scheduler)
+
+    assert str(signature) == (
+        "(model: 'Any', scheduler_name: 'str', steps: 'int', "
+        "denoise: 'float' = 1.0) -> 'Any'"
+    )
+
+
+def test_karras_scheduler_signature_matches_contract() -> None:
+    signature = inspect.signature(karras_scheduler)
+
+    assert str(signature) == (
+        "(steps: 'int', sigma_max: 'float', sigma_min: 'float', rho: 'float' = 7.0) -> 'Any'"
+    )
+
+
+def test_ays_scheduler_signature_matches_contract() -> None:
+    signature = inspect.signature(ays_scheduler)
+
+    assert str(signature) == (
+        "(model_type: 'str', steps: 'int', denoise: 'float' = 1.0) -> 'Any'"
+    )
+
+
+def test_flux2_scheduler_signature_matches_contract() -> None:
+    signature = inspect.signature(flux2_scheduler)
+
+    assert str(signature) == "(steps: 'int', width: 'int', height: 'int') -> 'Any'"
+
+
+def test_ltxv_scheduler_signature_matches_contract() -> None:
+    signature = inspect.signature(ltxv_scheduler)
+
+    assert str(signature) == (
+        "(steps: 'int', max_shift: 'float', base_shift: 'float', *, "
+        "stretch: 'bool' = True, terminal: 'float' = 0.1, latent: 'Any' = None) -> 'Any'"
+    )
 
 
 def test_basic_guider_wraps_basic_guider_type(
@@ -188,6 +243,209 @@ def test_disable_noise_wraps_disable_noise_type(monkeypatch: pytest.MonkeyPatch)
 
     assert isinstance(noise, FakeDisableNoise)
     assert noise.created is True
+
+
+def test_basic_scheduler_wraps_basic_scheduler_execute(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    model = object()
+    expected_sigmas = object()
+    recorded: dict[str, Any] = {}
+
+    class FakeBasicScheduler:
+        @classmethod
+        def execute(
+            cls,
+            received_model: Any,
+            received_scheduler: str,
+            received_steps: int,
+            received_denoise: float,
+        ) -> tuple[Any]:
+            recorded["args"] = (
+                received_model,
+                received_scheduler,
+                received_steps,
+                received_denoise,
+            )
+            return (expected_sigmas,)
+
+    monkeypatch.setattr(sampling_module, "_get_basic_scheduler_type", lambda: FakeBasicScheduler)
+    result = basic_scheduler(model, "normal", 20, 0.6)
+
+    assert recorded["args"] == (model, "normal", 20, 0.6)
+    assert result is expected_sigmas
+
+
+def test_karras_scheduler_wraps_karras_scheduler_execute(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    expected_sigmas = object()
+    recorded: dict[str, Any] = {}
+
+    class FakeKarrasScheduler:
+        @classmethod
+        def execute(
+            cls,
+            received_steps: int,
+            received_sigma_max: float,
+            received_sigma_min: float,
+            received_rho: float,
+        ) -> tuple[Any]:
+            recorded["args"] = (
+                received_steps,
+                received_sigma_max,
+                received_sigma_min,
+                received_rho,
+            )
+            return (expected_sigmas,)
+
+    monkeypatch.setattr(
+        sampling_module, "_get_karras_scheduler_type", lambda: FakeKarrasScheduler
+    )
+    result = karras_scheduler(25, 14.61, 0.03)
+
+    assert recorded["args"] == (25, 14.61, 0.03, 7.0)
+    assert result is expected_sigmas
+
+
+def test_ays_scheduler_wraps_ays_scheduler_execute(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    expected_sigmas = object()
+    recorded: dict[str, Any] = {}
+
+    class FakeAysScheduler:
+        @classmethod
+        def execute(
+            cls, received_model_type: str, received_steps: int, received_denoise: float
+        ) -> tuple[Any]:
+            recorded["args"] = (received_model_type, received_steps, received_denoise)
+            return (expected_sigmas,)
+
+    monkeypatch.setattr(sampling_module, "_get_ays_scheduler_type", lambda: FakeAysScheduler)
+    result = ays_scheduler("SDXL", 18, 0.75)
+
+    assert recorded["args"] == ("SDXL", 18, 0.75)
+    assert result is expected_sigmas
+
+
+def test_ays_scheduler_rejects_invalid_model_type() -> None:
+    with pytest.raises(ValueError, match="model_type must be one of"):
+        ays_scheduler("FLUX", 20)
+
+
+def test_flux2_scheduler_wraps_flux2_scheduler_execute(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    expected_sigmas = object()
+    recorded: dict[str, Any] = {}
+
+    class FakeFlux2Scheduler:
+        @classmethod
+        def execute(
+            cls, received_steps: int, received_width: int, received_height: int
+        ) -> tuple[Any]:
+            recorded["args"] = (received_steps, received_width, received_height)
+            return (expected_sigmas,)
+
+    monkeypatch.setattr(sampling_module, "_get_flux2_scheduler_type", lambda: FakeFlux2Scheduler)
+    result = flux2_scheduler(12, 1024, 768)
+
+    assert recorded["args"] == (12, 1024, 768)
+    assert result is expected_sigmas
+
+
+def test_ltxv_scheduler_wraps_ltxv_scheduler_execute(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    expected_sigmas = object()
+    recorded: dict[str, Any] = {}
+    latent = {"samples": object()}
+
+    class FakeLtxvScheduler:
+        @classmethod
+        def execute(
+            cls,
+            received_steps: int,
+            received_max_shift: float,
+            received_base_shift: float,
+            received_stretch: bool,
+            received_terminal: float,
+            received_latent: Any,
+        ) -> tuple[Any]:
+            recorded["args"] = (
+                received_steps,
+                received_max_shift,
+                received_base_shift,
+                received_stretch,
+                received_terminal,
+                received_latent,
+            )
+            return (expected_sigmas,)
+
+    monkeypatch.setattr(sampling_module, "_get_ltxv_scheduler_type", lambda: FakeLtxvScheduler)
+    result = ltxv_scheduler(
+        30,
+        2.05,
+        0.95,
+        stretch=False,
+        terminal=0.2,
+        latent=latent,
+    )
+
+    assert recorded["args"] == (30, 2.05, 0.95, False, 0.2, latent)
+    assert result is expected_sigmas
+
+
+def test_scheduler_wrappers_extract_from_nodeoutput_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeNodeOutput:
+        def __init__(self, value: Any) -> None:
+            self.result = (value,)
+
+    basic_value = object()
+    karras_value = object()
+    ays_value = object()
+    flux2_value = object()
+    ltxv_value = object()
+
+    class FakeBasicScheduler:
+        @classmethod
+        def execute(cls, *args: Any) -> FakeNodeOutput:
+            return FakeNodeOutput(basic_value)
+
+    class FakeKarrasScheduler:
+        @classmethod
+        def execute(cls, *args: Any) -> FakeNodeOutput:
+            return FakeNodeOutput(karras_value)
+
+    class FakeAysScheduler:
+        @classmethod
+        def execute(cls, *args: Any) -> FakeNodeOutput:
+            return FakeNodeOutput(ays_value)
+
+    class FakeFlux2Scheduler:
+        @classmethod
+        def execute(cls, *args: Any) -> FakeNodeOutput:
+            return FakeNodeOutput(flux2_value)
+
+    class FakeLtxvScheduler:
+        @classmethod
+        def execute(cls, *args: Any) -> FakeNodeOutput:
+            return FakeNodeOutput(ltxv_value)
+
+    monkeypatch.setattr(sampling_module, "_get_basic_scheduler_type", lambda: FakeBasicScheduler)
+    monkeypatch.setattr(sampling_module, "_get_karras_scheduler_type", lambda: FakeKarrasScheduler)
+    monkeypatch.setattr(sampling_module, "_get_ays_scheduler_type", lambda: FakeAysScheduler)
+    monkeypatch.setattr(sampling_module, "_get_flux2_scheduler_type", lambda: FakeFlux2Scheduler)
+    monkeypatch.setattr(sampling_module, "_get_ltxv_scheduler_type", lambda: FakeLtxvScheduler)
+
+    assert basic_scheduler(object(), "normal", 10) is basic_value
+    assert karras_scheduler(10, 14.6, 0.03) is karras_value
+    assert ays_scheduler("SD1", 10) is ays_value
+    assert flux2_scheduler(10, 1024, 1024) is flux2_value
+    assert ltxv_scheduler(10, 2.05, 0.95) is ltxv_value
 
 
 def test_sample_returns_raw_denoised_latent_without_transformation(
@@ -568,6 +826,106 @@ def test_uv_run_python_imports_disable_noise_on_cpu_only_machine_smoke() -> None
     assert result.stdout.strip() == "ok"
 
 
+def test_uv_run_python_imports_basic_scheduler_on_cpu_only_machine_smoke() -> None:
+    result = subprocess.run(
+        [
+            "uv",
+            "run",
+            "python",
+            "-c",
+            "from pycomfy.sampling import basic_scheduler; print('ok')",
+        ],
+        cwd=_repo_root(),
+        env=os.environ.copy(),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert result.stdout.strip() == "ok"
+
+
+def test_uv_run_python_imports_karras_scheduler_on_cpu_only_machine_smoke() -> None:
+    result = subprocess.run(
+        [
+            "uv",
+            "run",
+            "python",
+            "-c",
+            "from pycomfy.sampling import karras_scheduler; print('ok')",
+        ],
+        cwd=_repo_root(),
+        env=os.environ.copy(),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert result.stdout.strip() == "ok"
+
+
+def test_uv_run_python_imports_ays_scheduler_on_cpu_only_machine_smoke() -> None:
+    result = subprocess.run(
+        [
+            "uv",
+            "run",
+            "python",
+            "-c",
+            "from pycomfy.sampling import ays_scheduler; print('ok')",
+        ],
+        cwd=_repo_root(),
+        env=os.environ.copy(),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert result.stdout.strip() == "ok"
+
+
+def test_uv_run_python_imports_flux2_scheduler_on_cpu_only_machine_smoke() -> None:
+    result = subprocess.run(
+        [
+            "uv",
+            "run",
+            "python",
+            "-c",
+            "from pycomfy.sampling import flux2_scheduler; print('ok')",
+        ],
+        cwd=_repo_root(),
+        env=os.environ.copy(),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert result.stdout.strip() == "ok"
+
+
+def test_uv_run_python_imports_ltxv_scheduler_on_cpu_only_machine_smoke() -> None:
+    result = subprocess.run(
+        [
+            "uv",
+            "run",
+            "python",
+            "-c",
+            "from pycomfy.sampling import ltxv_scheduler; print('ok')",
+        ],
+        cwd=_repo_root(),
+        env=os.environ.copy(),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert result.stdout.strip() == "ok"
+
+
 def test_import_pycomfy_sampling_has_no_additional_heavy_side_effects() -> None:
     result = _run_python(
         "import json\n"
@@ -576,14 +934,21 @@ def test_import_pycomfy_sampling_has_no_additional_heavy_side_effects() -> None:
         "baseline_path = list(sys.path)\n"
         "baseline_modules = set(sys.modules)\n"
         "from pycomfy.sampling import "
-        "basic_guider, cfg_guider, disable_noise, random_noise, sample, sample_advanced\n"
+        "ays_scheduler, basic_guider, basic_scheduler, cfg_guider, disable_noise, "
+        "flux2_scheduler, karras_scheduler, ltxv_scheduler, random_noise, "
+        "sample, sample_advanced\n"
         "post_modules = set(sys.modules)\n"
         "new_modules = sorted(post_modules - baseline_modules)\n"
         "payload = {\n"
+        "  'ays_name': ays_scheduler.__name__,\n"
+        "  'basic_scheduler_name': basic_scheduler.__name__,\n"
+        "  'flux2_name': flux2_scheduler.__name__,\n"
         "  'func_name': sample.__name__,\n"
         "  'advanced_name': sample_advanced.__name__,\n"
         "  'basic_name': basic_guider.__name__,\n"
         "  'cfg_name': cfg_guider.__name__,\n"
+        "  'karras_name': karras_scheduler.__name__,\n"
+        "  'ltxv_name': ltxv_scheduler.__name__,\n"
         "  'random_name': random_noise.__name__,\n"
         "  'disable_name': disable_noise.__name__,\n"
         "  'path_unchanged': baseline_path == list(sys.path),\n"
@@ -596,10 +961,15 @@ def test_import_pycomfy_sampling_has_no_additional_heavy_side_effects() -> None:
     )
 
     payload = json.loads(result.stdout)
+    assert payload["ays_name"] == "ays_scheduler"
+    assert payload["basic_scheduler_name"] == "basic_scheduler"
+    assert payload["flux2_name"] == "flux2_scheduler"
     assert payload["func_name"] == "sample"
     assert payload["advanced_name"] == "sample_advanced"
     assert payload["basic_name"] == "basic_guider"
     assert payload["cfg_name"] == "cfg_guider"
+    assert payload["karras_name"] == "karras_scheduler"
+    assert payload["ltxv_name"] == "ltxv_scheduler"
     assert payload["random_name"] == "random_noise"
     assert payload["disable_name"] == "disable_noise"
     assert payload["path_unchanged"] is True
