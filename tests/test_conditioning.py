@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 import os
-import inspect
 import subprocess
 import sys
 from pathlib import Path

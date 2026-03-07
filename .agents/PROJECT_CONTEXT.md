@@ -46,6 +46,10 @@
 - `vendor/ComfyUI/`: vendored ComfyUI submodule (not edited directly)
 - `tests/`: pytest test files
 
+## ComfyUI API Notes
+- `clip.encode_from_tokens_scheduled(tokens)` is the canonical method for text conditioning — mirrors `CLIPTextEncode` in `nodes.py`.
+- `clip.encode_from_tokens(tokens, return_pooled=True)` is exclusive to GLIGEN (spatial conditioning) — do not use for standard text encoding.
+
 ## Implemented Capabilities
 <!-- Updated at the end of each iteration -->
 - (none yet — populated after first Refactor)

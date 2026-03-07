@@ -84,7 +84,7 @@ to succeed **so that** the module can be tested and linted in CI without GPU or 
 
 - FR-1: `pycomfy/conditioning.py` exposes a public function `encode_prompt(clip: Any, text: str) -> Any`.
 - FR-2: `encode_prompt` calls ComfyUI's CLIP encoder using the two-call pattern from `CLIPTextEncode`
-  (`clip.tokenize(text)` → `clip.encode_from_tokens(tokens, return_pooled=True)`), deferred to call
+  (`clip.tokenize(text)` → `clip.encode_from_tokens_scheduled(tokens)`), deferred to call
   time (not import time).
 - FR-3: The prompt string is passed to the ComfyUI encoder unchanged — no pre-processing, stripping, or
   transformation by pycomfy.
@@ -112,9 +112,11 @@ to succeed **so that** the module can be tested and linted in CI without GPU or 
 - ~~Does ComfyUI's `clip.tokenize` + `clip.encode_from_tokens` or a single combined call better reflect
   the expected upstream API?~~
   **Resolved:** Two separate calls — this is the canonical pattern from ComfyUI's `CLIPTextEncode` node
-  in `nodes.py`. Implementation must follow:
+  in `nodes.py` (verified against `vendor/ComfyUI/nodes.py` line 79-80). Implementation follows:
   ```python
   tokens = clip.tokenize(text)
-  conditioning = clip.encode_from_tokens(tokens, return_pooled=True)
+  conditioning = clip.encode_from_tokens_scheduled(tokens)
   ```
-  Verify against `vendor/ComfyUI/nodes.py` → `CLIPTextEncode` before implementing.
+  Note: `encode_from_tokens(tokens, return_pooled=True)` is used only by specialized nodes (e.g.
+  `GLIGENTextBoxApply`) that need pooled embeddings for spatial conditioning — not the standard
+  text encoding path.
