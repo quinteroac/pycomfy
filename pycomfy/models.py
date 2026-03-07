@@ -49,6 +49,21 @@ class ModelManager:
         folder_paths.add_model_folder_path(
             "embeddings", str(self.models_dir / "embeddings"), is_default=True
         )
+        folder_paths.add_model_folder_path(
+            "diffusion_models", str(self.models_dir / "unet"), is_default=True
+        )
+        folder_paths.add_model_folder_path(
+            "diffusion_models", str(self.models_dir / "diffusion_models"), is_default=False
+        )
+        folder_paths.add_model_folder_path(
+            "text_encoders", str(self.models_dir / "text_encoders"), is_default=True
+        )
+        folder_paths.add_model_folder_path(
+            "text_encoders", str(self.models_dir / "clip"), is_default=False
+        )
+        folder_paths.add_model_folder_path(
+            "vae", str(self.models_dir / "vae"), is_default=True
+        )
 
     def load_checkpoint(self, filename: str) -> CheckpointResult:
         """Load a checkpoint by filename from the configured checkpoints directory."""
@@ -72,51 +87,94 @@ class ModelManager:
         return CheckpointResult(model=model, clip=clip, vae=vae)
 
     def load_vae(self, path: str | Path) -> Any:
-        """Load a standalone VAE file and return the raw ComfyUI VAE object."""
+        """Load a standalone VAE from a path or filename.
+
+        If ``path`` is an absolute path to an existing file, that file is loaded.
+        Otherwise ``path`` is treated as a filename under the ``vae`` folder.
+        """
         ensure_comfyui_on_path()
 
-        vae_path = Path(path).resolve()
-        if not vae_path.is_file():
-            raise FileNotFoundError(f"vae file not found: {vae_path}")
-
+        import folder_paths
         from comfy import sd as comfy_sd
         from comfy import utils as comfy_utils
 
+        p = Path(path)
+        if p.is_absolute() and p.is_file():
+            vae_path = str(p.resolve())
+        elif p.is_absolute():
+            raise FileNotFoundError(f"vae file not found: {p}")
+        else:
+            name = path if isinstance(path, str) else p.name
+            vae_path = folder_paths.get_full_path_or_raise("vae", name)
+
         state_dict, metadata = comfy_utils.load_torch_file(
-            str(vae_path), return_metadata=True
+            vae_path, return_metadata=True
         )
         vae = comfy_sd.VAE(sd=state_dict, metadata=metadata)
         vae.throw_exception_if_invalid()
         return vae
 
-    def load_clip(self, path: str | Path) -> Any:
-        """Load a standalone CLIP file and return the raw ComfyUI CLIP object."""
-        ensure_comfyui_on_path()
+    def load_clip(
+        self,
+        path: str | Path,
+        *,
+        clip_type: str = "stable_diffusion",
+    ) -> Any:
+        """Load a standalone text encoder (CLIP) from a path or filename.
 
-        clip_path = Path(path).resolve()
-        if not clip_path.is_file():
-            raise FileNotFoundError(f"clip file not found: {clip_path}")
+        If ``path`` is an absolute path to an existing file, that file is loaded.
+        Otherwise ``path`` is treated as a filename under ``text_encoders`` / ``clip``.
+
+        ``clip_type`` selects the encoder architecture (e.g. ``"wan"`` for Wan / UMT5-XXL,
+        ``"stable_diffusion"``, ``"sd3"``, ``"flux"``). Must match the model weights.
+        """
+        ensure_comfyui_on_path()
 
         import folder_paths
         from comfy import sd as comfy_sd
 
+        p = Path(path)
+        if p.is_absolute() and p.is_file():
+            full_path = str(p.resolve())
+        elif p.is_absolute():
+            raise FileNotFoundError(f"clip file not found: {p}")
+        else:
+            name = path if isinstance(path, str) else p.name
+            full_path = folder_paths.get_full_path_or_raise("text_encoders", name)
+
+        clip_type_enum = getattr(
+            comfy_sd.CLIPType,
+            clip_type.upper(),
+            comfy_sd.CLIPType.STABLE_DIFFUSION,
+        )
         return comfy_sd.load_clip(
-            ckpt_paths=[str(clip_path)],
-            clip_type=comfy_sd.CLIPType.STABLE_DIFFUSION,
+            ckpt_paths=[full_path],
             embedding_directory=folder_paths.get_folder_paths("embeddings"),
+            clip_type=clip_type_enum,
         )
 
     def load_unet(self, path: str | Path) -> Any:
-        """Load a standalone UNet file and return the raw ComfyUI model object."""
+        """Load a standalone diffusion model (UNet) from a path or filename.
+
+        If ``path`` is an absolute path to an existing file, that file is loaded.
+        Otherwise ``path`` is treated as a filename and resolved under the
+        ``diffusion_models`` / ``unet`` folders (see ComfyUI folder layout).
+        """
         ensure_comfyui_on_path()
 
-        unet_path = Path(path).resolve()
-        if not unet_path.is_file():
-            raise FileNotFoundError(f"unet file not found: {unet_path}")
-
+        import folder_paths
         from comfy import sd as comfy_sd
 
-        return comfy_sd.load_diffusion_model(str(unet_path))
+        p = Path(path)
+        if p.is_absolute() and p.is_file():
+            full_path = str(p.resolve())
+        elif p.is_absolute():
+            raise FileNotFoundError(f"unet file not found: {p}")
+        else:
+            name = path if isinstance(path, str) else p.name
+            full_path = folder_paths.get_full_path_or_raise("diffusion_models", name)
+
+        return comfy_sd.load_diffusion_model(full_path)
 
 
 __all__ = ["CheckpointResult", "ModelManager"]

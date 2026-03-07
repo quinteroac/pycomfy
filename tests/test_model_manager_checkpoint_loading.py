@@ -109,6 +109,11 @@ def test_load_checkpoint_resolves_filename_and_returns_typed_result(
     assert calls["add_model_folder_path"] == [
         ("checkpoints", str(checkpoints_dir), True),
         ("embeddings", str(embeddings_dir), True),
+        ("diffusion_models", str(models_dir / "unet"), True),
+        ("diffusion_models", str(models_dir / "diffusion_models"), False),
+        ("text_encoders", str(models_dir / "text_encoders"), True),
+        ("text_encoders", str(models_dir / "clip"), False),
+        ("vae", str(models_dir / "vae"), True),
     ]
     assert calls["get_full_path_or_raise"] == [("checkpoints", checkpoint_filename)]
     assert calls["get_folder_paths"] == ["embeddings"]
