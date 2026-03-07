@@ -17,20 +17,23 @@
   - All tests must pass on CPU-only environments — CI has no GPU. GPU is validated locally before merging.
   - Test approach: critical paths only (pytest via `uv run pytest`). Test plans are written after prototyping, during the Refactor phase.
   - Git flow: feature branches per iteration (`feature/it-000001-foundation`), merged to `main` via PR.
+  - Public API pattern: modules are not auto-imported from `__init__.py` by default. Exceptions are `check_runtime`, `vae_decode`, and `apply_lora` which are re-exported for convenience. All other symbols use explicit submodule imports (e.g. `from pycomfy.conditioning import encode_prompt`).
+  - Lazy import pattern: no `torch`, `comfy.*`, or `ensure_comfyui_on_path()` at module top level — all deferred to call time inside function bodies. Exception: `vae.py` uses pure duck typing (no comfy import at all) — both patterns are valid.
 
 - **Iteration plan (summary):**
 
-  | # | Module | Goal |
-  |---|--------|-------|
-  | 01 | `_runtime` / `check_runtime()` | Package foundation + ComfyUI vendoring |
-  | 02 | `models` | Checkpoint / VAE / CLIP loading |
-  | 03 | `conditioning` | Prompt encoding, CLIP, weighting |
-  | 04 | `sampling` | KSampler, schedulers, seeds |
-  | 05 | `vae` | Encode image→latent, decode latent→PIL |
-  | 06 | `lora` | LoRA loading and stacking |
-  | 07 | `pipeline` | High-level `ImagePipeline` API |
-  | 08 | `queue` | Async / asyncio / progress callbacks |
-  | 09 | `plugins` | Optional capability plugin system |
-  | 10 | packaging | pip-installable, type stubs, DX |
+  | # | Module | Goal | Status |
+  |---|--------|-------|--------|
+  | 01 | `_runtime` / `check_runtime()` | Package foundation + ComfyUI vendoring | ✅ Done |
+  | 02 | `models` | Checkpoint loading (`ModelManager`, `CheckpointResult`) | ✅ Done |
+  | 03 | `conditioning` | Prompt encoding via `encode_prompt` | ✅ Done |
+  | 04 | `sampling` | KSampler wrapper via `sample()` | ✅ Done |
+  | 05 | `vae` | VAE decode latent→PIL via `vae_decode()` | ✅ Done |
+  | 06 | `lora` | LoRA loading and stacking via `apply_lora()` | ✅ Done |
+  | 07 | `vae` + `models` | VAE encode image→latent (`vae_encode`) + standalone loaders (`load_vae`, `load_clip`, `load_unet`) on `ModelManager` | ⬜ Next |
+  | 08 | `pipeline` | High-level `ImagePipeline` API (txt2img + img2img + Flux) | ⬜ |
+  | 09 | `queue` | Async / asyncio / progress callbacks | ⬜ |
+  | 10 | `plugins` | Optional capability plugin system | ⬜ |
+  | 11 | packaging | pip-installable, type stubs, DX | ⬜ |
 
 - **Rule:** All generated resources in this repo must be in English.

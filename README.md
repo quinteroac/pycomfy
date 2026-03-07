@@ -64,18 +64,19 @@ image.save("output.png")
 
 Early development. Built iteratively, one capability block at a time.
 
-| Iteration | Module | Status |
-|-----------|--------|--------|
-| 01 | Package foundation + `check_runtime()` | ✅ Done |
-| 02 | Model loading (checkpoint, VAE, CLIP) | ✅ Done |
-| 03 | Conditioning (CLIP encode, prompt weighting) | ✅ Done |
-| 04 | Sampling (KSampler, schedulers) | ✅ Done |
-| 05 | VAE encode / decode | 🔨 In progress |
-| 06 | LoRA loading and stacking | ⬜ Planned |
-| 07 | High-level `ImagePipeline` API | ⬜ Planned |
-| 08 | Async / asyncio / progress callbacks | ⬜ Planned |
-| 09 | Plugin system (video, audio, vision) | ⬜ Planned |
-| 10 | Packaging, type stubs, DX | ⬜ Planned |
+| # | Module | Goal | Status |
+|---|--------|------|--------|
+| 01 | `_runtime` / `check_runtime()` | Package foundation + ComfyUI vendoring | ✅ Done |
+| 02 | `models` | Checkpoint loading (`ModelManager`, `CheckpointResult`) | ✅ Done |
+| 03 | `conditioning` | Prompt encoding via `encode_prompt` | ✅ Done |
+| 04 | `sampling` | KSampler wrapper via `sample()` | ✅ Done |
+| 05 | `vae` | VAE decode latent→PIL via `vae_decode()` | ✅ Done |
+| 06 | `lora` | LoRA loading and stacking via `apply_lora()` | ✅ Done |
+| 07 | `vae` + `models` | VAE encode image→latent (`vae_encode`) + standalone loaders (`load_vae`, `load_clip`, `load_unet`) on `ModelManager` | ⬜ Next |
+| 08 | `pipeline` | High-level `ImagePipeline` API (txt2img + img2img + Flux) | ⬜ |
+| 09 | `queue` | Async / asyncio / progress callbacks | ⬜ |
+| 10 | `plugins` | Optional capability plugin system | ⬜ |
+| 11 | packaging | pip-installable, type stubs, DX | ⬜ |
 
 ---
 
