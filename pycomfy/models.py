@@ -103,5 +103,17 @@ class ModelManager:
             embedding_directory=folder_paths.get_folder_paths("embeddings"),
         )
 
+    def load_unet(self, path: str | Path) -> Any:
+        """Load a standalone UNet file and return the raw ComfyUI model object."""
+        ensure_comfyui_on_path()
+
+        unet_path = Path(path).resolve()
+        if not unet_path.is_file():
+            raise FileNotFoundError(f"unet file not found: {unet_path}")
+
+        from comfy import sd as comfy_sd
+
+        return comfy_sd.load_diffusion_model(str(unet_path))
+
 
 __all__ = ["CheckpointResult", "ModelManager"]
