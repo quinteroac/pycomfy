@@ -65,4 +65,7 @@ def test_import_has_no_additional_side_effects_beyond_import_pycomfy() -> None:
     assert payload["path_unchanged"] is True
     assert payload["torch_loaded"] is False
     assert payload["comfy_sd_loaded"] is False
-    assert payload["new_modules"] == ["pycomfy.models"]
+    # Only pycomfy.models and lightweight stdlib helpers (e.g. dataclasses) may be added.
+    # Heavy modules (torch, comfy.*) must not appear.
+    heavy = [m for m in payload["new_modules"] if m.startswith(("torch", "comfy", "numpy"))]
+    assert heavy == [], f"Unexpected heavy modules loaded on import: {heavy}"

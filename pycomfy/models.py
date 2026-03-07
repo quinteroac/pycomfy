@@ -6,25 +6,20 @@ importing ComfyUI loaders at module import time.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from ._runtime import ensure_comfyui_on_path
 
 
+@dataclass
 class CheckpointResult:
     """Container for objects produced by a ComfyUI checkpoint load."""
-
-    __slots__ = ("model", "clip", "vae")
 
     model: Any
     clip: Any | None
     vae: Any | None
-
-    def __init__(self, model: Any, clip: Any | None, vae: Any | None) -> None:
-        self.model = model
-        self.clip = clip
-        self.vae = vae
 
 
 class ModelManager:
