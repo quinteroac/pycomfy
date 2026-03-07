@@ -231,9 +231,32 @@ def _image_to_tensor_like(image: Image.Image) -> Any:
     return torch.tensor(batched_hwc, dtype=torch.float32)
 
 
+def _images_to_tensor_like(images: list[Image.Image]) -> Any:
+    stacked_hwc: list[list[list[list[float]]]] = []
+    for image in images:
+        stacked_hwc.append(_pil_to_batched_hwc(image)[0])
+
+    try:
+        import torch
+    except ModuleNotFoundError:
+        return _ListTensor(stacked_hwc)
+
+    return torch.tensor(stacked_hwc, dtype=torch.float32)
+
+
 def vae_encode(vae: _VaeEncoder, image: Image.Image) -> dict[str, Any]:
     """Encode a PIL image into a ComfyUI LATENT dict."""
     pixel_samples = _image_to_tensor_like(image)
+    samples = vae.encode(pixel_samples)
+    return {"samples": samples}
+
+
+def vae_encode_batch(vae: _VaeEncoder, images: list[Image.Image]) -> dict[str, Any]:
+    """Encode a list of PIL images into a ComfyUI LATENT dict."""
+    if not images:
+        raise ValueError("images must not be empty")
+
+    pixel_samples = _images_to_tensor_like(images)
     samples = vae.encode(pixel_samples)
     return {"samples": samples}
 
@@ -260,4 +283,11 @@ def vae_encode_tiled(
     return {"samples": samples}
 
 
-__all__ = ["vae_decode", "vae_decode_tiled", "vae_decode_batch", "vae_encode", "vae_encode_tiled"]
+__all__ = [
+    "vae_decode",
+    "vae_decode_tiled",
+    "vae_decode_batch",
+    "vae_encode",
+    "vae_encode_batch",
+    "vae_encode_tiled",
+]

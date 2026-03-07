@@ -8,15 +8,17 @@ import subprocess
 import sys
 from inspect import signature
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 
+import pytest
 from PIL import Image
 
 import pycomfy
 import pycomfy.vae as vae_module
 from pycomfy import vae_decode, vae_decode_tiled, vae_encode_tiled
 from pycomfy.models import CheckpointResult
-from pycomfy.vae import vae_decode_batch, vae_encode
+from pycomfy.vae import vae_decode_batch, vae_encode, vae_encode_batch
 from pycomfy.vae import vae_encode_tiled as vae_encode_tiled_from_module
 
 
@@ -84,6 +86,7 @@ def test_vae_module_exports_decode_and_encode() -> None:
         "vae_decode_tiled",
         "vae_decode_batch",
         "vae_encode",
+        "vae_encode_batch",
         "vae_encode_tiled",
     ]
 
@@ -374,6 +377,124 @@ def test_vae_encode_then_decode_round_trip_returns_pil_image() -> None:
     assert isinstance(output_image, Image.Image)
 
 
+def test_vae_encode_batch_returns_latent_dict_with_samples() -> None:
+    received_pixel_samples: list[Any] = []
+
+    class _MockVae:
+        def encode(self, pixel_samples: Any) -> str:
+            received_pixel_samples.append(pixel_samples)
+            return "encoded-batch"
+
+    images = [
+        Image.new("RGB", (1, 1), color=(10, 20, 30)),
+        Image.new("RGB", (1, 1), color=(40, 50, 60)),
+        Image.new("RGB", (1, 1), color=(70, 80, 90)),
+    ]
+
+    result = vae_encode_batch(_MockVae(), images)
+
+    assert result == {"samples": "encoded-batch"}
+    assert len(received_pixel_samples) == 1
+
+
+def test_vae_encode_batch_converts_to_rgb_and_stacks_once_before_encode() -> None:
+    received_pixel_samples: list[Any] = []
+
+    class _MockVae:
+        def encode(self, pixel_samples: Any) -> str:
+            received_pixel_samples.append(pixel_samples)
+            return "encoded-batch"
+
+    grayscale = Image.new("L", (1, 1), color=128)
+    rgba = Image.new("RGBA", (1, 1), color=(10, 20, 30, 40))
+    rgb = Image.new("RGB", (1, 1), color=(1, 2, 3))
+
+    result = vae_encode_batch(_MockVae(), [grayscale, rgba, rgb])
+
+    assert result == {"samples": "encoded-batch"}
+    assert len(received_pixel_samples) == 1
+    stacked = received_pixel_samples[0].tolist()
+    assert len(stacked) == 3
+    assert stacked[0][0][0] == pytest.approx([128 / 255.0, 128 / 255.0, 128 / 255.0])
+    assert stacked[1][0][0] == pytest.approx([10 / 255.0, 20 / 255.0, 30 / 255.0])
+    assert stacked[2][0][0] == pytest.approx([1 / 255.0, 2 / 255.0, 3 / 255.0])
+
+
+def test_vae_encode_batch_works_with_torch_available(monkeypatch: Any) -> None:
+    torch_calls: list[tuple[Any, Any]] = []
+
+    class _FakeTorchTensor:
+        def __init__(self, data: Any) -> None:
+            self._data = data
+
+        def tolist(self) -> Any:
+            return self._data
+
+    fake_torch: Any = ModuleType("torch")
+    fake_torch.float32 = object()
+
+    def _fake_tensor(data: Any, *, dtype: Any) -> _FakeTorchTensor:
+        torch_calls.append((data, dtype))
+        return _FakeTorchTensor(data)
+
+    setattr(fake_torch, "tensor", _fake_tensor)
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+
+    received_pixel_samples: list[Any] = []
+
+    class _MockVae:
+        def encode(self, pixel_samples: Any) -> str:
+            received_pixel_samples.append(pixel_samples)
+            return "encoded"
+
+    result = vae_encode_batch(
+        _MockVae(),
+        [Image.new("RGB", (1, 1), color=(1, 2, 3)), Image.new("RGB", (1, 1), color=(4, 5, 6))],
+    )
+
+    assert result == {"samples": "encoded"}
+    assert len(received_pixel_samples) == 1
+    assert received_pixel_samples[0].__class__.__name__ == "_FakeTorchTensor"
+    assert len(torch_calls) == 1
+
+
+def test_vae_encode_batch_works_without_torch(monkeypatch: Any) -> None:
+    monkeypatch.delitem(sys.modules, "torch", raising=False)
+    real_import = __import__
+
+    def _fake_import(name: str, *args: Any, **kwargs: Any) -> Any:
+        if name == "torch":
+            raise ModuleNotFoundError("No module named 'torch'")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr("builtins.__import__", _fake_import)
+    received_pixel_samples: list[Any] = []
+
+    class _MockVae:
+        def encode(self, pixel_samples: Any) -> str:
+            received_pixel_samples.append(pixel_samples)
+            return "encoded"
+
+    result = vae_encode_batch(_MockVae(), [Image.new("RGB", (1, 1), color=(9, 10, 11))])
+
+    assert result == {"samples": "encoded"}
+    assert len(received_pixel_samples) == 1
+    assert received_pixel_samples[0].__class__.__name__ == "_ListTensor"
+
+
+def test_vae_encode_batch_raises_value_error_for_empty_images() -> None:
+    class _MockVae:
+        def encode(self, pixel_samples: Any) -> str:
+            raise AssertionError(f"encode should not be called: {pixel_samples}")
+
+    try:
+        vae_encode_batch(_MockVae(), [])
+    except ValueError as exc:
+        assert str(exc) == "images must not be empty"
+    else:
+        raise AssertionError("Expected ValueError for empty images")
+
+
 def test_vae_encode_tiled_returns_latent_dict_with_samples_on_cpu_mock() -> None:
     class _MockVae:
         def encode_tiled(
@@ -493,13 +614,15 @@ def test_import_pycomfy_vae_has_no_heavy_import_side_effects() -> None:
         "baseline_modules = set(sys.modules)\n"
         "baseline_torch_loaded = 'torch' in sys.modules\n"
         "from pycomfy.vae import "
-        "vae_decode, vae_decode_batch, vae_decode_tiled, vae_encode, vae_encode_tiled\n"
+        "vae_decode, vae_decode_batch, vae_decode_tiled, vae_encode, vae_encode_batch, "
+        "vae_encode_tiled\n"
         "post_modules = set(sys.modules)\n"
         "new_modules = sorted(post_modules - baseline_modules)\n"
         "payload = {\n"
         "  'func_name': vae_decode.__name__,\n"
         "  'batch_func_name': vae_decode_batch.__name__,\n"
         "  'encode_func_name': vae_encode.__name__,\n"
+        "  'encode_batch_func_name': vae_encode_batch.__name__,\n"
         "  'encode_tiled_func_name': vae_encode_tiled.__name__,\n"
         "  'tiled_func_name': vae_decode_tiled.__name__,\n"
         "  'baseline_torch_loaded': baseline_torch_loaded,\n"
@@ -517,6 +640,7 @@ def test_import_pycomfy_vae_has_no_heavy_import_side_effects() -> None:
     assert payload["batch_func_name"] == "vae_decode_batch"
     assert payload["tiled_func_name"] == "vae_decode_tiled"
     assert payload["encode_func_name"] == "vae_encode"
+    assert payload["encode_batch_func_name"] == "vae_encode_batch"
     assert payload["encode_tiled_func_name"] == "vae_encode_tiled"
     assert payload["torch_loaded"] == payload["baseline_torch_loaded"]
     assert payload["nodes_loaded"] is False
