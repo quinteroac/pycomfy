@@ -70,7 +70,7 @@ Early development. Built iteratively, one capability block at a time.
 | 02 | Model loading (checkpoint, VAE, CLIP) | ✅ Done |
 | 03 | Conditioning (CLIP encode, prompt weighting) | ✅ Done |
 | 04 | Sampling (KSampler, schedulers) | ✅ Done |
-| 05 | VAE encode / decode | ✅ Done |
+| 05 | VAE encode / decode | 🔨 In progress |
 | 06 | LoRA loading and stacking | ⬜ Planned |
 | 07 | High-level `ImagePipeline` API | ⬜ Planned |
 | 08 | Async / asyncio / progress callbacks | ⬜ Planned |
