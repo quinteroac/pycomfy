@@ -7,6 +7,24 @@ importing ComfyUI loaders at module import time.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
+
+from ._runtime import ensure_comfyui_on_path
+
+
+class CheckpointResult:
+    """Container for objects produced by a ComfyUI checkpoint load."""
+
+    __slots__ = ("model", "clip", "vae")
+
+    model: Any
+    clip: Any | None
+    vae: Any | None
+
+    def __init__(self, model: Any, clip: Any | None, vae: Any | None) -> None:
+        self.model = model
+        self.clip = clip
+        self.vae = vae
 
 
 class ModelManager:
@@ -27,5 +45,31 @@ class ModelManager:
 
         self.models_dir = path
 
+        ensure_comfyui_on_path()
+        import folder_paths
 
-__all__ = ["ModelManager"]
+        folder_paths.add_model_folder_path(
+            "checkpoints", str(self.models_dir / "checkpoints"), is_default=True
+        )
+        folder_paths.add_model_folder_path(
+            "embeddings", str(self.models_dir / "embeddings"), is_default=True
+        )
+
+    def load_checkpoint(self, filename: str) -> CheckpointResult:
+        """Load a checkpoint by filename from the configured checkpoints directory."""
+        ensure_comfyui_on_path()
+        import folder_paths
+        from comfy import sd as comfy_sd
+
+        checkpoint_path = folder_paths.get_full_path_or_raise("checkpoints", filename)
+        loaded = comfy_sd.load_checkpoint_guess_config(
+            checkpoint_path,
+            output_vae=True,
+            output_clip=True,
+            embedding_directory=folder_paths.get_folder_paths("embeddings"),
+        )
+        model, clip, vae = loaded[:3]
+        return CheckpointResult(model=model, clip=clip, vae=vae)
+
+
+__all__ = ["CheckpointResult", "ModelManager"]
