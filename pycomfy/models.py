@@ -85,7 +85,9 @@ class ModelManager:
         state_dict, metadata = comfy_utils.load_torch_file(
             str(vae_path), return_metadata=True
         )
-        return comfy_sd.VAE(sd=state_dict, metadata=metadata)
+        vae = comfy_sd.VAE(sd=state_dict, metadata=metadata)
+        vae.throw_exception_if_invalid()
+        return vae
 
     def load_clip(self, path: str | Path) -> Any:
         """Load a standalone CLIP file and return the raw ComfyUI CLIP object."""
@@ -100,6 +102,7 @@ class ModelManager:
 
         return comfy_sd.load_clip(
             ckpt_paths=[str(clip_path)],
+            clip_type=comfy_sd.CLIPType.STABLE_DIFFUSION,
             embedding_directory=folder_paths.get_folder_paths("embeddings"),
         )
 
