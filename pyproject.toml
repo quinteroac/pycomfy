@@ -15,3 +15,6 @@ include = ["pycomfy*"]
 
 [tool.uv]
 # This project uses uv for install, lock, and run. See README and AGENTS.md.
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
