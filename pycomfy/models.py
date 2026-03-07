@@ -87,5 +87,21 @@ class ModelManager:
         )
         return comfy_sd.VAE(sd=state_dict, metadata=metadata)
 
+    def load_clip(self, path: str | Path) -> Any:
+        """Load a standalone CLIP file and return the raw ComfyUI CLIP object."""
+        ensure_comfyui_on_path()
+
+        clip_path = Path(path).resolve()
+        if not clip_path.is_file():
+            raise FileNotFoundError(f"clip file not found: {clip_path}")
+
+        import folder_paths
+        from comfy import sd as comfy_sd
+
+        return comfy_sd.load_clip(
+            ckpt_paths=[str(clip_path)],
+            embedding_directory=folder_paths.get_folder_paths("embeddings"),
+        )
+
 
 __all__ = ["CheckpointResult", "ModelManager"]
