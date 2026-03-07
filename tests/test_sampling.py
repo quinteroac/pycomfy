@@ -13,7 +13,14 @@ from typing import Any
 import pytest
 
 import pycomfy.sampling as sampling_module
-from pycomfy.sampling import basic_guider, cfg_guider, sample, sample_advanced
+from pycomfy.sampling import (
+    basic_guider,
+    cfg_guider,
+    disable_noise,
+    random_noise,
+    sample,
+    sample_advanced,
+)
 
 
 def _repo_root() -> Path:
@@ -41,11 +48,15 @@ def test_sampling_public_api_exports_all_entrypoints() -> None:
     assert sample_advanced.__name__ == "sample_advanced"
     assert basic_guider.__name__ == "basic_guider"
     assert cfg_guider.__name__ == "cfg_guider"
+    assert random_noise.__name__ == "random_noise"
+    assert disable_noise.__name__ == "disable_noise"
     assert sampling_module.__all__ == [
         "sample",
         "sample_advanced",
         "basic_guider",
         "cfg_guider",
+        "random_noise",
+        "disable_noise",
     ]
 
 
@@ -83,6 +94,18 @@ def test_cfg_guider_signature_matches_contract() -> None:
     assert str(signature) == (
         "(model: 'Any', positive: 'Any', negative: 'Any', cfg: 'Any') -> 'Any'"
     )
+
+
+def test_random_noise_signature_matches_contract() -> None:
+    signature = inspect.signature(random_noise)
+
+    assert str(signature) == "(noise_seed: 'int') -> 'Any'"
+
+
+def test_disable_noise_signature_matches_contract() -> None:
+    signature = inspect.signature(disable_noise)
+
+    assert str(signature) == "() -> 'Any'"
 
 
 def test_basic_guider_wraps_basic_guider_type(
@@ -137,6 +160,34 @@ def test_cfg_guider_wraps_cfg_guider_type(monkeypatch: pytest.MonkeyPatch) -> No
     assert guider.received_positive is positive
     assert guider.received_negative is negative
     assert guider.received_cfg == cfg
+
+
+def test_random_noise_wraps_random_noise_type(monkeypatch: pytest.MonkeyPatch) -> None:
+    noise_seed = 1_234_567_890
+
+    class FakeRandomNoise:
+        def __init__(self, received_noise_seed: int) -> None:
+            self.received_noise_seed = received_noise_seed
+
+    monkeypatch.setattr(sampling_module, "_get_random_noise_type", lambda: FakeRandomNoise)
+
+    noise = random_noise(noise_seed)
+
+    assert isinstance(noise, FakeRandomNoise)
+    assert noise.received_noise_seed == noise_seed
+
+
+def test_disable_noise_wraps_disable_noise_type(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeDisableNoise:
+        def __init__(self) -> None:
+            self.created = True
+
+    monkeypatch.setattr(sampling_module, "_get_disable_noise_type", lambda: FakeDisableNoise)
+
+    noise = disable_noise()
+
+    assert isinstance(noise, FakeDisableNoise)
+    assert noise.created is True
 
 
 def test_sample_returns_raw_denoised_latent_without_transformation(
@@ -477,6 +528,46 @@ def test_uv_run_python_imports_cfg_guider_on_cpu_only_machine_smoke() -> None:
     assert result.stdout.strip() == "ok"
 
 
+def test_uv_run_python_imports_random_noise_on_cpu_only_machine_smoke() -> None:
+    result = subprocess.run(
+        [
+            "uv",
+            "run",
+            "python",
+            "-c",
+            "from pycomfy.sampling import random_noise; print('ok')",
+        ],
+        cwd=_repo_root(),
+        env=os.environ.copy(),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert result.stdout.strip() == "ok"
+
+
+def test_uv_run_python_imports_disable_noise_on_cpu_only_machine_smoke() -> None:
+    result = subprocess.run(
+        [
+            "uv",
+            "run",
+            "python",
+            "-c",
+            "from pycomfy.sampling import disable_noise; print('ok')",
+        ],
+        cwd=_repo_root(),
+        env=os.environ.copy(),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert result.stdout.strip() == "ok"
+
+
 def test_import_pycomfy_sampling_has_no_additional_heavy_side_effects() -> None:
     result = _run_python(
         "import json\n"
@@ -484,7 +575,8 @@ def test_import_pycomfy_sampling_has_no_additional_heavy_side_effects() -> None:
         "import pycomfy\n"
         "baseline_path = list(sys.path)\n"
         "baseline_modules = set(sys.modules)\n"
-        "from pycomfy.sampling import basic_guider, cfg_guider, sample, sample_advanced\n"
+        "from pycomfy.sampling import "
+        "basic_guider, cfg_guider, disable_noise, random_noise, sample, sample_advanced\n"
         "post_modules = set(sys.modules)\n"
         "new_modules = sorted(post_modules - baseline_modules)\n"
         "payload = {\n"
@@ -492,6 +584,8 @@ def test_import_pycomfy_sampling_has_no_additional_heavy_side_effects() -> None:
         "  'advanced_name': sample_advanced.__name__,\n"
         "  'basic_name': basic_guider.__name__,\n"
         "  'cfg_name': cfg_guider.__name__,\n"
+        "  'random_name': random_noise.__name__,\n"
+        "  'disable_name': disable_noise.__name__,\n"
         "  'path_unchanged': baseline_path == list(sys.path),\n"
         "  'torch_loaded': 'torch' in sys.modules,\n"
         "  'nodes_loaded': 'nodes' in sys.modules,\n"
@@ -506,6 +600,8 @@ def test_import_pycomfy_sampling_has_no_additional_heavy_side_effects() -> None:
     assert payload["advanced_name"] == "sample_advanced"
     assert payload["basic_name"] == "basic_guider"
     assert payload["cfg_name"] == "cfg_guider"
+    assert payload["random_name"] == "random_noise"
+    assert payload["disable_name"] == "disable_noise"
     assert payload["path_unchanged"] is True
     assert payload["torch_loaded"] is False
     assert payload["nodes_loaded"] is False

@@ -35,6 +35,26 @@ def _get_cfg_guider_type() -> Any:
     return CFGGuider
 
 
+def _get_random_noise_type() -> Any:
+    """Resolve ComfyUI RandomNoise implementation at call time."""
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    from comfy_extras.nodes_custom_sampler import RandomNoise
+
+    return RandomNoise
+
+
+def _get_disable_noise_type() -> Any:
+    """Resolve ComfyUI DisableNoise implementation at call time."""
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    from comfy_extras.nodes_custom_sampler import DisableNoise
+
+    return DisableNoise
+
+
 def basic_guider(model: Any, conditioning: Any) -> Any:
     """Create a BasicGuider compatible with ``sample_custom()``."""
     guider_type = _get_basic_guider_type()
@@ -50,6 +70,18 @@ def cfg_guider(model: Any, positive: Any, negative: Any, cfg: Any) -> Any:
     guider.set_conds(positive, negative)
     guider.set_cfg(cfg)
     return guider
+
+
+def random_noise(noise_seed: int) -> Any:
+    """Create a RandomNoise object compatible with ``sample_custom()``."""
+    random_noise_type = _get_random_noise_type()
+    return random_noise_type(noise_seed)
+
+
+def disable_noise() -> Any:
+    """Create a DisableNoise object compatible with ``sample_custom()``."""
+    disable_noise_type = _get_disable_noise_type()
+    return disable_noise_type()
 
 
 def sample(
@@ -129,4 +161,11 @@ def sample_advanced(
     )[0]
 
 
-__all__ = ["sample", "sample_advanced", "basic_guider", "cfg_guider"]
+__all__ = [
+    "sample",
+    "sample_advanced",
+    "basic_guider",
+    "cfg_guider",
+    "random_noise",
+    "disable_noise",
+]
