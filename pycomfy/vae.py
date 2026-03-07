@@ -16,6 +16,17 @@ class _VaeEncoder(Protocol):
     def encode(self, pixel_samples: Any) -> Any: ...
 
 
+class _VaeEncoderTiled(Protocol):
+    def encode_tiled(
+        self,
+        pixel_samples: Any,
+        *,
+        tile_x: int,
+        tile_y: int,
+        overlap: int,
+    ) -> Any: ...
+
+
 class _VaeDecoderTiled(Protocol):
     def decode_tiled(
         self,
@@ -183,4 +194,16 @@ def vae_encode(vae: _VaeEncoder, image: Image.Image) -> dict[str, Any]:
     return {"samples": samples}
 
 
-__all__ = ["vae_decode", "vae_decode_tiled", "vae_encode"]
+def vae_encode_tiled(
+    vae: _VaeEncoderTiled,
+    image: Image.Image,
+    tile_size: int = 512,
+    overlap: int = 64,
+) -> dict[str, Any]:
+    """Encode a PIL image into a ComfyUI LATENT dict using tiled encode."""
+    pixel_samples = _image_to_tensor_like(image)
+    samples = vae.encode_tiled(pixel_samples, tile_x=tile_size, tile_y=tile_size, overlap=overlap)
+    return {"samples": samples}
+
+
+__all__ = ["vae_decode", "vae_decode_tiled", "vae_encode", "vae_encode_tiled"]
