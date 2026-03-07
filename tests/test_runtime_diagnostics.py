@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import importlib
 import subprocess
 from dataclasses import dataclass
 from typing import Any
 
-import pycomfy.runtime as runtime_module
+import pytest
+
 from pycomfy.runtime import check_runtime
 
 
@@ -22,7 +24,7 @@ class _FakeDevice:
 
 
 def test_check_runtime_returns_required_keys_and_types_on_cpu(
-    monkeypatch: Any,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     def fake_import_module(module_name: str) -> Any:
         if module_name == "comfyui_version":
@@ -41,7 +43,7 @@ def test_check_runtime_returns_required_keys_and_types_on_cpu(
 
         raise ModuleNotFoundError(module_name)
 
-    monkeypatch.setattr(runtime_module.importlib, "import_module", fake_import_module)
+    monkeypatch.setattr(importlib, "import_module", fake_import_module)
 
     payload = check_runtime()
 
@@ -56,7 +58,7 @@ def test_check_runtime_returns_required_keys_and_types_on_cpu(
 
 
 def test_check_runtime_reports_cuda_device_and_vram_via_model_management(
-    monkeypatch: Any,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: dict[str, int] = {"device": 0, "total": 0, "free": 0}
     fake_device = _FakeDevice("cuda", index=0)
@@ -90,7 +92,7 @@ def test_check_runtime_reports_cuda_device_and_vram_via_model_management(
 
         raise ModuleNotFoundError(module_name)
 
-    monkeypatch.setattr(runtime_module.importlib, "import_module", fake_import_module)
+    monkeypatch.setattr(importlib, "import_module", fake_import_module)
 
     payload = check_runtime()
 
@@ -102,14 +104,14 @@ def test_check_runtime_reports_cuda_device_and_vram_via_model_management(
 
 
 def test_check_runtime_returns_error_dict_when_runtime_is_missing(
-    monkeypatch: Any,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     def fake_import_module(module_name: str) -> Any:
         if module_name == "comfyui_version":
             return type("ComfyVersion", (), {"__version__": "0.16.3"})()
         raise ModuleNotFoundError(module_name)
 
-    monkeypatch.setattr(runtime_module.importlib, "import_module", fake_import_module)
+    monkeypatch.setattr(importlib, "import_module", fake_import_module)
 
     payload = check_runtime()
 
@@ -123,7 +125,7 @@ def test_check_runtime_returns_error_dict_when_runtime_is_missing(
 
 
 def test_check_runtime_returns_error_dict_when_runtime_is_not_responsive(
-    monkeypatch: Any,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class _FailingModelManagement:
         @staticmethod
@@ -137,7 +139,7 @@ def test_check_runtime_returns_error_dict_when_runtime_is_not_responsive(
             return _FailingModelManagement
         raise ModuleNotFoundError(module_name)
 
-    monkeypatch.setattr(runtime_module.importlib, "import_module", fake_import_module)
+    monkeypatch.setattr(importlib, "import_module", fake_import_module)
 
     payload = check_runtime()
 

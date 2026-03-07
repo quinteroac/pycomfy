@@ -6,13 +6,14 @@ import subprocess
 import sys
 import tomllib
 from pathlib import Path
+from typing import Any
 
 
 def _repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
-def _read_pyproject() -> dict:
+def _read_pyproject() -> dict[str, Any]:
     pyproject_path = _repo_root() / "pyproject.toml"
     return tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
 

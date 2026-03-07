@@ -4,7 +4,15 @@ from __future__ import annotations
 
 from typing import Any
 
-from ._runtime import ensure_comfyui_on_path
+
+def _get_common_ksampler() -> Any:
+    """Resolve ComfyUI sampling entrypoint at call time."""
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    import nodes
+
+    return nodes.common_ksampler
 
 
 def sample(
@@ -25,10 +33,9 @@ def sample(
     The `latent` input follows ComfyUI's `common_ksampler` contract: a LATENT dict
     containing `"samples"` and optional metadata keys.
     """
-    ensure_comfyui_on_path()
-    import nodes
+    common_ksampler = _get_common_ksampler()
 
-    return nodes.common_ksampler(
+    return common_ksampler(
         model,
         seed,
         steps,
