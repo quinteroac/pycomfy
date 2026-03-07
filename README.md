@@ -81,15 +81,27 @@ Early development. Built iteratively, one capability block at a time.
 
 ## Installation
 
-```bash
-# CPU
-pip install "pycomfy[cpu]"
+The package is **not published on PyPI yet**. Install from the repo (clone + submodule + uv).
 
-# CUDA
-pip install "pycomfy[cuda]"
+ComfyUI deps come from `vendor/ComfyUI/requirements.txt` (extra `comfyui`).
+
+**Note:** `uv.lock` is kept with the CPU variant of torch so CI (no GPU) can run `uv sync` and get reproducible tests. One sync installs CPU torch for everyone; GPU users replace torch with the step below.
+
+```bash
+# 1. ComfyUI submodule (required after clone)
+git submodule update --init
+
+# 2. Same for everyone (installs CPU torch)
+uv sync --extra comfyui
+
+# 3. GPU only: replace torch with CUDA build (required after every uv sync)
+uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124 --force-reinstall
+# RTX 50xx (Blackwell): use cu128
+uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128 --force-reinstall
+# Verify: uv run python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
 ```
 
-> Requires Python 3.12+. ComfyUI is vendored — no separate installation needed.
+> Requires Python 3.12+. ComfyUI is vendored — no separate installation needed. Once the package is on PyPI you can use `pip install pycomfy[cuda]` or `uv add pycomfy[cuda]`.
 
 ---
 

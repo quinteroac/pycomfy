@@ -11,9 +11,12 @@ def _python_version() -> str:
     return ".".join(str(part) for part in sys.version_info[:3])
 
 
-def _runtime_not_found(python_version: str) -> dict[str, Any]:
+def _runtime_not_found(python_version: str, detail: str = "") -> dict[str, Any]:
+    msg = "ComfyUI runtime not found. Run: git submodule update --init"
+    if detail:
+        msg += f" (or install missing deps). Cause: {detail}"
     return {
-        "error": "ComfyUI runtime not found. Run: git submodule update --init",
+        "error": msg,
         "comfyui_version": None,
         "device": None,
         "vram_total_mb": None,
@@ -41,11 +44,14 @@ def check_runtime() -> dict[str, Any]:
     """Return structured runtime diagnostics for the current Python process."""
     python_version = _python_version()
 
+    from ._runtime import ensure_comfyui_on_path
+    ensure_comfyui_on_path()
+
     try:
         comfyui_version_module = importlib.import_module("comfyui_version")
         model_management = importlib.import_module("comfy.model_management")
-    except Exception:
-        return _runtime_not_found(python_version)
+    except Exception as exc:
+        return _runtime_not_found(python_version, str(exc))
 
     try:
         device = model_management.get_torch_device()
