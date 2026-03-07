@@ -24,6 +24,9 @@ htmlcov/
 # Node (Bun/nvst)
 node_modules/
 
+# Project
+schemas/
+
 # Environment and secrets
 .env
 .env.*
