@@ -29,25 +29,48 @@ I built this for myself, to use in my own projects. But I'm building it in the o
 
 `pycomfy` imports ComfyUI's internal modules directly — no server, no HTTP, no node system. ComfyUI is vendored as a git submodule and its internals are made transparently importable when you `import pycomfy`.
 
-The goal is an API that feels like `diffusers` but runs on ComfyUI's engine:
+The API exposes ComfyUI's building blocks as plain Python functions. You compose them directly — the same way you'd wire nodes in ComfyUI, but in code:
 
 ```python
 from pycomfy.models import ModelManager
-from pycomfy.pipeline import ImagePipeline
+from pycomfy.conditioning import encode_prompt
+from pycomfy.sampling import sample
+from pycomfy import vae_decode, vae_encode, apply_lora
 
 manager = ModelManager(models_dir="/path/to/models")
 checkpoint = manager.load_checkpoint("animagine-xl.safetensors")
 
-pipeline = ImagePipeline(checkpoint)
-image = await pipeline.run(
-    prompt="a portrait of a woman, studio lighting",
-    negative_prompt="blurry, low quality",
-    steps=20,
-    cfg=7.0,
-    seed=42,
+# Apply a LoRA
+model, clip = apply_lora(checkpoint.model, checkpoint.clip, "style.safetensors", 0.8, 0.8)
+
+# Encode prompts
+positive = encode_prompt(clip, "a portrait of a woman, studio lighting")
+negative = encode_prompt(clip, "blurry, low quality")
+
+# txt2img
+import torch
+latent = {"samples": torch.zeros(1, 4, 64, 64)}
+denoised = sample(
+    model, positive, negative, latent,
+    steps=20, cfg=7.0, sampler_name="euler",
+    scheduler="normal", seed=42,
 )
+image = vae_decode(checkpoint.vae, denoised)
 image.save("output.png")
+
+# img2img
+source = Image.open("input.png")
+latent = vae_encode(checkpoint.vae, source)
+denoised = sample(
+    model, positive, negative, latent,
+    steps=20, cfg=7.0, sampler_name="euler",
+    scheduler="normal", seed=42, denoise=0.75,
+)
+image = vae_decode(checkpoint.vae, denoised)
+image.save("output_img2img.png")
 ```
+
+The modularity is the point. Every building block is explicit — you see exactly what's happening at each step, and you can swap any piece without fighting a pipeline abstraction.
 
 ---
 
@@ -57,12 +80,13 @@ image.save("output.png")
 - Not a node system or workflow runner
 - Not a replacement for ComfyUI — it depends on it
 - Not a general-purpose diffusion library — it's opinionated toward ComfyUI's engine
+- Not an opinionated pipeline — there is no `ImagePipeline`. You compose the blocks yourself.
 
 ---
 
 ## Status
 
-Early development. Built iteratively, one capability block at a time.
+Early development. Built iteratively, one capability block at a time. The full node inventory and iteration plan is in [`ROADMAP.md`](ROADMAP.md).
 
 | # | Module | Goal | Status |
 |---|--------|------|--------|
@@ -72,11 +96,13 @@ Early development. Built iteratively, one capability block at a time.
 | 04 | `sampling` | KSampler wrapper via `sample()` | ✅ Done |
 | 05 | `vae` | VAE decode latent→PIL via `vae_decode()` | ✅ Done |
 | 06 | `lora` | LoRA loading and stacking via `apply_lora()` | ✅ Done |
-| 07 | `vae` + `models` | VAE encode image→latent (`vae_encode`) + standalone loaders (`load_vae`, `load_clip`, `load_unet`) on `ModelManager` | ⬜ Next |
-| 08 | `pipeline` | High-level `ImagePipeline` API (txt2img + img2img + Flux) | ⬜ |
-| 09 | `queue` | Async / asyncio / progress callbacks | ⬜ |
-| 10 | `plugins` | Optional capability plugin system | ⬜ |
-| 11 | packaging | pip-installable, type stubs, DX | ⬜ |
+| 07 | `vae` + `models` | VAE encode + standalone loaders (`load_vae`, `load_clip`, `load_unet`) | ✅ Done |
+| 08 | `vae` — tiled | Tiled VAE encode/decode for large images without OOM | ⬜ Next |
+| 09 | `vae` — batch/video | Batch VAE encode/decode for video frame sequences | ⬜ |
+| 10 | `sampling` — advanced | `SamplerCustomAdvanced`, schedulers, sigma manipulation | ⬜ |
+| 11 | `audio` | Stable Audio, WAN sound-to-video, LTXV audio, ACE Step | ⬜ |
+| — | **`v0.1.0-preview`** | **Preview release milestone** | ⬜ |
+| 12–18 | conditioning, controlnet, latent, image, mask, model patches, packaging | Post-preview | ⬜ |
 
 ---
 

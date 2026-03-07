@@ -8,6 +8,8 @@
 
 - **Project context:** [`.agents/PROJECT_CONTEXT.md`](.agents/PROJECT_CONTEXT.md) — conventions, architecture decisions, and modular structure; the agent adheres from the second iteration onward.
 
+- **Roadmap and node inventory:** [`.agents/ROADMAP.md`](.agents/ROADMAP.md) — full iteration plan, node classification (Roadmap / Nice-to-have / Discarded), and optional dependency schema.
+
 - **Key architecture decisions (do not revisit without explicit instruction):**
   - ComfyUI is vendored at `vendor/ComfyUI` as a git submodule pinned to a stable release tag — never floating on `master`. Update the pin deliberately between iterations only.
   - `sys.path` manipulation is encapsulated entirely inside `pycomfy/_runtime.py` — consumers never touch paths manually. Use absolute paths derived from `__file__`.
@@ -17,23 +19,10 @@
   - All tests must pass on CPU-only environments — CI has no GPU. GPU is validated locally before merging.
   - Test approach: critical paths only (pytest via `uv run pytest`). Test plans are written after prototyping, during the Refactor phase.
   - Git flow: feature branches per iteration (`feature/it-000001-foundation`), merged to `main` via PR.
-  - Public API pattern: modules are not auto-imported from `__init__.py` by default. Exceptions are `check_runtime`, `vae_decode`, and `apply_lora` which are re-exported for convenience. All other symbols use explicit submodule imports (e.g. `from pycomfy.conditioning import encode_prompt`).
+  - Public API pattern: modules are not auto-imported from `__init__.py` by default. Exceptions are `check_runtime`, `vae_decode`, `vae_encode`, and `apply_lora` which are re-exported for convenience. All other symbols use explicit submodule imports (e.g. `from pycomfy.conditioning import encode_prompt`).
   - Lazy import pattern: no `torch`, `comfy.*`, or `ensure_comfyui_on_path()` at module top level — all deferred to call time inside function bodies. Exception: `vae.py` uses pure duck typing (no comfy import at all) — both patterns are valid.
-
-- **Iteration plan (summary):**
-
-  | # | Module | Goal | Status |
-  |---|--------|-------|--------|
-  | 01 | `_runtime` / `check_runtime()` | Package foundation + ComfyUI vendoring | ✅ Done |
-  | 02 | `models` | Checkpoint loading (`ModelManager`, `CheckpointResult`) | ✅ Done |
-  | 03 | `conditioning` | Prompt encoding via `encode_prompt` | ✅ Done |
-  | 04 | `sampling` | KSampler wrapper via `sample()` | ✅ Done |
-  | 05 | `vae` | VAE decode latent→PIL via `vae_decode()` | ✅ Done |
-  | 06 | `lora` | LoRA loading and stacking via `apply_lora()` | ✅ Done |
-  | 07 | `vae` + `models` | VAE encode image→latent (`vae_encode`) + standalone loaders (`load_vae`, `load_clip`, `load_unet`) on `ModelManager` | ⬜ Next |
-  | 08 | `pipeline` | High-level `ImagePipeline` API (txt2img + img2img + Flux) | ⬜ |
-  | 09 | `queue` | Async / asyncio / progress callbacks | ⬜ |
-  | 10 | `plugins` | Optional capability plugin system | ⬜ |
-  | 11 | packaging | pip-installable, type stubs, DX | ⬜ |
+  - `path` type annotation: `str | Path` is the established pattern across `ModelManager`, `load_checkpoint`, and `apply_lora`. Do not change to `str | os.PathLike` unless updating all occurrences simultaneously in a dedicated cleanup iteration.
+  - No high-level pipeline abstraction: pycomfy is a modular runtime library. There is no `ImagePipeline` or equivalent. Callers compose the building blocks directly. This is intentional — the modularity is the feature.
+  - External libraries over node ports: prefer `Pillow`, `numpy`, `opencv-python`, `torchaudio` for image transforms, mask ops, video I/O, and audio I/O respectively. Only wrap comfy nodes when they provide non-trivial logic (VAE, samplers, model patches, conditioning). See ROADMAP.md for the full classification.
 
 - **Rule:** All generated resources in this repo must be in English.
