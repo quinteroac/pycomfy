@@ -8,7 +8,9 @@ version = "0.1.0"
 description = "ComfyUI inference engine as a standalone Python library (no server, no UI)."
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "pillow>=12.1.1",
+]
 
 [project.optional-dependencies]
 cpu = ["torch"]
