@@ -15,8 +15,8 @@ dependencies = [
 
 [project.optional-dependencies]
 # torch from pytorch-cpu / pytorch-cuda index (see [tool.uv.sources])
-cpu = ["torch", "torchvision", "torchaudio"]
-cuda = ["torch", "torchvision", "torchaudio"]
+cpu = ["torch"]
+cuda = ["torch"]
 # ComfyUI runtime deps (from vendor/ComfyUI/requirements.txt via: uv add -r vendor/ComfyUI/requirements.txt --optional comfyui)
 comfyui = [
     "aiohttp>=3.11.8",

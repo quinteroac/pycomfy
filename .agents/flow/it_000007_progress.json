@@ -1,0 +1,58 @@
+{
+  "entries": [
+    {
+      "use_case_id": "US-001",
+      "status": "completed",
+      "attempt_count": 1,
+      "last_agent_exit_code": 0,
+      "quality_checks": [],
+      "last_error_summary": "",
+      "updated_at": "2026-03-07T16:10:47.304Z"
+    },
+    {
+      "use_case_id": "US-002",
+      "status": "completed",
+      "attempt_count": 1,
+      "last_agent_exit_code": 0,
+      "quality_checks": [],
+      "last_error_summary": "",
+      "updated_at": "2026-03-07T16:14:20.676Z"
+    },
+    {
+      "use_case_id": "US-003",
+      "status": "completed",
+      "attempt_count": 1,
+      "last_agent_exit_code": 0,
+      "quality_checks": [],
+      "last_error_summary": "",
+      "updated_at": "2026-03-07T16:17:08.826Z"
+    },
+    {
+      "use_case_id": "US-004",
+      "status": "completed",
+      "attempt_count": 1,
+      "last_agent_exit_code": 0,
+      "quality_checks": [],
+      "last_error_summary": "",
+      "updated_at": "2026-03-07T16:18:40.699Z"
+    },
+    {
+      "use_case_id": "US-005",
+      "status": "completed",
+      "attempt_count": 1,
+      "last_agent_exit_code": 0,
+      "quality_checks": [],
+      "last_error_summary": "",
+      "updated_at": "2026-03-07T16:20:12.257Z"
+    },
+    {
+      "use_case_id": "US-006",
+      "status": "completed",
+      "attempt_count": 1,
+      "last_agent_exit_code": 0,
+      "quality_checks": [],
+      "last_error_summary": "",
+      "updated_at": "2026-03-07T16:21:57.689Z"
+    }
+  ]
+}

@@ -40,3 +40,4 @@ docs/nvst-flow/
 *.swo
 .DS_Store
 output.png
+output_separate.png

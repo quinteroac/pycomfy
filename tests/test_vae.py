@@ -15,6 +15,7 @@ import pycomfy
 import pycomfy.vae as vae_module
 from pycomfy import vae_decode
 from pycomfy.models import CheckpointResult
+from pycomfy.vae import vae_encode
 
 
 def _repo_root() -> Path:
@@ -75,14 +76,20 @@ class _FakeTensor:
         return self._data
 
 
-def test_vae_module_exports_only_vae_decode() -> None:
-    assert vae_module.__all__ == ["vae_decode"]
+def test_vae_module_exports_decode_and_encode() -> None:
+    assert vae_module.__all__ == ["vae_decode", "vae_encode"]
 
 
 def test_vae_decode_is_re_exported_from_package_root() -> None:
     assert callable(vae_decode)
     assert pycomfy.vae_decode is vae_decode
     assert "vae_decode" in pycomfy.__all__
+
+
+def test_vae_encode_is_re_exported_from_package_root() -> None:
+    assert callable(vae_encode)
+    assert pycomfy.vae_encode is vae_encode
+    assert "vae_encode" in pycomfy.__all__
 
 
 def test_vae_decode_accepts_checkpoint_result_vae_and_returns_pil_image() -> None:
@@ -101,6 +108,22 @@ def test_vae_decode_accepts_checkpoint_result_vae_and_returns_pil_image() -> Non
 
     assert isinstance(image, Image.Image)
     assert calls == [samples]
+
+
+def test_vae_encode_then_decode_round_trip_returns_pil_image() -> None:
+    class _MockVae:
+        def encode(self, pixel_samples: Any) -> _FakeTensor:
+            return _FakeTensor(pixel_samples.tolist())
+
+        def decode(self, samples: _FakeTensor) -> _FakeTensor:
+            return samples
+
+    input_image = Image.new("RGB", (2, 2), color=(64, 128, 192))
+    mock_vae = _MockVae()
+
+    output_image = vae_decode(mock_vae, vae_encode(mock_vae, input_image))
+
+    assert isinstance(output_image, Image.Image)
 
 
 def test_vae_decode_outputs_uint8_pixels_in_0_to_255_range() -> None:
@@ -133,11 +156,14 @@ def test_import_pycomfy_vae_has_no_heavy_import_side_effects() -> None:
         "import sys\n"
         "import pycomfy\n"
         "baseline_modules = set(sys.modules)\n"
-        "from pycomfy.vae import vae_decode\n"
+        "baseline_torch_loaded = 'torch' in sys.modules\n"
+        "from pycomfy.vae import vae_decode, vae_encode\n"
         "post_modules = set(sys.modules)\n"
         "new_modules = sorted(post_modules - baseline_modules)\n"
         "payload = {\n"
         "  'func_name': vae_decode.__name__,\n"
+        "  'encode_func_name': vae_encode.__name__,\n"
+        "  'baseline_torch_loaded': baseline_torch_loaded,\n"
         "  'torch_loaded': 'torch' in sys.modules,\n"
         "  'nodes_loaded': 'nodes' in sys.modules,\n"
         "  'folder_paths_loaded': 'folder_paths' in sys.modules,\n"
@@ -149,7 +175,8 @@ def test_import_pycomfy_vae_has_no_heavy_import_side_effects() -> None:
 
     payload = json.loads(result.stdout)
     assert payload["func_name"] == "vae_decode"
-    assert payload["torch_loaded"] is False
+    assert payload["encode_func_name"] == "vae_encode"
+    assert payload["torch_loaded"] == payload["baseline_torch_loaded"]
     assert payload["nodes_loaded"] is False
     assert payload["folder_paths_loaded"] is False
     assert payload["comfy_sd_loaded"] is False

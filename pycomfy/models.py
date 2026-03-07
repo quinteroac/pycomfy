@@ -71,5 +71,52 @@ class ModelManager:
         model, clip, vae = loaded[:3]
         return CheckpointResult(model=model, clip=clip, vae=vae)
 
+    def load_vae(self, path: str | Path) -> Any:
+        """Load a standalone VAE file and return the raw ComfyUI VAE object."""
+        ensure_comfyui_on_path()
+
+        vae_path = Path(path).resolve()
+        if not vae_path.is_file():
+            raise FileNotFoundError(f"vae file not found: {vae_path}")
+
+        from comfy import sd as comfy_sd
+        from comfy import utils as comfy_utils
+
+        state_dict, metadata = comfy_utils.load_torch_file(
+            str(vae_path), return_metadata=True
+        )
+        vae = comfy_sd.VAE(sd=state_dict, metadata=metadata)
+        vae.throw_exception_if_invalid()
+        return vae
+
+    def load_clip(self, path: str | Path) -> Any:
+        """Load a standalone CLIP file and return the raw ComfyUI CLIP object."""
+        ensure_comfyui_on_path()
+
+        clip_path = Path(path).resolve()
+        if not clip_path.is_file():
+            raise FileNotFoundError(f"clip file not found: {clip_path}")
+
+        import folder_paths
+        from comfy import sd as comfy_sd
+
+        return comfy_sd.load_clip(
+            ckpt_paths=[str(clip_path)],
+            clip_type=comfy_sd.CLIPType.STABLE_DIFFUSION,
+            embedding_directory=folder_paths.get_folder_paths("embeddings"),
+        )
+
+    def load_unet(self, path: str | Path) -> Any:
+        """Load a standalone UNet file and return the raw ComfyUI model object."""
+        ensure_comfyui_on_path()
+
+        unet_path = Path(path).resolve()
+        if not unet_path.is_file():
+            raise FileNotFoundError(f"unet file not found: {unet_path}")
+
+        from comfy import sd as comfy_sd
+
+        return comfy_sd.load_diffusion_model(str(unet_path))
+
 
 __all__ = ["CheckpointResult", "ModelManager"]

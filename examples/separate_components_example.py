@@ -1,30 +1,28 @@
 #!/usr/bin/env python3
 """
-Simple checkpoint example using pycomfy.
+Example using pycomfy with diffusion model, CLIP, and VAE loaded separately.
 
-Runs the complete flow: runtime check → load checkpoint → encode prompts →
-then either txt2img (empty latent) or img2img (input image encoded with VAE) →
-sample → VAE decode → save image.
+Runs txt2img or img2img (same as simple_checkpoint_example) but loads the three
+components from distinct files via ModelManager.load_unet(), load_clip(),
+and load_vae().
 
 - Without --image: txt2img (empty latent, denoise=1.0).
 - With --image: img2img (vae_encode input image, then sample with --denoise).
 
+Use this when you have:
+  - A standalone diffusion model (UNet) in diffusion_models/ or unet/
+  - A standalone text encoder (CLIP) in text_encoders/ or clip/
+  - A standalone VAE in vae/
+
 Setup (from repo root):
-  1. ComfyUI submodule:
-       git submodule update --init
-  2. Python deps: uv sync --extra comfyui (installs CPU torch; same for everyone).
-       GPU: then uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124 --force-reinstall
-            (RTX 50xx: cu128). Without --force-reinstall, torch stays CPU.
+  1. ComfyUI submodule: git submodule update --init
+  2. Python deps: uv sync --extra comfyui
+     GPU: uv pip install torch torchvision torchaudio --index-url ... (see AGENTS.md)
 
 Usage:
   export PYCOMFY_MODELS_DIR=/path/to/models
-  export PYCOMFY_CHECKPOINT=your_checkpoint.safetensors
-  uv run python examples/simple_checkpoint_example.py
-  uv run python examples/simple_checkpoint_example.py --image input.png --denoise 0.85
-  uv run python examples/simple_checkpoint_example.py --lora path/to/lora.safetensors --lora-strength-model 0.8
-
-If you see "ComfyUI runtime not found", the message will include the missing
-module (e.g. psutil, torch, safetensors); install ComfyUI's requirements as above.
+  uv run python examples/separate_components_example.py --unet unet.safetensors --clip clip.safetensors --vae vae.safetensors
+  uv run python examples/separate_components_example.py --unet unet.safetensors --clip clip.safetensors --vae vae.safetensors --image input.png --denoise 0.85
 """
 
 from __future__ import annotations
@@ -35,6 +33,20 @@ import sys
 from pathlib import Path
 
 from PIL import Image
+
+
+def _resolve_path(models_dir: Path, value: str, subdirs: list[str]) -> Path:
+    """Resolve path: if value is an existing path use it, else look under models_dir/subdir."""
+    p = Path(value)
+    if p.is_absolute() and p.is_file():
+        return p
+    if p.is_file():
+        return p.resolve()
+    for sub in subdirs:
+        candidate = models_dir / sub / value
+        if candidate.is_file():
+            return candidate
+    return Path(value).resolve()
 
 
 def _empty_latent(width: int, height: int, batch_size: int = 1) -> dict:
@@ -55,17 +67,27 @@ def _empty_latent(width: int, height: int, batch_size: int = 1) -> dict:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Simple checkpoint example: txt2img or img2img (use --image for img2img).",
+        description="Txt2img or img2img with separate UNet/CLIP/VAE (use --image for img2img).",
     )
     parser.add_argument(
         "--models-dir",
         default=os.environ.get("PYCOMFY_MODELS_DIR"),
-        help="Models root (must contain checkpoints/). Default: PYCOMFY_MODELS_DIR.",
+        help="Models root. Default: PYCOMFY_MODELS_DIR.",
     )
     parser.add_argument(
-        "--checkpoint",
-        default=os.environ.get("PYCOMFY_CHECKPOINT", ""),
-        help="Checkpoint filename in checkpoints/. Default: PYCOMFY_CHECKPOINT.",
+        "--unet",
+        required=True,
+        help="Diffusion model (UNet) file: path or filename under diffusion_models/ or unet/.",
+    )
+    parser.add_argument(
+        "--clip",
+        required=True,
+        help="CLIP text encoder file: path or filename under text_encoders/ or clip/.",
+    )
+    parser.add_argument(
+        "--vae",
+        required=True,
+        help="VAE file: path or filename under vae/.",
     )
     parser.add_argument(
         "--prompt",
@@ -119,7 +141,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--output",
-        default="output.png",
+        default="output_separate.png",
         help="Output image path.",
     )
     parser.add_argument(
@@ -133,23 +155,6 @@ def main() -> int:
         default=0.85,
         help="Denoise strength for img2img (0–1). Only used when --image is set (default 0.85).",
     )
-    parser.add_argument(
-        "--lora",
-        default="",
-        help="Path to LoRA file (.safetensors). If relative and not found, tries <models-dir>/loras/<value>. Omit to skip LoRA.",
-    )
-    parser.add_argument(
-        "--lora-strength-model",
-        type=float,
-        default=1.0,
-        help="LoRA strength for model (default 1.0).",
-    )
-    parser.add_argument(
-        "--lora-strength-clip",
-        type=float,
-        default=1.0,
-        help="LoRA strength for CLIP (default 1.0).",
-    )
     args = parser.parse_args()
 
     if not args.models_dir or not Path(args.models_dir).is_dir():
@@ -158,33 +163,35 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
-    if not args.checkpoint.strip():
-        print(
-            "error: --checkpoint (or PYCOMFY_CHECKPOINT) is required",
-            file=sys.stderr,
-        )
-        return 1
 
-    # Resolve optional LoRA path
-    lora_path: str | None = None
-    if args.lora.strip():
-        p = Path(args.lora.strip())
-        if p.is_absolute() and p.is_file():
-            lora_path = str(p)
-        elif p.is_file():
-            lora_path = str(p.resolve())
-        elif args.models_dir:
-            fallback = Path(args.models_dir) / "loras" / p.name
-            if fallback.is_file():
-                lora_path = str(fallback)
-        if lora_path is None:
-            print(
-                "error: LoRA file not found:",
-                args.lora,
-                "(tried cwd and <models-dir>/loras/)",
-                file=sys.stderr,
-            )
-            return 1
+    models_dir = Path(args.models_dir)
+
+    # Resolve component paths (filename → models_dir/subdir/filename)
+    unet_path = _resolve_path(
+        models_dir,
+        args.unet.strip(),
+        ["diffusion_models", "unet"],
+    )
+    clip_path = _resolve_path(
+        models_dir,
+        args.clip.strip(),
+        ["text_encoders", "clip"],
+    )
+    vae_path = _resolve_path(
+        models_dir,
+        args.vae.strip(),
+        ["vae"],
+    )
+
+    if not unet_path.is_file():
+        print("error: diffusion model file not found:", unet_path, file=sys.stderr)
+        return 1
+    if not clip_path.is_file():
+        print("error: CLIP file not found:", clip_path, file=sys.stderr)
+        return 1
+    if not vae_path.is_file():
+        print("error: VAE file not found:", vae_path, file=sys.stderr)
+        return 1
 
     # Resolve optional input image (img2img)
     input_image_path: Path | None = None
@@ -199,7 +206,7 @@ def main() -> int:
             return 1
 
     # 1) Runtime check
-    from pycomfy import check_runtime, vae_decode, vae_encode, apply_lora
+    from pycomfy import check_runtime, vae_decode, vae_encode
     from pycomfy.conditioning import encode_prompt
     from pycomfy.models import ModelManager
     from pycomfy.sampling import sample
@@ -210,32 +217,14 @@ def main() -> int:
         return 1
     print("runtime:", runtime.get("comfyui_version", "?"), runtime.get("device", "?"))
 
-    # 2) Load checkpoint
+    # 2) Load components separately
     manager = ModelManager(args.models_dir)
-    checkpoint = manager.load_checkpoint(args.checkpoint.strip())
-    print("loaded checkpoint:", args.checkpoint)
-
-    if checkpoint.clip is None:
-        print("error: checkpoint has no CLIP (cannot encode prompts)", file=sys.stderr)
-        return 1
-    if checkpoint.vae is None:
-        print("error: checkpoint has no VAE (cannot decode latent)", file=sys.stderr)
-        return 1
-
-    # 2b) Apply LoRA if requested
-    model = checkpoint.model
-    clip = checkpoint.clip
-    if lora_path is not None:
-        model, clip = apply_lora(
-            checkpoint.model,
-            checkpoint.clip,
-            lora_path,
-            args.lora_strength_model,
-            args.lora_strength_clip,
-        )
-        print("applied LoRA:", lora_path, f"(model={args.lora_strength_model}, clip={args.lora_strength_clip})")
-    if clip is None:
-        clip = checkpoint.clip
+    model = manager.load_unet(unet_path)
+    clip = manager.load_clip(clip_path)
+    vae = manager.load_vae(vae_path)
+    print("loaded diffusion model:", unet_path.name)
+    print("loaded CLIP:", clip_path.name)
+    print("loaded VAE:", vae_path.name)
 
     # 3) Encode prompts
     positive = encode_prompt(clip, args.prompt)
@@ -244,7 +233,7 @@ def main() -> int:
     # 4) Latent: img2img (vae_encode input image) or txt2img (empty latent)
     if input_image_path is not None:
         input_pil = Image.open(input_image_path).convert("RGB")
-        latent = vae_encode(checkpoint.vae, input_pil)
+        latent = vae_encode(vae, input_pil)
         denoise = args.denoise
         print("mode: img2img, denoise:", denoise)
     else:
@@ -267,7 +256,7 @@ def main() -> int:
     )
 
     # 6) VAE decode → PIL
-    image = vae_decode(checkpoint.vae, denoised)
+    image = vae_decode(vae, denoised)
     image.save(args.output)
     print("saved:", args.output)
 
