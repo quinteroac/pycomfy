@@ -1,0 +1,140 @@
+{
+  "goals": [
+    "Expose a single `sample()` function that wraps ComfyUI's KSampler with a clean, typed Python API.",
+    "Delegate 100 % of denoising logic to `comfy.*` internals — no custom sampler implementations.",
+    "Keep `from pycomfy.sampling import sample` CPU-safe (no torch import at module level).",
+    "Allow sampler name, scheduler, CFG scale, step count, and seed to be fully controlled by the caller."
+  ],
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "`sample()` returns a denoised latent",
+      "description": "As a Python developer building an inference pipeline, I want to call `sample(model, positive, negative, latent, steps, cfg, sampler_name, scheduler, seed)` so that I receive a denoised latent tensor I can immediately pass to VAE decode.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-001-AC01",
+          "text": "`pycomfy/sampling.py` is created and exports `sample`."
+        },
+        {
+          "id": "US-001-AC02",
+          "text": "The function signature is: `sample(model, positive, negative, latent, steps, cfg, sampler_name, scheduler, seed, *, denoise: float = 1.0) -> Any`."
+        },
+        {
+          "id": "US-001-AC03",
+          "text": "The return value is the raw denoised latent object produced by `comfy` — no additional wrapping or transformation."
+        },
+        {
+          "id": "US-001-AC04",
+          "text": "The function calls `comfy`'s sampler using the same call pattern as the `KSampler` / `common_ksampler` node in `vendor/ComfyUI/nodes.py` (verified by grepping before implementation)."
+        },
+        {
+          "id": "US-001-AC05",
+          "text": "Typecheck / lint passes (`ruff check . && mypy pycomfy/`)."
+        }
+      ]
+    },
+    {
+      "id": "US-002",
+      "title": "Sampler and scheduler are selectable by name",
+      "description": "As a Python developer, I want to pass `sampler_name=\"euler\"` and `scheduler=\"normal\"` as plain strings so that I can switch between any ComfyUI-supported sampler/scheduler combination without modifying pycomfy.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-002-AC01",
+          "text": "`sampler_name` and `scheduler` are plain `str` parameters with no default that silently overrides the caller's choice (defaults are permitted only if they are documented and clearly labelled as such in the docstring)."
+        },
+        {
+          "id": "US-002-AC02",
+          "text": "The strings are passed through to `comfy` unchanged — pycomfy does not validate, transform, or reject any sampler or scheduler name."
+        },
+        {
+          "id": "US-002-AC03",
+          "text": "A unit test using mocks verifies that `comfy`'s internal call receives exactly the `sampler_name` and `scheduler` values the caller passed."
+        },
+        {
+          "id": "US-002-AC04",
+          "text": "Typecheck / lint passes."
+        }
+      ]
+    },
+    {
+      "id": "US-003",
+      "title": "Seed is controllable for reproducibility",
+      "description": "As a Python developer building production pipelines, I want to pass `seed=42` so that I get a deterministic result for the same model, conditioning, and latent inputs.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-003-AC01",
+          "text": "`seed` is an `int` parameter."
+        },
+        {
+          "id": "US-003-AC02",
+          "text": "The value is passed through to `comfy`'s sampler call unchanged — reproducibility is comfy's responsibility."
+        },
+        {
+          "id": "US-003-AC03",
+          "text": "A unit test using mocks verifies that the seed value reaches the underlying comfy call."
+        },
+        {
+          "id": "US-003-AC04",
+          "text": "Typecheck / lint passes."
+        }
+      ]
+    },
+    {
+      "id": "US-004",
+      "title": "CPU-only import never crashes",
+      "description": "As a CI pipeline (CPU-only), I want `from pycomfy.sampling import sample` to succeed without a GPU, torch, or any model files so that the test suite stays green in all environments.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-004-AC01",
+          "text": "`uv run python -c \"from pycomfy.sampling import sample; print('ok')\"` exits with code 0 on a CPU-only machine."
+        },
+        {
+          "id": "US-004-AC02",
+          "text": "No `import torch`, no `import comfy.*`, and no ComfyUI path manipulation happens at module import time — these are deferred to call time only."
+        },
+        {
+          "id": "US-004-AC03",
+          "text": "The CI smoke test for this import is added to the pytest suite and passes."
+        },
+        {
+          "id": "US-004-AC04",
+          "text": "Typecheck / lint passes."
+        }
+      ]
+    }
+  ],
+  "functionalRequirements": [
+    {
+      "id": "FR-1",
+      "description": "** `pycomfy/sampling.py` must exist and define `sample` as its sole public export (listed in `__all__`). The full signature is `sample(model, positive, negative, latent, steps, cfg, sampler_name, scheduler, seed, *, denoise: float = 1.0) -> Any`; `denoise` defaults to `1.0` (full denoising) and is passed through to comfy unchanged."
+    },
+    {
+      "id": "FR-2",
+      "description": "** `sample()` must delegate denoising to `comfy` internals using the call pattern extracted from the `KSampler` / `common_ksampler` node in `vendor/ComfyUI/nodes.py`. The call pattern must be verified by inspection before implementation."
+    },
+    {
+      "id": "FR-3",
+      "description": "** No `torch` import, no `comfy.*` import, and no `ensure_comfyui_on_path()` call may appear at module top level — only inside function bodies."
+    },
+    {
+      "id": "FR-4",
+      "description": "** `sampler_name` and `scheduler` string values are passed through to comfy as-is; pycomfy does not validate or reject unknown values."
+    },
+    {
+      "id": "FR-5",
+      "description": "** `seed` is passed through to comfy as-is; pycomfy does not manage RNG state beyond forwarding the value."
+    },
+    {
+      "id": "FR-6",
+      "description": "** All public functions must carry type annotations; the module must pass `mypy pycomfy/` without new errors."
+    },
+    {
+      "id": "FR-7",
+      "description": "** `ruff check .` must pass with no new violations."
+    },
+    {
+      "id": "FR-8",
+      "description": "** The `pycomfy/__init__.py` public surface is updated to expose `sample` (re-export or documented import path, consistent with how `models` and `conditioning` were handled)."
+    }
+  ]
+}
