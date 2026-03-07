@@ -8,15 +8,39 @@ import subprocess
 import sys
 from inspect import signature
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 
+import pytest
 from PIL import Image
 
 import pycomfy
 import pycomfy.vae as vae_module
-from pycomfy import vae_decode, vae_decode_tiled, vae_encode_tiled
+from pycomfy import (
+    vae_decode,
+    vae_decode_tiled,
+    vae_encode_tiled,
+)
+from pycomfy import (
+    vae_decode_batch as vae_decode_batch_from_root,
+)
+from pycomfy import (
+    vae_decode_batch_tiled as vae_decode_batch_tiled_from_root,
+)
+from pycomfy import (
+    vae_encode_batch as vae_encode_batch_from_root,
+)
+from pycomfy import (
+    vae_encode_batch_tiled as vae_encode_batch_tiled_from_root,
+)
 from pycomfy.models import CheckpointResult
-from pycomfy.vae import vae_encode
+from pycomfy.vae import (
+    vae_decode_batch,
+    vae_decode_batch_tiled,
+    vae_encode,
+    vae_encode_batch,
+    vae_encode_batch_tiled,
+)
 from pycomfy.vae import vae_encode_tiled as vae_encode_tiled_from_module
 
 
@@ -82,8 +106,12 @@ def test_vae_module_exports_decode_and_encode() -> None:
     assert vae_module.__all__ == [
         "vae_decode",
         "vae_decode_tiled",
+        "vae_decode_batch",
+        "vae_decode_batch_tiled",
         "vae_encode",
+        "vae_encode_batch",
         "vae_encode_tiled",
+        "vae_encode_batch_tiled",
     ]
 
 
@@ -111,6 +139,17 @@ def test_vae_encode_tiled_is_exported_from_module_and_package_root() -> None:
     assert pycomfy.vae_encode_tiled is vae_encode_tiled
     assert vae_module.vae_encode_tiled is vae_encode_tiled_from_module
     assert "vae_encode_tiled" in pycomfy.__all__
+
+
+def test_vae_batch_functions_are_re_exported_from_package_root() -> None:
+    assert pycomfy.vae_decode_batch is vae_decode_batch_from_root
+    assert pycomfy.vae_decode_batch_tiled is vae_decode_batch_tiled_from_root
+    assert pycomfy.vae_encode_batch is vae_encode_batch_from_root
+    assert pycomfy.vae_encode_batch_tiled is vae_encode_batch_tiled_from_root
+    assert "vae_decode_batch" in pycomfy.__all__
+    assert "vae_decode_batch_tiled" in pycomfy.__all__
+    assert "vae_encode_batch" in pycomfy.__all__
+    assert "vae_encode_batch_tiled" in pycomfy.__all__
 
 
 def test_vae_decode_accepts_checkpoint_result_vae_and_returns_pil_image() -> None:
@@ -222,6 +261,215 @@ def test_vae_decode_tiled_has_expected_type_signature() -> None:
     )
 
 
+def test_vae_decode_batch_with_4d_samples_returns_flat_pil_list() -> None:
+    samples = _FakeTensor([[[[0.0, 0.0, 0.0]]], [[[0.0, 0.0, 0.0]]]])
+    decoded = _FakeTensor(
+        [
+            [[[0.1, 0.2, 0.3]]],
+            [[[0.4, 0.5, 0.6]]],
+        ]
+    )
+
+    class _FakeVae:
+        def decode(self, value: object) -> _FakeTensor:
+            assert value is samples
+            return decoded
+
+    images = vae_decode_batch(_FakeVae(), {"samples": samples})
+
+    assert isinstance(images, list)
+    assert len(images) == 2
+    assert all(isinstance(image, Image.Image) for image in images)
+
+
+def test_vae_decode_batch_with_5d_samples_flattens_batch_and_time() -> None:
+    samples = _FakeTensor(
+        [
+            [[[[0.0, 0.0, 0.0]]]],
+            [[[[0.0, 0.0, 0.0]]]],
+        ]
+    )
+    decoded = _FakeTensor(
+        [
+            [
+                [[[0.1, 0.2, 0.3]]],
+                [[[0.4, 0.5, 0.6]]],
+            ],
+            [
+                [[[0.7, 0.8, 0.9]]],
+                [[[0.2, 0.3, 0.4]]],
+            ],
+        ]
+    )
+
+    class _FakeVae:
+        def decode(self, value: object) -> _FakeTensor:
+            assert value is samples
+            return decoded
+
+    images = vae_decode_batch(_FakeVae(), {"samples": samples})
+    assert len(images) == 4
+    assert all(isinstance(image, Image.Image) for image in images)
+
+
+def test_vae_decode_batch_uses_shape_autodetection_and_has_no_mode_argument() -> None:
+    seen_sample_dims: list[int] = []
+
+    class _FakeVae:
+        def decode(self, value: _FakeTensor) -> _FakeTensor:
+            seen_sample_dims.append(len(value.shape))
+            return _FakeTensor([[[[0.1, 0.2, 0.3]]]])
+
+    vae_decode_batch(_FakeVae(), {"samples": _FakeTensor([[[[0.0, 0.0, 0.0]]]])})
+    vae_decode_batch(_FakeVae(), {"samples": _FakeTensor([[[[[0.0, 0.0, 0.0]]]]])})
+
+    assert seen_sample_dims == [4, 5]
+    assert "mode" not in signature(vae_decode_batch).parameters
+
+
+def test_vae_decode_batch_unbinds_nested_samples_before_decode() -> None:
+    unbound = _FakeTensor([[[[0.0, 0.0, 0.0]]]])
+    nested_samples = _FakeTensor([unbound.tolist()], is_nested=True)
+    decode_calls: list[_FakeTensor] = []
+
+    class _FakeVae:
+        def decode(self, value: _FakeTensor) -> _FakeTensor:
+            decode_calls.append(value)
+            return _FakeTensor([[[[0.1, 0.2, 0.3]]]])
+
+    images = vae_decode_batch(_FakeVae(), {"samples": nested_samples})
+
+    assert len(images) == 1
+    assert len(decode_calls) == 1
+    assert decode_calls[0].tolist() == unbound.tolist()
+
+
+def test_vae_decode_batch_calls_detach_and_cpu_for_each_frame(monkeypatch: Any) -> None:
+    expected = Image.new("RGB", (1, 1), color=(1, 2, 3))
+
+    class _Frame:
+        def __init__(self) -> None:
+            self.detach_calls = 0
+            self.cpu_calls = 0
+
+        def detach(self) -> _Frame:
+            self.detach_calls += 1
+            return self
+
+        def cpu(self) -> _Frame:
+            self.cpu_calls += 1
+            return self
+
+    class _DecodedFrames:
+        def __init__(self, frames: list[_Frame]) -> None:
+            self._frames = frames
+            self.shape = (len(frames), 1, 1, 3)
+
+        def __getitem__(self, index: int) -> _Frame:
+            return self._frames[index]
+
+    frames = [_Frame(), _Frame(), _Frame()]
+    helper_calls: list[_Frame] = []
+
+    class _FakeVae:
+        def decode(self, _value: object) -> _DecodedFrames:
+            return _DecodedFrames(frames)
+
+    def _fake_helper(image: _Frame) -> Image.Image:
+        helper_calls.append(image)
+        return expected
+
+    monkeypatch.setattr(vae_module, "_tensor_like_to_pil", _fake_helper)
+
+    images = vae_decode_batch(_FakeVae(), {"samples": _FakeTensor([[[[0.0]]]])})
+
+    assert len(images) == 3
+    assert helper_calls == frames
+    assert all(frame.detach_calls == 1 for frame in frames)
+    assert all(frame.cpu_calls == 1 for frame in frames)
+
+
+def test_vae_decode_batch_has_expected_type_signature() -> None:
+    fn_signature = signature(vae_module.vae_decode_batch)
+    assert str(fn_signature) == (
+        "(vae: '_VaeDecoder', latent: 'Mapping[str, Any]') -> 'list[Image.Image]'"
+    )
+
+
+def test_vae_decode_batch_tiled_with_4d_samples_calls_decode_tiled_per_frame() -> None:
+    samples = _FakeTensor([[[[0.0, 0.0, 0.0]]], [[[0.0, 0.0, 0.0]]]])
+    calls: list[tuple[Any, int, int, int]] = []
+
+    class _FakeVae:
+        def decode_tiled(
+            self,
+            value: _FakeTensor,
+            *,
+            tile_x: int,
+            tile_y: int,
+            overlap: int,
+        ) -> _FakeTensor:
+            calls.append((value.tolist(), tile_x, tile_y, overlap))
+            return _FakeTensor([[[[0.1, 0.2, 0.3]]]])
+
+    images = vae_decode_batch_tiled(_FakeVae(), {"samples": samples})
+
+    assert len(images) == 2
+    assert calls == [
+        ([[[[0.0, 0.0, 0.0]]]], 512, 512, 64),
+        ([[[[0.0, 0.0, 0.0]]]], 512, 512, 64),
+    ]
+    assert all(isinstance(image, Image.Image) for image in images)
+
+
+def test_vae_decode_batch_tiled_with_5d_samples_flattens_batch_and_time() -> None:
+    samples = _FakeTensor(
+        [
+            [
+                [[[0.0, 0.0, 0.0]]],
+                [[[0.0, 0.0, 0.0]]],
+            ],
+            [
+                [[[0.0, 0.0, 0.0]]],
+                [[[0.0, 0.0, 0.0]]],
+            ],
+        ]
+    )
+    calls: list[tuple[Any, int, int, int]] = []
+
+    class _FakeVae:
+        def decode_tiled(
+            self,
+            value: _FakeTensor,
+            *,
+            tile_x: int,
+            tile_y: int,
+            overlap: int,
+        ) -> _FakeTensor:
+            calls.append((value.tolist(), tile_x, tile_y, overlap))
+            return _FakeTensor([[[[0.2, 0.4, 0.6]]]])
+
+    images = vae_decode_batch_tiled(_FakeVae(), {"samples": samples}, tile_size=128, overlap=16)
+
+    assert len(images) == 4
+    assert len(calls) == 4
+    assert all(call[1:] == (128, 128, 16) for call in calls)
+
+
+def test_vae_decode_batch_tiled_uses_decode_tiled_protocol_signature() -> None:
+    protocol_methods = set(vae_module._VaeDecoderTiled.__dict__.keys())
+    assert "decode_tiled" in protocol_methods
+    assert "_VaeDecoderBatchTiled" not in vars(vae_module)
+
+
+def test_vae_decode_batch_tiled_has_expected_type_signature() -> None:
+    fn_signature = signature(vae_module.vae_decode_batch_tiled)
+    assert str(fn_signature) == (
+        "(vae: '_VaeDecoderTiled', latent: 'Mapping[str, Any]', tile_size: 'int' = 512, "
+        "overlap: 'int' = 64) -> 'list[Image.Image]'"
+    )
+
+
 def test_vae_encode_then_decode_round_trip_returns_pil_image() -> None:
     class _MockVae:
         def encode(self, pixel_samples: Any) -> _FakeTensor:
@@ -236,6 +484,124 @@ def test_vae_encode_then_decode_round_trip_returns_pil_image() -> None:
     output_image = vae_decode(mock_vae, vae_encode(mock_vae, input_image))
 
     assert isinstance(output_image, Image.Image)
+
+
+def test_vae_encode_batch_returns_latent_dict_with_samples() -> None:
+    received_pixel_samples: list[Any] = []
+
+    class _MockVae:
+        def encode(self, pixel_samples: Any) -> str:
+            received_pixel_samples.append(pixel_samples)
+            return "encoded-batch"
+
+    images = [
+        Image.new("RGB", (1, 1), color=(10, 20, 30)),
+        Image.new("RGB", (1, 1), color=(40, 50, 60)),
+        Image.new("RGB", (1, 1), color=(70, 80, 90)),
+    ]
+
+    result = vae_encode_batch(_MockVae(), images)
+
+    assert result == {"samples": "encoded-batch"}
+    assert len(received_pixel_samples) == 1
+
+
+def test_vae_encode_batch_converts_to_rgb_and_stacks_once_before_encode() -> None:
+    received_pixel_samples: list[Any] = []
+
+    class _MockVae:
+        def encode(self, pixel_samples: Any) -> str:
+            received_pixel_samples.append(pixel_samples)
+            return "encoded-batch"
+
+    grayscale = Image.new("L", (1, 1), color=128)
+    rgba = Image.new("RGBA", (1, 1), color=(10, 20, 30, 40))
+    rgb = Image.new("RGB", (1, 1), color=(1, 2, 3))
+
+    result = vae_encode_batch(_MockVae(), [grayscale, rgba, rgb])
+
+    assert result == {"samples": "encoded-batch"}
+    assert len(received_pixel_samples) == 1
+    stacked = received_pixel_samples[0].tolist()
+    assert len(stacked) == 3
+    assert stacked[0][0][0] == pytest.approx([128 / 255.0, 128 / 255.0, 128 / 255.0])
+    assert stacked[1][0][0] == pytest.approx([10 / 255.0, 20 / 255.0, 30 / 255.0])
+    assert stacked[2][0][0] == pytest.approx([1 / 255.0, 2 / 255.0, 3 / 255.0])
+
+
+def test_vae_encode_batch_works_with_torch_available(monkeypatch: Any) -> None:
+    torch_calls: list[tuple[Any, Any]] = []
+
+    class _FakeTorchTensor:
+        def __init__(self, data: Any) -> None:
+            self._data = data
+
+        def tolist(self) -> Any:
+            return self._data
+
+    fake_torch: Any = ModuleType("torch")
+    fake_torch.float32 = object()
+
+    def _fake_tensor(data: Any, *, dtype: Any) -> _FakeTorchTensor:
+        torch_calls.append((data, dtype))
+        return _FakeTorchTensor(data)
+
+    setattr(fake_torch, "tensor", _fake_tensor)
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+
+    received_pixel_samples: list[Any] = []
+
+    class _MockVae:
+        def encode(self, pixel_samples: Any) -> str:
+            received_pixel_samples.append(pixel_samples)
+            return "encoded"
+
+    result = vae_encode_batch(
+        _MockVae(),
+        [Image.new("RGB", (1, 1), color=(1, 2, 3)), Image.new("RGB", (1, 1), color=(4, 5, 6))],
+    )
+
+    assert result == {"samples": "encoded"}
+    assert len(received_pixel_samples) == 1
+    assert received_pixel_samples[0].__class__.__name__ == "_FakeTorchTensor"
+    assert len(torch_calls) == 1
+
+
+def test_vae_encode_batch_works_without_torch(monkeypatch: Any) -> None:
+    monkeypatch.delitem(sys.modules, "torch", raising=False)
+    real_import = __import__
+
+    def _fake_import(name: str, *args: Any, **kwargs: Any) -> Any:
+        if name == "torch":
+            raise ModuleNotFoundError("No module named 'torch'")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr("builtins.__import__", _fake_import)
+    received_pixel_samples: list[Any] = []
+
+    class _MockVae:
+        def encode(self, pixel_samples: Any) -> str:
+            received_pixel_samples.append(pixel_samples)
+            return "encoded"
+
+    result = vae_encode_batch(_MockVae(), [Image.new("RGB", (1, 1), color=(9, 10, 11))])
+
+    assert result == {"samples": "encoded"}
+    assert len(received_pixel_samples) == 1
+    assert received_pixel_samples[0].__class__.__name__ == "_ListTensor"
+
+
+def test_vae_encode_batch_raises_value_error_for_empty_images() -> None:
+    class _MockVae:
+        def encode(self, pixel_samples: Any) -> str:
+            raise AssertionError(f"encode should not be called: {pixel_samples}")
+
+    try:
+        vae_encode_batch(_MockVae(), [])
+    except ValueError as exc:
+        assert str(exc) == "images must not be empty"
+    else:
+        raise AssertionError("Expected ValueError for empty images")
 
 
 def test_vae_encode_tiled_returns_latent_dict_with_samples_on_cpu_mock() -> None:
@@ -325,6 +691,76 @@ def test_vae_encode_tiled_has_expected_type_signature() -> None:
     )
 
 
+def test_vae_encode_batch_tiled_has_expected_type_signature() -> None:
+    fn_signature = signature(vae_module.vae_encode_batch_tiled)
+
+    assert str(fn_signature) == (
+        "(vae: '_VaeEncoderTiled', images: 'list[Image.Image]', tile_size: 'int' = 512, "
+        "overlap: 'int' = 64) -> 'dict[str, Any]'"
+    )
+
+
+def test_vae_encode_batch_tiled_encodes_each_image_and_concatenates_samples() -> None:
+    calls: list[tuple[Any, int, int, int]] = []
+    encoded_batches = [
+        _FakeTensor([[[[1.0, 2.0]]]]),
+        _FakeTensor([[[[3.0, 4.0]]]]),
+    ]
+
+    class _MockVae:
+        def __init__(self) -> None:
+            self._index = 0
+
+        def encode_tiled(
+            self,
+            pixel_samples: Any,
+            *,
+            tile_x: int,
+            tile_y: int,
+            overlap: int,
+        ) -> _FakeTensor:
+            calls.append((pixel_samples, tile_x, tile_y, overlap))
+            batch = encoded_batches[self._index]
+            self._index += 1
+            return batch
+
+    images = [
+        Image.new("RGB", (1, 1), color=(1, 2, 3)),
+        Image.new("RGB", (1, 1), color=(4, 5, 6)),
+    ]
+
+    result = vae_encode_batch_tiled(_MockVae(), images, tile_size=64, overlap=8)
+
+    assert len(calls) == 2
+    assert all(call[1:] == (64, 64, 8) for call in calls)
+    assert calls[0][0].tolist() == vae_module._image_to_tensor_like(images[0]).tolist()
+    assert calls[1][0].tolist() == vae_module._image_to_tensor_like(images[1]).tolist()
+    assert result["samples"].tolist() == [[[[1.0, 2.0]]], [[[3.0, 4.0]]]]
+
+
+def test_vae_encode_batch_tiled_raises_value_error_for_empty_images() -> None:
+    class _MockVae:
+        def encode_tiled(
+            self,
+            pixel_samples: Any,
+            *,
+            tile_x: int,
+            tile_y: int,
+            overlap: int,
+        ) -> str:
+            raise AssertionError(
+                "encode_tiled should not be called: "
+                f"{pixel_samples}, {tile_x}, {tile_y}, {overlap}"
+            )
+
+    try:
+        vae_encode_batch_tiled(_MockVae(), [])
+    except ValueError as exc:
+        assert str(exc) == "images must not be empty"
+    else:
+        raise AssertionError("Expected ValueError for empty images")
+
+
 def test_vae_decode_outputs_uint8_pixels_in_0_to_255_range() -> None:
     decoded = _FakeTensor(
         [
@@ -356,12 +792,18 @@ def test_import_pycomfy_vae_has_no_heavy_import_side_effects() -> None:
         "import pycomfy\n"
         "baseline_modules = set(sys.modules)\n"
         "baseline_torch_loaded = 'torch' in sys.modules\n"
-        "from pycomfy.vae import vae_decode, vae_decode_tiled, vae_encode, vae_encode_tiled\n"
+        "from pycomfy.vae import "
+        "vae_decode, vae_decode_batch, vae_decode_batch_tiled, vae_decode_tiled, "
+        "vae_encode, vae_encode_batch, vae_encode_batch_tiled, vae_encode_tiled\n"
         "post_modules = set(sys.modules)\n"
         "new_modules = sorted(post_modules - baseline_modules)\n"
         "payload = {\n"
         "  'func_name': vae_decode.__name__,\n"
+        "  'batch_func_name': vae_decode_batch.__name__,\n"
+        "  'batch_tiled_func_name': vae_decode_batch_tiled.__name__,\n"
         "  'encode_func_name': vae_encode.__name__,\n"
+        "  'encode_batch_func_name': vae_encode_batch.__name__,\n"
+        "  'encode_batch_tiled_func_name': vae_encode_batch_tiled.__name__,\n"
         "  'encode_tiled_func_name': vae_encode_tiled.__name__,\n"
         "  'tiled_func_name': vae_decode_tiled.__name__,\n"
         "  'baseline_torch_loaded': baseline_torch_loaded,\n"
@@ -376,8 +818,12 @@ def test_import_pycomfy_vae_has_no_heavy_import_side_effects() -> None:
 
     payload = json.loads(result.stdout)
     assert payload["func_name"] == "vae_decode"
+    assert payload["batch_func_name"] == "vae_decode_batch"
+    assert payload["batch_tiled_func_name"] == "vae_decode_batch_tiled"
     assert payload["tiled_func_name"] == "vae_decode_tiled"
     assert payload["encode_func_name"] == "vae_encode"
+    assert payload["encode_batch_func_name"] == "vae_encode_batch"
+    assert payload["encode_batch_tiled_func_name"] == "vae_encode_batch_tiled"
     assert payload["encode_tiled_func_name"] == "vae_encode_tiled"
     assert payload["torch_loaded"] == payload["baseline_torch_loaded"]
     assert payload["nodes_loaded"] is False

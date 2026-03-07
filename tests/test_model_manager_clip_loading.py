@@ -99,6 +99,11 @@ def test_load_clip_calls_comfy_loader_with_resolved_path_and_returns_raw_clip(
     assert calls["add_model_folder_path"] == [
         ("checkpoints", str(checkpoints_dir), True),
         ("embeddings", str(embeddings_dir), True),
+        ("diffusion_models", str(models_dir / "unet"), True),
+        ("diffusion_models", str(models_dir / "diffusion_models"), False),
+        ("text_encoders", str(models_dir / "text_encoders"), True),
+        ("text_encoders", str(models_dir / "clip"), False),
+        ("vae", str(models_dir / "vae"), True),
     ]
 
 

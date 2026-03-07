@@ -1,0 +1,227 @@
+{
+  "goals": [
+    "Provide `vae_decode_batch` to convert any batched latent (4-D or 5-D) into a flat",
+    "Provide `vae_encode_batch` to convert a `list[PIL.Image]` into a batched latent tensor.",
+    "Provide tiled variants (`vae_decode_batch_tiled`, `vae_encode_batch_tiled`) for large",
+    "All four functions must follow the established `vae.py` patterns: pure duck-typing",
+    "All tests pass on CPU-only environments (CI constraint)."
+  ],
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Decode a video latent batch into PIL frames",
+      "description": "As a Python developer building a video generation pipeline, I want to call `vae_decode_batch(vae, latent)` with a ComfyUI LATENT dict whose `\"samples\"` tensor is either 4-D `(B, C, H, W)` or 5-D `(B, C, T, H, W)`, so that I get back a flat `list[PIL.Image]` with one image per frame (all batches concatenated) without writing any reshape boilerplate myself.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-001-AC01",
+          "text": "`vae_decode_batch(vae, {\"samples\": tensor_4d})` returns a `list[PIL.Image]` of"
+        },
+        {
+          "id": "US-001-AC02",
+          "text": "`vae_decode_batch(vae, {\"samples\": tensor_5d})` returns a `list[PIL.Image]` of"
+        },
+        {
+          "id": "US-001-AC03",
+          "text": "Shape auto-detection: the function checks `len(tensor.shape)` — no explicit `mode`"
+        },
+        {
+          "id": "US-001-AC04",
+          "text": "The returned list is never empty when the input is valid."
+        },
+        {
+          "id": "US-001-AC05",
+          "text": "`is_nested` / unbind handling is applied (matching existing `vae_decode` logic)."
+        },
+        {
+          "id": "US-001-AC06",
+          "text": "`detach()` / `cpu()` called on each image slice before conversion (GPU-safety)."
+        },
+        {
+          "id": "US-001-AC07",
+          "text": "Typecheck / lint passes."
+        }
+      ]
+    },
+    {
+      "id": "US-002",
+      "title": "Encode a list of PIL images into a video latent batch",
+      "description": "As a Python developer building a video generation pipeline, I want to call `vae_encode_batch(vae, images)` with a `list[PIL.Image]`, so that I get back a ComfyUI LATENT dict `{\"samples\": tensor}` whose shape is appropriate for passing to the sampler (batched 4-D or 5-D, depending on the VAE).",
+      "acceptanceCriteria": [
+        {
+          "id": "US-002-AC01",
+          "text": "`vae_encode_batch(vae, [img1, img2, img3])` returns a dict with key `\"samples\"`."
+        },
+        {
+          "id": "US-002-AC02",
+          "text": "All images are converted to RGB and stacked into a single pixel tensor before"
+        },
+        {
+          "id": "US-002-AC03",
+          "text": "Works with `torch` available (returns real tensor) and without `torch` (returns"
+        },
+        {
+          "id": "US-002-AC04",
+          "text": "Raises `ValueError` when `images` is an empty list."
+        },
+        {
+          "id": "US-002-AC05",
+          "text": "Typecheck / lint passes."
+        }
+      ]
+    },
+    {
+      "id": "US-003",
+      "title": "Tiled decode for large video frames",
+      "description": "As a Python developer generating high-resolution video, I want `vae_decode_batch_tiled(vae, latent, tile_size, overlap)`, so that I can decode large batched latents frame-by-frame without running out of GPU memory.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-003-AC01",
+          "text": "Signature: `vae_decode_batch_tiled(vae, latent, tile_size=512, overlap=64)` —"
+        },
+        {
+          "id": "US-003-AC02",
+          "text": "Decodes every frame slice using `vae.decode_tiled(...)` and collects results into"
+        },
+        {
+          "id": "US-003-AC03",
+          "text": "Handles both 4-D and 5-D tensors (same auto-detection logic as US-001)."
+        },
+        {
+          "id": "US-003-AC04",
+          "text": "`_VaeDecoderTiled` protocol is reused (no new protocol class needed)."
+        },
+        {
+          "id": "US-003-AC05",
+          "text": "Typecheck / lint passes."
+        }
+      ]
+    },
+    {
+      "id": "US-004",
+      "title": "Tiled encode for large video frames",
+      "description": "As a Python developer generating high-resolution video, I want `vae_encode_batch_tiled(vae, images, tile_size, overlap)`, so that I can encode large PIL frames into a batched latent without OOM.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-004-AC01",
+          "text": "Signature: `vae_encode_batch_tiled(vae, images, tile_size=512, overlap=64)`."
+        },
+        {
+          "id": "US-004-AC02",
+          "text": "Each image is encoded individually via `vae.encode_tiled(...)` and results are"
+        },
+        {
+          "id": "US-004-AC03",
+          "text": "Raises `ValueError` when `images` is an empty list."
+        },
+        {
+          "id": "US-004-AC04",
+          "text": "`_VaeEncoderTiled` protocol is reused (no new protocol class needed)."
+        },
+        {
+          "id": "US-004-AC05",
+          "text": "Typecheck / lint passes."
+        }
+      ]
+    },
+    {
+      "id": "US-005",
+      "title": "Public API export",
+      "description": "As a Python developer, I want to import all four batch functions from `pycomfy.vae`, so that my import lines are consistent with the rest of pycomfy's API.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-005-AC01",
+          "text": "`from pycomfy.vae import vae_decode_batch, vae_encode_batch` works without error."
+        },
+        {
+          "id": "US-005-AC02",
+          "text": "`from pycomfy.vae import vae_decode_batch_tiled, vae_encode_batch_tiled` works"
+        },
+        {
+          "id": "US-005-AC03",
+          "text": "All four names are added to `__all__` in `pycomfy/vae.py`."
+        },
+        {
+          "id": "US-005-AC04",
+          "text": "All four names are imported in `pycomfy/__init__.py` and added to its `__all__`"
+        },
+        {
+          "id": "US-005-AC05",
+          "text": "`from pycomfy import vae_decode_batch, vae_encode_batch, vae_decode_batch_tiled, vae_encode_batch_tiled`"
+        },
+        {
+          "id": "US-005-AC06",
+          "text": "Existing `vae_decode`, `vae_decode_tiled`, `vae_encode`, `vae_encode_tiled` remain"
+        },
+        {
+          "id": "US-005-AC07",
+          "text": "Typecheck / lint passes."
+        }
+      ]
+    },
+    {
+      "id": "US-006",
+      "title": "Tests for batch functions",
+      "description": "As a maintainer, I want pytest tests covering the four new batch functions on CPU, so that CI can validate correctness without a GPU.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-006-AC01",
+          "text": "`vae_decode_batch` tested with a mock VAE and a fake 4-D tensor → list of 1+ PIL"
+        },
+        {
+          "id": "US-006-AC02",
+          "text": "`vae_decode_batch` tested with a fake 5-D tensor → correct frame count."
+        },
+        {
+          "id": "US-006-AC03",
+          "text": "`vae_encode_batch` tested with a list of small PIL images → dict with `\"samples\"`."
+        },
+        {
+          "id": "US-006-AC04",
+          "text": "`vae_encode_batch` raises `ValueError` on empty list."
+        },
+        {
+          "id": "US-006-AC05",
+          "text": "`vae_decode_batch_tiled` tested with a mock tiled VAE."
+        },
+        {
+          "id": "US-006-AC06",
+          "text": "`vae_encode_batch_tiled` tested with a mock tiled VAE."
+        },
+        {
+          "id": "US-006-AC07",
+          "text": "All existing VAE tests still pass (`uv run pytest` green)."
+        }
+      ]
+    }
+  ],
+  "functionalRequirements": [
+    {
+      "id": "FR-1",
+      "description": "`vae_decode_batch(vae, latent)` — accepts a `_VaeDecoder` duck-type and a"
+    },
+    {
+      "id": "FR-2",
+      "description": "`vae_encode_batch(vae, images)` — accepts a `_VaeEncoder` duck-type and"
+    },
+    {
+      "id": "FR-3",
+      "description": "`vae_decode_batch_tiled(vae, latent, tile_size=512, overlap=64)` — same as FR-1"
+    },
+    {
+      "id": "FR-4",
+      "description": "`vae_encode_batch_tiled(vae, images, tile_size=512, overlap=64)` — same as FR-2"
+    },
+    {
+      "id": "FR-5",
+      "description": "All four functions must defer `import torch` to call time (lazy import pattern)."
+    },
+    {
+      "id": "FR-6",
+      "description": "All four names exported in `pycomfy/vae.py`'s `__all__`."
+    },
+    {
+      "id": "FR-7",
+      "description": "`vae_decode_batch` and `vae_decode_batch_tiled` must call `detach()` and `cpu()`"
+    }
+  ]
+}

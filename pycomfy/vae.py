@@ -169,6 +169,89 @@ def vae_decode_tiled(
     return _tensor_like_to_pil(image)
 
 
+def vae_decode_batch(vae: _VaeDecoder, latent: Mapping[str, Any]) -> list[Image.Image]:
+    """Decode a ComfyUI LATENT dict into a flat list of PIL images."""
+    samples = latent["samples"]
+    if getattr(samples, "is_nested", False):
+        samples = samples.unbind()[0]
+
+    sample_dims = len(samples.shape)
+    if sample_dims not in (4, 5):
+        raise ValueError("latent samples must be 4D or 5D")
+
+    images = vae.decode(samples)
+    image_dims = len(images.shape)
+    if image_dims == 5:
+        images = images.reshape(-1, images.shape[-3], images.shape[-2], images.shape[-1])
+    elif image_dims != 4:
+        raise ValueError("unsupported decoded image shape")
+
+    if images.shape[0] == 0:
+        raise ValueError("decoded image tensor is empty")
+
+    result: list[Image.Image] = []
+    for index in range(images.shape[0]):
+        image = images[index]
+        if hasattr(image, "detach"):
+            image = image.detach()
+        if hasattr(image, "cpu"):
+            image = image.cpu()
+        result.append(_tensor_like_to_pil(image))
+
+    if not result:
+        raise ValueError("decoded image tensor is empty")
+    return result
+
+
+def vae_decode_batch_tiled(
+    vae: _VaeDecoderTiled,
+    latent: Mapping[str, Any],
+    tile_size: int = 512,
+    overlap: int = 64,
+) -> list[Image.Image]:
+    """Decode a ComfyUI LATENT dict into a flat list of PIL images using tiled decode."""
+    samples = latent["samples"]
+    if getattr(samples, "is_nested", False):
+        samples = samples.unbind()[0]
+
+    sample_dims = len(samples.shape)
+    if sample_dims == 5:
+        samples = samples.reshape(-1, samples.shape[-3], samples.shape[-2], samples.shape[-1])
+    elif sample_dims != 4:
+        raise ValueError("latent samples must be 4D or 5D")
+
+    if samples.shape[0] == 0:
+        raise ValueError("latent samples must not be empty")
+
+    result: list[Image.Image] = []
+    for index in range(samples.shape[0]):
+        frame_samples = samples[index : index + 1]
+        images = vae.decode_tiled(
+            frame_samples,
+            tile_x=tile_size,
+            tile_y=tile_size,
+            overlap=overlap,
+        )
+
+        image_dims = len(images.shape)
+        if image_dims == 5:
+            images = images.reshape(-1, images.shape[-3], images.shape[-2], images.shape[-1])
+        elif image_dims != 4:
+            raise ValueError("unsupported decoded image shape")
+
+        if images.shape[0] == 0:
+            raise ValueError("decoded image tensor is empty")
+
+        image = images[0]
+        if hasattr(image, "detach"):
+            image = image.detach()
+        if hasattr(image, "cpu"):
+            image = image.cpu()
+        result.append(_tensor_like_to_pil(image))
+
+    return result
+
+
 def _pil_to_batched_hwc(image: Image.Image) -> list[list[list[list[float]]]]:
     rgb = image.convert("RGB")
     width, height = rgb.size
@@ -197,9 +280,53 @@ def _image_to_tensor_like(image: Image.Image) -> Any:
     return torch.tensor(batched_hwc, dtype=torch.float32)
 
 
+def _images_to_tensor_like(images: list[Image.Image]) -> Any:
+    stacked_hwc: list[list[list[list[float]]]] = []
+    for image in images:
+        stacked_hwc.append(_pil_to_batched_hwc(image)[0])
+
+    try:
+        import torch
+    except ModuleNotFoundError:
+        return _ListTensor(stacked_hwc)
+
+    return torch.tensor(stacked_hwc, dtype=torch.float32)
+
+
+def _concat_batch_tensors(samples_list: list[Any]) -> Any:
+    if not samples_list:
+        raise ValueError("samples_list must not be empty")
+
+    try:
+        import torch
+    except ModuleNotFoundError:
+        torch = None  # type: ignore[assignment]
+
+    if torch is not None and all(isinstance(samples, torch.Tensor) for samples in samples_list):
+        return torch.cat(samples_list, dim=0)
+
+    stacked_samples: list[Any] = []
+    for samples in samples_list:
+        values = samples.tolist()
+        if not isinstance(values, list):
+            raise ValueError("encoded samples must be batch-first tensors")
+        stacked_samples.extend(values)
+    return _ListTensor(stacked_samples)
+
+
 def vae_encode(vae: _VaeEncoder, image: Image.Image) -> dict[str, Any]:
     """Encode a PIL image into a ComfyUI LATENT dict."""
     pixel_samples = _image_to_tensor_like(image)
+    samples = vae.encode(pixel_samples)
+    return {"samples": samples}
+
+
+def vae_encode_batch(vae: _VaeEncoder, images: list[Image.Image]) -> dict[str, Any]:
+    """Encode a list of PIL images into a ComfyUI LATENT dict."""
+    if not images:
+        raise ValueError("images must not be empty")
+
+    pixel_samples = _images_to_tensor_like(images)
     samples = vae.encode(pixel_samples)
     return {"samples": samples}
 
@@ -226,4 +353,32 @@ def vae_encode_tiled(
     return {"samples": samples}
 
 
-__all__ = ["vae_decode", "vae_decode_tiled", "vae_encode", "vae_encode_tiled"]
+def vae_encode_batch_tiled(
+    vae: _VaeEncoderTiled,
+    images: list[Image.Image],
+    tile_size: int = 512,
+    overlap: int = 64,
+) -> dict[str, Any]:
+    """Encode a list of PIL images into a ComfyUI LATENT dict using tiled encode."""
+    if not images:
+        raise ValueError("images must not be empty")
+
+    samples_list: list[Any] = []
+    for image in images:
+        pixel_samples = _image_to_tensor_like(image)
+        samples = vae.encode_tiled(pixel_samples, tile_x=tile_size, tile_y=tile_size, overlap=overlap)
+        samples_list.append(samples)
+
+    return {"samples": _concat_batch_tensors(samples_list)}
+
+
+__all__ = [
+    "vae_decode",
+    "vae_decode_tiled",
+    "vae_decode_batch",
+    "vae_decode_batch_tiled",
+    "vae_encode",
+    "vae_encode_batch",
+    "vae_encode_tiled",
+    "vae_encode_batch_tiled",
+]
