@@ -86,6 +86,12 @@ def test_vae_decode_is_re_exported_from_package_root() -> None:
     assert "vae_decode" in pycomfy.__all__
 
 
+def test_vae_encode_is_re_exported_from_package_root() -> None:
+    assert callable(vae_encode)
+    assert pycomfy.vae_encode is vae_encode
+    assert "vae_encode" in pycomfy.__all__
+
+
 def test_vae_decode_accepts_checkpoint_result_vae_and_returns_pil_image() -> None:
     samples = _FakeTensor([[[[0.0, 0.0, 0.0]]]])
     decoded = _FakeTensor([[[[1.0, 1.0, 1.0], [0.5, 0.5, 0.5]]]])

@@ -23,6 +23,7 @@ def _install_fake_vae_loader_modules(
         "add_model_folder_path": [],
         "load_torch_file": [],
         "VAE": [],
+        "throw_exception_if_invalid": [],
     }
 
     folder_paths_module = ModuleType("folder_paths")
@@ -44,9 +45,22 @@ def _install_fake_vae_loader_modules(
 
     comfy_sd_module = ModuleType("comfy.sd")
 
+    class _FakeVaeWrapper:
+        def __init__(self, wrapped: Any) -> None:
+            self._wrapped = wrapped
+
+        def throw_exception_if_invalid(self) -> None:
+            calls["throw_exception_if_invalid"].append(True)
+
+        def __eq__(self, other: object) -> bool:
+            return other is self._wrapped or other is self
+
+    _fake_vae_instance = _FakeVaeWrapper(vae_object)
+    calls["vae_instance"] = [_fake_vae_instance]
+
     def VAE(*, sd: dict[str, Any], metadata: dict[str, Any] | None) -> Any:
         calls["VAE"].append((sd, metadata))
-        return vae_object
+        return _fake_vae_instance
 
     setattr(comfy_sd_module, "VAE", VAE)
 
@@ -88,9 +102,10 @@ def test_load_vae_calls_comfy_loader_with_resolved_path_and_returns_raw_vae(
     manager = ModelManager(models_dir=models_dir)
     result = manager.load_vae(vae_file.parent / "." / vae_file.name)
 
-    assert result is fake_vae
+    assert result is calls["vae_instance"][0]
     assert calls["load_torch_file"] == [(str(vae_file.resolve()), True)]
     assert calls["VAE"] == [(fake_state_dict, fake_metadata)]
+    assert calls["throw_exception_if_invalid"] == [True]
     assert calls["add_model_folder_path"] == [
         ("checkpoints", str(checkpoints_dir), True),
         ("embeddings", str(embeddings_dir), True),

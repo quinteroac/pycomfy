@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import enum
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -10,6 +11,10 @@ from typing import Any
 import pytest
 
 from pycomfy.models import ModelManager
+
+
+class _FakeCLIPType(enum.Enum):
+    STABLE_DIFFUSION = "stable_diffusion"
 
 
 def _install_fake_clip_loader_modules(
@@ -41,9 +46,15 @@ def _install_fake_clip_loader_modules(
     setattr(folder_paths_module, "get_folder_paths", get_folder_paths)
 
     comfy_sd_module = ModuleType("comfy.sd")
+    setattr(comfy_sd_module, "CLIPType", _FakeCLIPType)
 
-    def load_clip(*, ckpt_paths: list[str], embedding_directory: list[str]) -> Any:
-        calls["load_clip"].append((ckpt_paths, embedding_directory))
+    def load_clip(
+        *,
+        ckpt_paths: list[str],
+        clip_type: Any,
+        embedding_directory: list[str],
+    ) -> Any:
+        calls["load_clip"].append((ckpt_paths, clip_type, embedding_directory))
         return clip_object
 
     setattr(comfy_sd_module, "load_clip", load_clip)
@@ -81,7 +92,9 @@ def test_load_clip_calls_comfy_loader_with_resolved_path_and_returns_raw_clip(
     result = manager.load_clip(clip_file.parent / "." / clip_file.name)
 
     assert result is fake_clip
-    assert calls["load_clip"] == [([str(clip_file.resolve())], embeddings_paths)]
+    assert calls["load_clip"] == [
+        ([str(clip_file.resolve())], _FakeCLIPType.STABLE_DIFFUSION, embeddings_paths)
+    ]
     assert calls["get_folder_paths"] == ["embeddings"]
     assert calls["add_model_folder_path"] == [
         ("checkpoints", str(checkpoints_dir), True),
