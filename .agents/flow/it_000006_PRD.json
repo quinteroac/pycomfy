@@ -100,7 +100,7 @@
   "functionalRequirements": [
     {
       "id": "FR-1",
-      "description": "** `apply_lora(model: Any, clip: Any, path: str | os.PathLike, strength_model: float, strength_clip: float) -> tuple[Any, Any]` — public function in `pycomfy/lora.py`."
+      "description": "** `apply_lora(model: Any, clip: Any, path: str | Path, strength_model: float, strength_clip: float) -> tuple[Any, Any]` — public function in `pycomfy/lora.py`."
     },
     {
       "id": "FR-2",

@@ -36,7 +36,7 @@ originals unchanged.
 - [ ] `apply_lora(model, clip, path, strength_model, strength_clip)` accepts:
   - `model`: ComfyUI model patcher object (as returned by `ModelManager.load_checkpoint`)
   - `clip`: ComfyUI CLIP object (as returned by `ModelManager.load_checkpoint`)
-  - `path`: `str | os.PathLike` — absolute path to the LoRA file on disk
+  - `path`: `str | Path` — absolute path to the LoRA file on disk
   - `strength_model`: `float` — scale applied to model LoRA weights
   - `strength_clip`: `float` — scale applied to CLIP LoRA weights
 - [ ] The function returns a `tuple[Any, Any]` of `(patched_model, patched_clip)`.
