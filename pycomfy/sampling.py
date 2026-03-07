@@ -15,6 +15,43 @@ def _get_common_ksampler() -> Any:
     return nodes.common_ksampler
 
 
+def _get_basic_guider_type() -> Any:
+    """Resolve ComfyUI BasicGuider implementation at call time."""
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    from comfy_extras.nodes_custom_sampler import Guider_Basic
+
+    return Guider_Basic
+
+
+def _get_cfg_guider_type() -> Any:
+    """Resolve ComfyUI CFGGuider implementation at call time."""
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    from comfy.samplers import CFGGuider
+
+    return CFGGuider
+
+
+def basic_guider(model: Any, conditioning: Any) -> Any:
+    """Create a BasicGuider compatible with ``sample_custom()``."""
+    guider_type = _get_basic_guider_type()
+    guider = guider_type(model)
+    guider.set_conds(conditioning)
+    return guider
+
+
+def cfg_guider(model: Any, positive: Any, negative: Any, cfg: Any) -> Any:
+    """Create a CFGGuider compatible with ``sample_custom()``."""
+    guider_type = _get_cfg_guider_type()
+    guider = guider_type(model)
+    guider.set_conds(positive, negative)
+    guider.set_cfg(cfg)
+    return guider
+
+
 def sample(
     model: Any,
     positive: Any,
@@ -92,4 +129,4 @@ def sample_advanced(
     )[0]
 
 
-__all__ = ["sample", "sample_advanced"]
+__all__ = ["sample", "sample_advanced", "basic_guider", "cfg_guider"]
