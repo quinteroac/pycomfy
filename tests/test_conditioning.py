@@ -1,4 +1,4 @@
-"""Tests for US-001 prompt conditioning helpers."""
+"""Tests for prompt conditioning helpers."""
 
 from __future__ import annotations
 
@@ -88,6 +88,50 @@ def test_encode_prompt_supports_negative_prompt_text() -> None:
 
     assert result is not None
     assert result is sentinel_conditioning
+
+
+def test_encode_prompt_accepts_weighted_prompt_syntax_without_changes() -> None:
+    weighted_prompt = "a portrait of a woman, (studio lighting:1.3)"
+    sentinel_conditioning = object()
+    expected_tokens = {"tokenized": weighted_prompt}
+
+    class FakeClip:
+        def __init__(self) -> None:
+            self.tokenize_calls: list[str] = []
+            self.encode_calls: list[object] = []
+
+        def tokenize(self, text: str) -> object:
+            self.tokenize_calls.append(text)
+            return expected_tokens
+
+        def encode_from_tokens_scheduled(self, tokens: object) -> object:
+            self.encode_calls.append(tokens)
+            return sentinel_conditioning
+
+    clip = FakeClip()
+    result = encode_prompt(clip, weighted_prompt)
+
+    assert result is not None
+    assert result is sentinel_conditioning
+    assert clip.tokenize_calls == [weighted_prompt]
+    assert clip.encode_calls == [expected_tokens]
+
+
+def test_encode_prompt_does_not_raise_for_valid_weighted_prompt_syntax() -> None:
+    weighted_prompt = "a portrait of a woman, (studio lighting:1.3)"
+
+    class FakeClip:
+        def tokenize(self, text: str) -> object:
+            assert text == weighted_prompt
+            return ("tokens", text)
+
+        def encode_from_tokens_scheduled(self, tokens: object) -> object:
+            return {"conditioning": tokens}
+
+    result = encode_prompt(FakeClip(), weighted_prompt)
+
+    assert result is not None
+    assert result == {"conditioning": ("tokens", weighted_prompt)}
 
 
 def test_conditioning_public_api_has_single_encode_prompt_entrypoint() -> None:
