@@ -199,7 +199,7 @@ def main() -> int:
             return 1
 
     # 1) Runtime check
-    from pycomfy import check_runtime, vae_decode, vae_encode, apply_lora
+    from pycomfy import check_runtime, vae_decode_tiled, vae_encode, apply_lora
     from pycomfy.conditioning import encode_prompt
     from pycomfy.models import ModelManager
     from pycomfy.sampling import sample
@@ -267,7 +267,7 @@ def main() -> int:
     )
 
     # 6) VAE decode → PIL
-    image = vae_decode(checkpoint.vae, denoised)
+    image = vae_decode_tiled(checkpoint.vae, denoised)
     image.save(args.output)
     print("saved:", args.output)
 
