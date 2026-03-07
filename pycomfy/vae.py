@@ -142,7 +142,17 @@ def vae_decode_tiled(
     tile_size: int = 512,
     overlap: int = 64,
 ) -> Image.Image:
-    """Decode a ComfyUI LATENT dict into a PIL image using tiled decode."""
+    """Decode a ComfyUI LATENT dict into a PIL image using tiled decode.
+
+    Args:
+        vae: VAE model with a ``decode_tiled`` method.
+        latent: ComfyUI LATENT dict containing a ``"samples"`` tensor.
+        tile_size: Width and height of each decode tile in pixels. Defaults to 512.
+        overlap: Number of pixels of overlap between adjacent tiles. Defaults to 64.
+
+    Returns:
+        Decoded image as a PIL ``Image``.
+    """
     samples = latent["samples"]
     if getattr(samples, "is_nested", False):
         samples = samples.unbind()[0]
@@ -200,7 +210,17 @@ def vae_encode_tiled(
     tile_size: int = 512,
     overlap: int = 64,
 ) -> dict[str, Any]:
-    """Encode a PIL image into a ComfyUI LATENT dict using tiled encode."""
+    """Encode a PIL image into a ComfyUI LATENT dict using tiled encode.
+
+    Args:
+        vae: VAE model with an ``encode_tiled`` method.
+        image: Input PIL image to encode.
+        tile_size: Width and height of each encode tile in pixels. Defaults to 512.
+        overlap: Number of pixels of overlap between adjacent tiles. Defaults to 64.
+
+    Returns:
+        ComfyUI LATENT dict containing a ``"samples"`` tensor.
+    """
     pixel_samples = _image_to_tensor_like(image)
     samples = vae.encode_tiled(pixel_samples, tile_x=tile_size, tile_y=tile_size, overlap=overlap)
     return {"samples": samples}
