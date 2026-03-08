@@ -79,6 +79,39 @@ The modularity is the point. Every building block is explicit — you see exactl
 
 ---
 
+## How ComfyUI is embedded
+
+`comfy-diffusion` ships ComfyUI's source as a **git submodule** vendored inside the package at
+`comfy_diffusion/vendor/ComfyUI`. This means the full ComfyUI source tree is included in every
+PyPI wheel — no separate ComfyUI installation, no running server, no `git clone`.
+
+When you `import comfy_diffusion` the package calls `ensure_comfyui_on_path()`, which inserts
+`comfy_diffusion/vendor/ComfyUI` into `sys.path`. After that single call the entire `comfy.*`
+namespace is importable directly from your code:
+
+```python
+import comfy_diffusion  # bootstraps the path
+
+import comfy.model_management  # ComfyUI internals, directly importable
+import comfy.samplers
+import comfy.sd
+```
+
+The `[comfyui]` extra (e.g. `pip install "comfy-diffusion[cpu,comfyui]"`) installs all of
+ComfyUI's Python runtime dependencies — the same packages listed in ComfyUI's own
+`requirements.txt`. Without this extra the `comfy.*` modules will be missing their deps and fail
+to import.
+
+**Summary of the three moving parts:**
+
+| Part | What it does |
+|------|-------------|
+| `comfy_diffusion/vendor/ComfyUI` | ComfyUI source, vendored as a git submodule and shipped in the wheel |
+| `comfy_diffusion/_runtime.py` | Inserts the vendor path into `sys.path` on first import |
+| `[comfyui]` extra | Installs ComfyUI's Python runtime dependencies from PyPI |
+
+---
+
 ## What it is not
 
 - Not a ComfyUI wrapper that talks to a running server
