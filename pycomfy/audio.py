@@ -54,6 +54,17 @@ def _get_ltxv_empty_latent_audio_type() -> Any:
     return LTXVEmptyLatentAudio
 
 
+def _get_ace_step_15_latent_audio_dependencies() -> tuple[Any, Any]:
+    """Resolve torch and ComfyUI model management at call time."""
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    import comfy.model_management
+    import torch
+
+    return torch, comfy.model_management
+
+
 def _unwrap_node_output(output: Any) -> Any:
     """Return first output for ComfyUI V3 nodes and tuple-style APIs."""
     if hasattr(output, "result"):
@@ -131,9 +142,18 @@ def encode_ace_step_15_audio(
     return clip.encode_from_tokens_scheduled(tokens)
 
 
+def empty_ace_step_15_latent_audio(seconds: float, batch_size: int = 1) -> dict[str, Any]:
+    """Create empty ACE Step 1.5 latents used as sampler noise input."""
+    torch, model_management = _get_ace_step_15_latent_audio_dependencies()
+    length = round(seconds * 48000 / 1920)
+    latent = torch.zeros([batch_size, 64, length], device=model_management.intermediate_device())
+    return {"samples": latent, "type": "audio"}
+
+
 __all__ = [
     "ltxv_audio_vae_encode",
     "ltxv_audio_vae_decode",
     "ltxv_empty_latent_audio",
     "encode_ace_step_15_audio",
+    "empty_ace_step_15_latent_audio",
 ]

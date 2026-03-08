@@ -12,6 +12,7 @@ from typing import Any
 
 import pycomfy.audio as audio_module
 from pycomfy.audio import (
+    empty_ace_step_15_latent_audio,
     encode_ace_step_15_audio,
     ltxv_audio_vae_decode,
     ltxv_audio_vae_encode,
@@ -45,6 +46,7 @@ def test_audio_module_exports_ltxv_audio_vae_helpers() -> None:
         "ltxv_audio_vae_decode",
         "ltxv_empty_latent_audio",
         "encode_ace_step_15_audio",
+        "empty_ace_step_15_latent_audio",
     ]
 
 
@@ -238,6 +240,43 @@ def test_encode_ace_step_15_audio_wraps_tokenize_and_encode_from_tokens_schedule
     assert clip.encode_calls == [expected_tokens]
 
 
+def test_empty_ace_step_15_latent_audio_signature_matches_contract() -> None:
+    signature = inspect.signature(empty_ace_step_15_latent_audio)
+    assert str(signature) == "(seconds: 'float', batch_size: 'int' = 1) -> 'dict[str, Any]'"
+
+
+def test_empty_ace_step_15_latent_audio_wraps_logic_and_returns_audio_latent_dict(
+    monkeypatch: Any,
+) -> None:
+    expected_tensor = object()
+
+    class FakeTorch:
+        def __init__(self) -> None:
+            self.zeros_calls: list[tuple[list[int], str]] = []
+
+        def zeros(self, shape: list[int], *, device: str) -> Any:
+            self.zeros_calls.append((shape, device))
+            return expected_tensor
+
+    class FakeModelManagement:
+        @staticmethod
+        def intermediate_device() -> str:
+            return "fake-device"
+
+    fake_torch = FakeTorch()
+
+    monkeypatch.setattr(
+        audio_module,
+        "_get_ace_step_15_latent_audio_dependencies",
+        lambda: (fake_torch, FakeModelManagement),
+    )
+
+    result = empty_ace_step_15_latent_audio(seconds=2.5, batch_size=3)
+
+    assert result == {"samples": expected_tensor, "type": "audio"}
+    assert fake_torch.zeros_calls == [([3, 64, 62], "fake-device")]
+
+
 def test_ltxv_audio_vae_encode_is_importable_from_pycomfy_audio() -> None:
     result = _run_python(
         "from pycomfy.audio import ltxv_audio_vae_encode; "
@@ -282,6 +321,17 @@ def test_encode_ace_step_15_audio_is_importable_from_pycomfy_audio() -> None:
     assert result.stdout.strip() == "ok"
 
 
+def test_empty_ace_step_15_latent_audio_is_importable_from_pycomfy_audio() -> None:
+    result = _run_python(
+        "from pycomfy.audio import empty_ace_step_15_latent_audio; "
+        "assert empty_ace_step_15_latent_audio.__name__ == 'empty_ace_step_15_latent_audio'; "
+        "print('ok')"
+    )
+
+    assert result.returncode == 0
+    assert result.stdout.strip() == "ok"
+
+
 def test_import_pycomfy_audio_has_no_torch_or_comfy_side_effects() -> None:
     result = _run_python(
         "import json\n"
@@ -289,6 +339,7 @@ def test_import_pycomfy_audio_has_no_torch_or_comfy_side_effects() -> None:
         "import pycomfy\n"
         "baseline_modules = set(sys.modules)\n"
         "from pycomfy.audio import (\n"
+        "  empty_ace_step_15_latent_audio,\n"
         "  encode_ace_step_15_audio,\n"
         "  ltxv_audio_vae_decode,\n"
         "  ltxv_audio_vae_encode,\n"
@@ -297,6 +348,7 @@ def test_import_pycomfy_audio_has_no_torch_or_comfy_side_effects() -> None:
         "post_modules = set(sys.modules)\n"
         "new_modules = sorted(post_modules - baseline_modules)\n"
         "payload = {\n"
+        "  'empty_ace_step_15_func_name': empty_ace_step_15_latent_audio.__name__,\n"
         "  'ace_step_15_func_name': encode_ace_step_15_audio.__name__,\n"
         "  'func_name': ltxv_audio_vae_encode.__name__,\n"
         "  'decode_func_name': ltxv_audio_vae_decode.__name__,\n"
@@ -310,6 +362,7 @@ def test_import_pycomfy_audio_has_no_torch_or_comfy_side_effects() -> None:
     )
 
     payload = json.loads(result.stdout)
+    assert payload["empty_ace_step_15_func_name"] == "empty_ace_step_15_latent_audio"
     assert payload["ace_step_15_func_name"] == "encode_ace_step_15_audio"
     assert payload["func_name"] == "ltxv_audio_vae_encode"
     assert payload["decode_func_name"] == "ltxv_audio_vae_decode"
