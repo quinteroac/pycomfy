@@ -176,5 +176,70 @@ class ModelManager:
 
         return comfy_sd.load_diffusion_model(full_path)
 
+    def load_ltxv_audio_vae(self, path: str | Path) -> object:
+        """Load an LTXV audio VAE checkpoint from a path or filename.
+
+        If ``path`` is an absolute path to an existing file, that file is loaded.
+        Otherwise ``path`` is treated as a filename under the ``checkpoints`` folder.
+        """
+        ensure_comfyui_on_path()
+
+        import folder_paths
+        from comfy import utils as comfy_utils
+        from comfy.ldm.lightricks.vae.audio_vae import AudioVAE
+
+        p = Path(path)
+        if p.is_absolute() and p.is_file():
+            checkpoint_path = str(p.resolve())
+        elif p.is_absolute():
+            raise FileNotFoundError(f"ltxv audio vae file not found: {p}")
+        else:
+            name = path if isinstance(path, str) else p.name
+            checkpoint_path = folder_paths.get_full_path_or_raise("checkpoints", name)
+
+        state_dict, metadata = comfy_utils.load_torch_file(
+            checkpoint_path, return_metadata=True
+        )
+        return AudioVAE(state_dict, metadata)
+
+    def load_ltxav_text_encoder(
+        self, text_encoder_path: str | Path, checkpoint_path: str | Path
+    ) -> object:
+        """Load an LTXAV text encoder from two separate files.
+
+        ``text_encoder_path`` is the text encoder file (from ``text_encoders/``).
+        ``checkpoint_path`` is the companion checkpoint file (from ``checkpoints/``).
+        Both can be absolute paths to existing files or relative filenames resolved
+        via folder_paths.
+        """
+        ensure_comfyui_on_path()
+
+        import folder_paths
+        from comfy import sd as comfy_sd
+
+        te_p = Path(text_encoder_path)
+        if te_p.is_absolute() and te_p.is_file():
+            resolved_te = str(te_p.resolve())
+        elif te_p.is_absolute():
+            raise FileNotFoundError(f"ltxav text encoder file not found: {te_p}")
+        else:
+            name = text_encoder_path if isinstance(text_encoder_path, str) else te_p.name
+            resolved_te = folder_paths.get_full_path_or_raise("text_encoders", name)
+
+        ckpt_p = Path(checkpoint_path)
+        if ckpt_p.is_absolute() and ckpt_p.is_file():
+            resolved_ckpt = str(ckpt_p.resolve())
+        elif ckpt_p.is_absolute():
+            raise FileNotFoundError(f"ltxav checkpoint file not found: {ckpt_p}")
+        else:
+            name = checkpoint_path if isinstance(checkpoint_path, str) else ckpt_p.name
+            resolved_ckpt = folder_paths.get_full_path_or_raise("checkpoints", name)
+
+        return comfy_sd.load_clip(
+            ckpt_paths=[resolved_te, resolved_ckpt],
+            embedding_directory=folder_paths.get_folder_paths("embeddings"),
+            clip_type=comfy_sd.CLIPType.LTXV,
+        )
+
 
 __all__ = ["CheckpointResult", "ModelManager"]
