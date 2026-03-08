@@ -11,7 +11,11 @@ from pathlib import Path
 from typing import Any
 
 import pycomfy.audio as audio_module
-from pycomfy.audio import ltxv_audio_vae_decode, ltxv_audio_vae_encode
+from pycomfy.audio import (
+    ltxv_audio_vae_decode,
+    ltxv_audio_vae_encode,
+    ltxv_empty_latent_audio,
+)
 
 
 def _repo_root() -> Path:
@@ -35,7 +39,11 @@ def _run_python(code: str) -> subprocess.CompletedProcess[str]:
 
 
 def test_audio_module_exports_ltxv_audio_vae_helpers() -> None:
-    assert audio_module.__all__ == ["ltxv_audio_vae_encode", "ltxv_audio_vae_decode"]
+    assert audio_module.__all__ == [
+        "ltxv_audio_vae_encode",
+        "ltxv_audio_vae_decode",
+        "ltxv_empty_latent_audio",
+    ]
 
 
 def test_ltxv_audio_vae_encode_signature_matches_contract() -> None:
@@ -86,6 +94,74 @@ def test_ltxv_audio_vae_decode_calls_vae_decode_and_returns_raw_audio_tensor() -
     assert vae.calls == [expected_latent]
 
 
+def test_ltxv_empty_latent_audio_signature_matches_contract() -> None:
+    signature = inspect.signature(ltxv_empty_latent_audio)
+    assert (
+        str(signature)
+        == "(audio_vae: '_LtxvAudioVae', frames_number: 'int', "
+        "frame_rate: 'int' = 25, batch_size: 'int' = 1) -> 'dict[str, Any]'"
+    )
+
+
+def test_ltxv_empty_latent_audio_wraps_node_execute_and_returns_audio_latent_dict(
+    monkeypatch: Any,
+) -> None:
+    expected_samples = object()
+
+    class FakeAudioVae:
+        def __init__(self) -> None:
+            self.calls: list[tuple[int, int]] = []
+            self.sample_rate = 48000
+            self.latent_channels = 32
+            self.latent_frequency_bins = 128
+
+        def num_of_latents_from_frames(self, frames_number: int, frame_rate: int) -> int:
+            self.calls.append((frames_number, frame_rate))
+            return 123
+
+    class FakeLtxvEmptyLatentAudio:
+        @classmethod
+        def execute(
+            cls,
+            *,
+            frames_number: int,
+            frame_rate: int,
+            batch_size: int,
+            audio_vae: Any,
+        ) -> tuple[dict[str, Any]]:
+            num_latents = audio_vae.num_of_latents_from_frames(frames_number, frame_rate)
+            return (
+                {
+                    "samples": expected_samples,
+                    "sample_rate": int(audio_vae.sample_rate),
+                    "type": "audio",
+                    "num_latents": num_latents,
+                    "batch_size": batch_size,
+                },
+            )
+
+    monkeypatch.setattr(
+        audio_module,
+        "_get_ltxv_empty_latent_audio_type",
+        lambda: FakeLtxvEmptyLatentAudio,
+    )
+
+    audio_vae = FakeAudioVae()
+    result = ltxv_empty_latent_audio(
+        audio_vae=audio_vae,
+        frames_number=97,
+        frame_rate=25,
+        batch_size=2,
+    )
+
+    assert result["samples"] is expected_samples
+    assert result["sample_rate"] == 48000
+    assert result["type"] == "audio"
+    assert result["num_latents"] == 123
+    assert result["batch_size"] == 2
+    assert audio_vae.calls == [(97, 25)]
+
+
 def test_ltxv_audio_vae_encode_is_importable_from_pycomfy_audio() -> None:
     result = _run_python(
         "from pycomfy.audio import ltxv_audio_vae_encode; "
@@ -108,18 +184,34 @@ def test_ltxv_audio_vae_decode_is_importable_from_pycomfy_audio() -> None:
     assert result.stdout.strip() == "ok"
 
 
+def test_ltxv_empty_latent_audio_is_importable_from_pycomfy_audio() -> None:
+    result = _run_python(
+        "from pycomfy.audio import ltxv_empty_latent_audio; "
+        "assert ltxv_empty_latent_audio.__name__ == 'ltxv_empty_latent_audio'; "
+        "print('ok')"
+    )
+
+    assert result.returncode == 0
+    assert result.stdout.strip() == "ok"
+
+
 def test_import_pycomfy_audio_has_no_torch_or_comfy_side_effects() -> None:
     result = _run_python(
         "import json\n"
         "import sys\n"
         "import pycomfy\n"
         "baseline_modules = set(sys.modules)\n"
-        "from pycomfy.audio import ltxv_audio_vae_decode, ltxv_audio_vae_encode\n"
+        "from pycomfy.audio import (\n"
+        "  ltxv_audio_vae_decode,\n"
+        "  ltxv_audio_vae_encode,\n"
+        "  ltxv_empty_latent_audio,\n"
+        ")\n"
         "post_modules = set(sys.modules)\n"
         "new_modules = sorted(post_modules - baseline_modules)\n"
         "payload = {\n"
         "  'func_name': ltxv_audio_vae_encode.__name__,\n"
         "  'decode_func_name': ltxv_audio_vae_decode.__name__,\n"
+        "  'empty_latent_func_name': ltxv_empty_latent_audio.__name__,\n"
         "  'torch_loaded': 'torch' in sys.modules,\n"
         "  'comfy_loaded': 'comfy' in sys.modules,\n"
         "  'comfy_sd_loaded': 'comfy.sd' in sys.modules,\n"
@@ -131,6 +223,7 @@ def test_import_pycomfy_audio_has_no_torch_or_comfy_side_effects() -> None:
     payload = json.loads(result.stdout)
     assert payload["func_name"] == "ltxv_audio_vae_encode"
     assert payload["decode_func_name"] == "ltxv_audio_vae_decode"
+    assert payload["empty_latent_func_name"] == "ltxv_empty_latent_audio"
     assert payload["torch_loaded"] is False
     assert payload["comfy_loaded"] is False
     assert payload["comfy_sd_loaded"] is False
