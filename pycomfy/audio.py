@@ -6,10 +6,14 @@ from typing import Any, Protocol, cast
 
 
 class _LtxvAudioVaeEncoder(Protocol):
+    sample_rate: int
+
     def encode(self, audio: Any) -> Any: ...
 
 
 class _LtxvAudioVaeDecoder(Protocol):
+    output_sample_rate: int
+
     def decode(self, latent: Any) -> Any: ...
 
 
@@ -74,14 +78,19 @@ def _unwrap_node_output(output: Any) -> Any:
     return output
 
 
-def ltxv_audio_vae_encode(vae: _LtxvAudioVaeEncoder, audio: Any) -> Any:
+def ltxv_audio_vae_encode(vae: _LtxvAudioVaeEncoder, audio: Any) -> dict[str, Any]:
     """Encode raw audio with an LTXV audio VAE."""
-    return vae.encode(audio)
+    audio_latents = vae.encode(audio)
+    return {"samples": audio_latents, "sample_rate": int(vae.sample_rate), "type": "audio"}
 
 
-def ltxv_audio_vae_decode(vae: _LtxvAudioVaeDecoder, latent: Any) -> Any:
+def ltxv_audio_vae_decode(vae: _LtxvAudioVaeDecoder, latent: Any) -> dict[str, Any]:
     """Decode latent audio with an LTXV audio VAE."""
-    return vae.decode(latent)
+    latent_tensor = latent["samples"] if isinstance(latent, dict) else latent
+    if getattr(latent_tensor, "is_nested", False):
+        latent_tensor = latent_tensor.unbind()[-1]
+    audio = vae.decode(latent_tensor).to(latent_tensor.device)
+    return {"waveform": audio, "sample_rate": int(vae.output_sample_rate)}
 
 
 def ltxv_empty_latent_audio(
