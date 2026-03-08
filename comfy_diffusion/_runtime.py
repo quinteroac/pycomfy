@@ -12,7 +12,7 @@ from pathlib import Path
 
 def _comfyui_root() -> Path:
     """Return the absolute path to the vendored ComfyUI directory."""
-    return Path(__file__).resolve().parents[1] / "vendor" / "ComfyUI"
+    return Path(__file__).resolve().parent / "vendor" / "ComfyUI"
 
 
 def ensure_comfyui_on_path() -> Path:

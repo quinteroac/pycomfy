@@ -115,19 +115,67 @@ Early development. Built iteratively, one capability block at a time. The full n
 
 Requires Python 3.12+. ComfyUI is vendored inside the package — no separate ComfyUI installation needed.
 
-### From PyPI (recommended)
+### From PyPI
 
 ```bash
 # CPU
 pip install "comfy-diffusion[cpu,comfyui]"
-# or with uv
-uv add "comfy-diffusion[cpu,comfyui]"
 
 # CUDA (RTX 30xx / 40xx — cu124)
 pip install "comfy-diffusion[cuda,comfyui]"
 
 # CUDA (RTX 50xx / Blackwell — cu128)
 pip install "comfy-diffusion[cuda,comfyui]" --extra-index-url https://download.pytorch.org/whl/cu128
+```
+
+### In your own project (uv)
+
+When using `uv` in your own project you need to declare the PyTorch package index in your
+`pyproject.toml` — uv does not inherit `[tool.uv.sources]` from dependencies.
+
+Add the following to your `pyproject.toml` before running `uv add`:
+
+**CPU:**
+
+```toml
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu" }]
+torchvision = [{ index = "pytorch-cpu" }]
+torchaudio = [{ index = "pytorch-cpu" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+```
+
+**CUDA cu124 (RTX 30xx / 40xx):**
+
+```toml
+[tool.uv.sources]
+torch = [{ index = "pytorch-cuda" }]
+torchvision = [{ index = "pytorch-cuda" }]
+torchaudio = [{ index = "pytorch-cuda" }]
+
+[[tool.uv.index]]
+name = "pytorch-cuda"
+url = "https://download.pytorch.org/whl/cu124"
+explicit = true
+```
+
+For CUDA cu128 (RTX 50xx / Blackwell) use `https://download.pytorch.org/whl/cu128` instead.
+
+Then add the dependency and verify:
+
+```bash
+# CPU
+uv add "comfy-diffusion[cpu,comfyui]"
+
+# CUDA
+uv add "comfy-diffusion[cuda,comfyui]"
+
+# Verify
+uv run python -c "import comfy_diffusion; print(comfy_diffusion.check_runtime())"
 ```
 
 ### From source
