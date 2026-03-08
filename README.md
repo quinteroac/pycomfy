@@ -79,6 +79,39 @@ The modularity is the point. Every building block is explicit — you see exactl
 
 ---
 
+## How ComfyUI is embedded
+
+`comfy-diffusion` ships ComfyUI's source as a **git submodule** vendored inside the package at
+`comfy_diffusion/vendor/ComfyUI`. This means the full ComfyUI source tree is included in every
+PyPI wheel — no separate ComfyUI installation, no running server, no `git clone`.
+
+When you `import comfy_diffusion` the package calls `ensure_comfyui_on_path()`, which inserts
+`comfy_diffusion/vendor/ComfyUI` into `sys.path`. After that single call the entire `comfy.*`
+namespace is importable directly from your code:
+
+```python
+import comfy_diffusion  # bootstraps the path
+
+import comfy.model_management  # ComfyUI internals, directly importable
+import comfy.samplers
+import comfy.sd
+```
+
+The `[comfyui]` extra (e.g. `pip install "comfy-diffusion[cpu,comfyui]"`) installs all of
+ComfyUI's Python runtime dependencies — the same packages listed in ComfyUI's own
+`requirements.txt`. Without this extra the `comfy.*` modules will be missing their deps and fail
+to import.
+
+**Summary of the three moving parts:**
+
+| Part | What it does |
+|------|-------------|
+| `comfy_diffusion/vendor/ComfyUI` | ComfyUI source, vendored as a git submodule and shipped in the wheel |
+| `comfy_diffusion/_runtime.py` | Inserts the vendor path into `sys.path` on first import |
+| `[comfyui]` extra | Installs ComfyUI's Python runtime dependencies from PyPI |
+
+---
+
 ## What it is not
 
 - Not a ComfyUI wrapper that talks to a running server
@@ -115,19 +148,67 @@ Early development. Built iteratively, one capability block at a time. The full n
 
 Requires Python 3.12+. ComfyUI is vendored inside the package — no separate ComfyUI installation needed.
 
-### From PyPI (recommended)
+### From PyPI
 
 ```bash
 # CPU
 pip install "comfy-diffusion[cpu,comfyui]"
-# or with uv
-uv add "comfy-diffusion[cpu,comfyui]"
 
 # CUDA (RTX 30xx / 40xx — cu124)
 pip install "comfy-diffusion[cuda,comfyui]"
 
 # CUDA (RTX 50xx / Blackwell — cu128)
 pip install "comfy-diffusion[cuda,comfyui]" --extra-index-url https://download.pytorch.org/whl/cu128
+```
+
+### In your own project (uv)
+
+When using `uv` in your own project you need to declare the PyTorch package index in your
+`pyproject.toml` — uv does not inherit `[tool.uv.sources]` from dependencies.
+
+Add the following to your `pyproject.toml` before running `uv add`:
+
+**CPU:**
+
+```toml
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu" }]
+torchvision = [{ index = "pytorch-cpu" }]
+torchaudio = [{ index = "pytorch-cpu" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+```
+
+**CUDA cu124 (RTX 30xx / 40xx):**
+
+```toml
+[tool.uv.sources]
+torch = [{ index = "pytorch-cuda" }]
+torchvision = [{ index = "pytorch-cuda" }]
+torchaudio = [{ index = "pytorch-cuda" }]
+
+[[tool.uv.index]]
+name = "pytorch-cuda"
+url = "https://download.pytorch.org/whl/cu124"
+explicit = true
+```
+
+For CUDA cu128 (RTX 50xx / Blackwell) use `https://download.pytorch.org/whl/cu128` instead.
+
+Then add the dependency and verify:
+
+```bash
+# CPU
+uv add "comfy-diffusion[cpu,comfyui]"
+
+# CUDA
+uv add "comfy-diffusion[cuda,comfyui]"
+
+# Verify
+uv run python -c "import comfy_diffusion; print(comfy_diffusion.check_runtime())"
 ```
 
 ### From source

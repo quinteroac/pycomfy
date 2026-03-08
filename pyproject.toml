@@ -59,6 +59,9 @@ dev = ["pytest>=8.0", "ruff>=0.4", "mypy>=1.10"]
 [tool.setuptools.packages.find]
 include = ["comfy_diffusion*"]
 
+[tool.setuptools.package-data]
+comfy_diffusion = ["vendor/ComfyUI/**/*", "vendor/ComfyUI/**/.*"]
+
 [tool.uv]
 # This project uses uv for install, lock, and run. See README and AGENTS.md.
 

@@ -65,7 +65,7 @@ def test_torch_optional_dependencies_are_not_version_pinned() -> None:
 
 
 def test_uv_editable_install_succeeds_and_allows_importing_comfy_diffusion(tmp_path: Path) -> None:
-    submodule_path = _repo_root() / "vendor" / "ComfyUI"
+    submodule_path = _repo_root() / "comfy_diffusion" / "vendor" / "ComfyUI"
     assert submodule_path.is_dir()
 
     venv_dir = tmp_path / ".venv"
