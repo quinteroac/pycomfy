@@ -8,7 +8,7 @@
 
 - **Project context:** [`.agents/PROJECT_CONTEXT.md`](.agents/PROJECT_CONTEXT.md) — conventions, architecture decisions, and modular structure; the agent adheres from the second iteration onward.
 
-- **Roadmap and node inventory:** [`.agents/ROADMAP.md`](.agents/ROADMAP.md) — full iteration plan, node classification (Roadmap / Nice-to-have / Discarded), and optional dependency schema.
+- **Roadmap and node inventory:** [`ROADMAP.md`](ROADMAP.md) — full iteration plan, node classification (Roadmap / Nice-to-have / Discarded), and optional dependency schema.
 
 - **Key architecture decisions (do not revisit without explicit instruction):**
   - ComfyUI is vendored at `vendor/ComfyUI` as a git submodule pinned to a stable release tag — never floating on `master`. Update the pin deliberately between iterations only.

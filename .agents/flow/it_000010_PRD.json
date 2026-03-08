@@ -1,0 +1,259 @@
+{
+  "goals": [
+    "Expose `sample_advanced()` (maps to `KSamplerAdvanced`) with explicit `add_noise` and",
+    "Expose `sample_custom()` (maps to `SamplerCustomAdvanced`) accepting composable guiders, noise",
+    "Expose scheduler factory functions (`basic_scheduler`, `karras_scheduler`, `ays_scheduler`,",
+    "Expose sigma utility functions (`split_sigmas`, `split_sigmas_denoise`) and a sampler selector",
+    "Ensure all new public symbols follow the lazy-import pattern and all tests pass on CPU-only CI."
+  ],
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "sample_advanced()",
+      "description": "As a developer composing a multi-pass inference pipeline, I want to call `sample_advanced(model, positive, negative, latent, ...)` with explicit `add_noise` and `return_with_leftover_noise` boolean flags, so that I can chain denoising passes without injecting noise between them, matching `KSamplerAdvanced` semantics.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-001-AC01",
+          "text": "`pycomfy.sampling.sample_advanced(model, positive, negative, latent, steps, cfg, sampler_name, scheduler, noise_seed, *, add_noise=True, return_with_leftover_noise=False, denoise=1.0, start_at_step=0, end_at_step=10000)` exists and is importable."
+        },
+        {
+          "id": "US-001-AC02",
+          "text": "Returns a LATENT dict identical in structure to the output of `sample()`."
+        },
+        {
+          "id": "US-001-AC03",
+          "text": "Passing `add_noise=False` does not inject noise into the latent before sampling."
+        },
+        {
+          "id": "US-001-AC04",
+          "text": "`return_with_leftover_noise=True` returns the latent before the final noise removal step."
+        },
+        {
+          "id": "US-001-AC05",
+          "text": "`sample_advanced` is exported in `pycomfy/sampling.py`'s `__all__`."
+        },
+        {
+          "id": "US-001-AC06",
+          "text": "No `torch`, `comfy.*`, or `ensure_comfyui_on_path()` at module top level — all imports deferred to call time."
+        },
+        {
+          "id": "US-001-AC07",
+          "text": "Typecheck / lint passes."
+        }
+      ]
+    },
+    {
+      "id": "US-002",
+      "title": "Guider factory functions",
+      "description": "As a developer building a Flux or LTXV pipeline, I want factory functions `basic_guider(model, conditioning)` and `cfg_guider(model, positive, negative, cfg)`, so that I can construct the guider object required by `sample_custom()` without accessing ComfyUI internals directly.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-002-AC01",
+          "text": "`pycomfy.sampling.basic_guider(model, conditioning) -> Any` exists and wraps `BasicGuider`."
+        },
+        {
+          "id": "US-002-AC02",
+          "text": "`pycomfy.sampling.cfg_guider(model, positive, negative, cfg) -> Any` exists and wraps `CFGGuider`."
+        },
+        {
+          "id": "US-002-AC03",
+          "text": "Both functions are exported in `__all__`."
+        },
+        {
+          "id": "US-002-AC04",
+          "text": "Lazy import pattern respected."
+        },
+        {
+          "id": "US-002-AC05",
+          "text": "Typecheck / lint passes."
+        }
+      ]
+    },
+    {
+      "id": "US-003",
+      "title": "Noise injector factory functions",
+      "description": "As a developer composing a custom denoising loop, I want `random_noise(noise_seed)` and `disable_noise()` factory functions, so that I can pass the correct noise injector to `sample_custom()`.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-003-AC01",
+          "text": "`pycomfy.sampling.random_noise(noise_seed: int) -> Any` exists and wraps `RandomNoise`."
+        },
+        {
+          "id": "US-003-AC02",
+          "text": "`pycomfy.sampling.disable_noise() -> Any` exists and wraps `DisableNoise`."
+        },
+        {
+          "id": "US-003-AC03",
+          "text": "Both exported in `__all__`."
+        },
+        {
+          "id": "US-003-AC04",
+          "text": "Lazy import pattern respected."
+        },
+        {
+          "id": "US-003-AC05",
+          "text": "Typecheck / lint passes."
+        }
+      ]
+    },
+    {
+      "id": "US-004",
+      "title": "Scheduler factory functions",
+      "description": "As a developer targeting SD, Flux, LTXV, or WAN model architectures, I want scheduler functions that return sigma tensors for each schedule type, so that I can pass them directly to `sample_custom()` without writing ComfyUI boilerplate.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-004-AC01",
+          "text": "`basic_scheduler(model, scheduler_name: str, steps: int, denoise: float = 1.0) -> Any` wraps `BasicScheduler.execute(model, scheduler, steps, denoise)`."
+        },
+        {
+          "id": "US-004-AC02",
+          "text": "`karras_scheduler(steps: int, sigma_max: float, sigma_min: float, rho: float = 7.0) -> Any` wraps `KarrasScheduler.execute(steps, sigma_max, sigma_min, rho)`. Note: takes no `model` argument."
+        },
+        {
+          "id": "US-004-AC03",
+          "text": "`ays_scheduler(model_type: str, steps: int, denoise: float = 1.0) -> Any` wraps `AlignYourStepsScheduler.execute(model_type, steps, denoise)`. `model_type` must be one of `\"SD1\"`, `\"SDXL\"`, or `\"SVD\"`. Note: takes no `model` object."
+        },
+        {
+          "id": "US-004-AC04",
+          "text": "`flux2_scheduler(steps: int, width: int, height: int) -> Any` wraps `Flux2Scheduler.execute(steps, width, height)`. Note: takes no `model` argument; image dimensions drive the sigma schedule."
+        },
+        {
+          "id": "US-004-AC05",
+          "text": "`ltxv_scheduler(steps: int, max_shift: float, base_shift: float, *, stretch: bool = True, terminal: float = 0.1, latent: Any = None) -> Any` wraps `LTXVScheduler.execute(steps, max_shift, base_shift, stretch, terminal, latent)`. `latent` is optional and used to derive token count."
+        },
+        {
+          "id": "US-004-AC06",
+          "text": "All scheduler functions return a SIGMAS tensor."
+        },
+        {
+          "id": "US-004-AC07",
+          "text": "All exported in `__all__`."
+        },
+        {
+          "id": "US-004-AC08",
+          "text": "Lazy import pattern respected."
+        },
+        {
+          "id": "US-004-AC09",
+          "text": "Typecheck / lint passes."
+        }
+      ]
+    },
+    {
+      "id": "US-005",
+      "title": "sample_custom()",
+      "description": "As a developer needing full control over guiders and sigma schedules (Flux, LTXV, WAN), I want `sample_custom(noise, guider, sampler, sigmas, latent_image)`, so that I can compose advanced denoising workflows using any guider + scheduler combination. > Note: Unlike `sample()` and `sample_advanced()`, this function does NOT take a `model` argument. The model is already embedded inside the `guider` object (constructed via `basic_guider()` or `cfg_guider()`). This is intentional and follows `SamplerCustomAdvanced` semantics.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-005-AC01",
+          "text": "`pycomfy.sampling.sample_custom(noise, guider, sampler, sigmas, latent_image) -> tuple[Any, Any]` exists and wraps `SamplerCustomAdvanced.execute(noise, guider, sampler, sigmas, latent_image)`."
+        },
+        {
+          "id": "US-005-AC02",
+          "text": "`noise` is the first positional argument (required); accepts any noise injector returned by `random_noise()` or `disable_noise()`."
+        },
+        {
+          "id": "US-005-AC03",
+          "text": "Accepts any guider returned by `basic_guider()` or `cfg_guider()`."
+        },
+        {
+          "id": "US-005-AC04",
+          "text": "Accepts any sampler returned by `get_sampler()`."
+        },
+        {
+          "id": "US-005-AC05",
+          "text": "Accepts any sigma tensor returned by the scheduler functions."
+        },
+        {
+          "id": "US-005-AC06",
+          "text": "Returns a tuple `(output_latent, denoised_latent)` — both LATENT dicts."
+        },
+        {
+          "id": "US-005-AC07",
+          "text": "`sample_custom` exported in `__all__`."
+        },
+        {
+          "id": "US-005-AC08",
+          "text": "Can be called end-to-end on a CPU dummy latent with `BasicGuider` + `BasicScheduler` without raising."
+        },
+        {
+          "id": "US-005-AC09",
+          "text": "Docstring explicitly states that `model` is embedded in `guider`, not a direct argument."
+        },
+        {
+          "id": "US-005-AC10",
+          "text": "Lazy import pattern respected."
+        },
+        {
+          "id": "US-005-AC11",
+          "text": "Typecheck / lint passes."
+        }
+      ]
+    },
+    {
+      "id": "US-006",
+      "title": "Sigma tools and sampler selector",
+      "description": "As a developer building multi-pass inference (e.g., hires-fix, img2img), I want `split_sigmas`, `split_sigmas_denoise`, and `get_sampler` utilities, so that I can manipulate sigma schedules and select named samplers without using ComfyUI node internals directly.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-006-AC01",
+          "text": "`split_sigmas(sigmas, step) -> tuple[Any, Any]` wraps `SplitSigmas` and returns `(sigmas_first, sigmas_second)`."
+        },
+        {
+          "id": "US-006-AC02",
+          "text": "`split_sigmas_denoise(sigmas, denoise) -> tuple[Any, Any]` wraps `SplitSigmasDenoise` and returns `(sigmas_first, sigmas_second)`."
+        },
+        {
+          "id": "US-006-AC03",
+          "text": "`get_sampler(sampler_name: str) -> Any` wraps `KSamplerSelect` and returns a SAMPLER object."
+        },
+        {
+          "id": "US-006-AC04",
+          "text": "All three exported in `__all__`."
+        },
+        {
+          "id": "US-006-AC05",
+          "text": "Lazy import pattern respected."
+        },
+        {
+          "id": "US-006-AC06",
+          "text": "Typecheck / lint passes."
+        }
+      ]
+    }
+  ],
+  "functionalRequirements": [
+    {
+      "id": "FR-1",
+      "description": "All new public functions must live in `pycomfy/sampling.py` and be added to `__all__`."
+    },
+    {
+      "id": "FR-2",
+      "description": "No `torch`, `comfy.*`, `comfy_extras.*`, or `ensure_comfyui_on_path()` calls at module top level — deferred to function body call time only."
+    },
+    {
+      "id": "FR-3",
+      "description": "All function signatures use `str | Path` for path arguments (none in this module) and `Any` for ComfyUI opaque objects, with type hints on every public API parameter."
+    },
+    {
+      "id": "FR-4",
+      "description": "The existing `sample()` function must remain unchanged and all existing tests must continue to pass."
+    },
+    {
+      "id": "FR-5",
+      "description": "New wrapper functions must call the corresponding ComfyUI node's `execute()` classmethod directly (or `sample()` for old-style nodes). Do not re-implement logic. For `KSamplerAdvanced` (old-style, `nodes.py`), call `.sample()` on an instance. For all `io.ComfyNode` subclasses (`comfy_extras/*`), call `ClassName.execute(...)` as a classmethod."
+    },
+    {
+      "id": "FR-6",
+      "description": "Import paths for extra schedulers: `AlignYourStepsScheduler` ← `comfy_extras.nodes_align_your_steps`; `Flux2Scheduler` ← `comfy_extras.nodes_flux`; `LTXVScheduler` ← `comfy_extras.nodes_lt`. All paths verified against the pinned `vendor/ComfyUI` submodule."
+    },
+    {
+      "id": "FR-7",
+      "description": "`sample_custom()` must call `SamplerCustomAdvanced.sample()` with the correct argument order as defined in `comfy_extras/nodes_custom_sampler.py`."
+    },
+    {
+      "id": "FR-8",
+      "description": "All new symbols must be documented with a one-line docstring describing input/output contract."
+    }
+  ]
+}
