@@ -9,7 +9,7 @@ from typing import Any
 
 import pytest
 
-from pycomfy.models import ModelManager
+from comfy_diffusion.models import ModelManager
 
 
 def _install_fake_unet_loader_modules(

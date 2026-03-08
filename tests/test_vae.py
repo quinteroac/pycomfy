@@ -14,34 +14,34 @@ from typing import Any
 import pytest
 from PIL import Image
 
-import pycomfy
-import pycomfy.vae as vae_module
-from pycomfy import (
+import comfy_diffusion
+import comfy_diffusion.vae as vae_module
+from comfy_diffusion import (
     vae_decode,
     vae_decode_tiled,
     vae_encode_tiled,
 )
-from pycomfy import (
+from comfy_diffusion import (
     vae_decode_batch as vae_decode_batch_from_root,
 )
-from pycomfy import (
+from comfy_diffusion import (
     vae_decode_batch_tiled as vae_decode_batch_tiled_from_root,
 )
-from pycomfy import (
+from comfy_diffusion import (
     vae_encode_batch as vae_encode_batch_from_root,
 )
-from pycomfy import (
+from comfy_diffusion import (
     vae_encode_batch_tiled as vae_encode_batch_tiled_from_root,
 )
-from pycomfy.models import CheckpointResult
-from pycomfy.vae import (
+from comfy_diffusion.models import CheckpointResult
+from comfy_diffusion.vae import (
     vae_decode_batch,
     vae_decode_batch_tiled,
     vae_encode,
     vae_encode_batch,
     vae_encode_batch_tiled,
 )
-from pycomfy.vae import vae_encode_tiled as vae_encode_tiled_from_module
+from comfy_diffusion.vae import vae_encode_tiled as vae_encode_tiled_from_module
 
 
 def _repo_root() -> Path:
@@ -117,39 +117,39 @@ def test_vae_module_exports_decode_and_encode() -> None:
 
 def test_vae_decode_is_re_exported_from_package_root() -> None:
     assert callable(vae_decode)
-    assert pycomfy.vae_decode is vae_decode
-    assert "vae_decode" in pycomfy.__all__
+    assert comfy_diffusion.vae_decode is vae_decode
+    assert "vae_decode" in comfy_diffusion.__all__
 
 
 def test_vae_decode_tiled_is_re_exported_from_package_root() -> None:
     assert callable(vae_decode_tiled)
-    assert pycomfy.vae_decode_tiled is vae_decode_tiled
-    assert "vae_decode_tiled" in pycomfy.__all__
+    assert comfy_diffusion.vae_decode_tiled is vae_decode_tiled
+    assert "vae_decode_tiled" in comfy_diffusion.__all__
 
 
 def test_vae_encode_is_re_exported_from_package_root() -> None:
     assert callable(vae_encode)
-    assert pycomfy.vae_encode is vae_encode
-    assert "vae_encode" in pycomfy.__all__
+    assert comfy_diffusion.vae_encode is vae_encode
+    assert "vae_encode" in comfy_diffusion.__all__
 
 
 def test_vae_encode_tiled_is_exported_from_module_and_package_root() -> None:
     assert callable(vae_encode_tiled_from_module)
     assert callable(vae_encode_tiled)
-    assert pycomfy.vae_encode_tiled is vae_encode_tiled
+    assert comfy_diffusion.vae_encode_tiled is vae_encode_tiled
     assert vae_module.vae_encode_tiled is vae_encode_tiled_from_module
-    assert "vae_encode_tiled" in pycomfy.__all__
+    assert "vae_encode_tiled" in comfy_diffusion.__all__
 
 
 def test_vae_batch_functions_are_re_exported_from_package_root() -> None:
-    assert pycomfy.vae_decode_batch is vae_decode_batch_from_root
-    assert pycomfy.vae_decode_batch_tiled is vae_decode_batch_tiled_from_root
-    assert pycomfy.vae_encode_batch is vae_encode_batch_from_root
-    assert pycomfy.vae_encode_batch_tiled is vae_encode_batch_tiled_from_root
-    assert "vae_decode_batch" in pycomfy.__all__
-    assert "vae_decode_batch_tiled" in pycomfy.__all__
-    assert "vae_encode_batch" in pycomfy.__all__
-    assert "vae_encode_batch_tiled" in pycomfy.__all__
+    assert comfy_diffusion.vae_decode_batch is vae_decode_batch_from_root
+    assert comfy_diffusion.vae_decode_batch_tiled is vae_decode_batch_tiled_from_root
+    assert comfy_diffusion.vae_encode_batch is vae_encode_batch_from_root
+    assert comfy_diffusion.vae_encode_batch_tiled is vae_encode_batch_tiled_from_root
+    assert "vae_decode_batch" in comfy_diffusion.__all__
+    assert "vae_decode_batch_tiled" in comfy_diffusion.__all__
+    assert "vae_encode_batch" in comfy_diffusion.__all__
+    assert "vae_encode_batch_tiled" in comfy_diffusion.__all__
 
 
 def test_vae_decode_accepts_checkpoint_result_vae_and_returns_pil_image() -> None:
@@ -785,14 +785,14 @@ def test_vae_decode_outputs_uint8_pixels_in_0_to_255_range() -> None:
     assert channels[4] == 255
 
 
-def test_import_pycomfy_vae_has_no_heavy_import_side_effects() -> None:
+def test_import_comfy_diffusion_vae_has_no_heavy_import_side_effects() -> None:
     result = _run_python(
         "import json\n"
         "import sys\n"
-        "import pycomfy\n"
+        "import comfy_diffusion\n"
         "baseline_modules = set(sys.modules)\n"
         "baseline_torch_loaded = 'torch' in sys.modules\n"
-        "from pycomfy.vae import "
+        "from comfy_diffusion.vae import "
         "vae_decode, vae_decode_batch, vae_decode_batch_tiled, vae_decode_tiled, "
         "vae_encode, vae_encode_batch, vae_encode_batch_tiled, vae_encode_tiled\n"
         "post_modules = set(sys.modules)\n"

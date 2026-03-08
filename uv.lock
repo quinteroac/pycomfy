@@ -308,6 +308,114 @@ wheels = [
 ]
 
 [[package]]
+name = "comfy-diffusion"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "pillow" },
+    { name = "psutil" },
+]
+
+[package.optional-dependencies]
+comfyui = [
+    { name = "aiohttp" },
+    { name = "alembic" },
+    { name = "av" },
+    { name = "comfy-aimdo" },
+    { name = "comfy-kitchen" },
+    { name = "comfyui-embedded-docs" },
+    { name = "comfyui-frontend-package" },
+    { name = "comfyui-workflow-templates" },
+    { name = "einops" },
+    { name = "glfw" },
+    { name = "kornia" },
+    { name = "numpy" },
+    { name = "pillow" },
+    { name = "psutil" },
+    { name = "pydantic" },
+    { name = "pydantic-settings" },
+    { name = "pyopengl" },
+    { name = "pyyaml" },
+    { name = "requests" },
+    { name = "safetensors" },
+    { name = "scipy" },
+    { name = "sentencepiece" },
+    { name = "spandrel" },
+    { name = "sqlalchemy" },
+    { name = "tokenizers" },
+    { name = "torchsde" },
+    { name = "tqdm" },
+    { name = "transformers" },
+    { name = "yarl" },
+]
+cpu = [
+    { name = "torch", version = "2.10.0", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform == 'darwin'" },
+    { name = "torch", version = "2.10.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform != 'darwin'" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "mypy" },
+    { name = "pytest" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "aiohttp", marker = "extra == 'comfyui'", specifier = ">=3.11.8" },
+    { name = "alembic", marker = "extra == 'comfyui'", specifier = ">=1.18.4" },
+    { name = "av", marker = "extra == 'comfyui'", specifier = ">=14.2.0" },
+    { name = "comfy-aimdo", marker = "extra == 'comfyui'", specifier = ">=0.2.7" },
+    { name = "comfy-kitchen", marker = "extra == 'comfyui'", specifier = ">=0.2.7" },
+    { name = "comfyui-embedded-docs", marker = "extra == 'comfyui'", specifier = "==0.4.3" },
+    { name = "comfyui-frontend-package", marker = "extra == 'comfyui'", specifier = "==1.39.19" },
+    { name = "comfyui-workflow-templates", marker = "extra == 'comfyui'", specifier = "==0.9.10" },
+    { name = "einops", marker = "extra == 'comfyui'", specifier = ">=0.8.2" },
+    { name = "glfw", marker = "extra == 'comfyui'", specifier = ">=2.10.0" },
+    { name = "kornia", marker = "extra == 'comfyui'", specifier = ">=0.7.1" },
+    { name = "numpy", marker = "extra == 'comfyui'", specifier = ">=1.25.0" },
+    { name = "pillow", specifier = ">=12.1.1" },
+    { name = "pillow", marker = "extra == 'comfyui'", specifier = ">=12.1.1" },
+    { name = "psutil" },
+    { name = "psutil", marker = "extra == 'comfyui'", specifier = ">=7.2.2" },
+    { name = "pydantic", marker = "extra == 'comfyui'", specifier = "~=2.0" },
+    { name = "pydantic-settings", marker = "extra == 'comfyui'", specifier = "~=2.0" },
+    { name = "pyopengl", marker = "extra == 'comfyui'", specifier = ">=3.1.10" },
+    { name = "pyyaml", marker = "extra == 'comfyui'", specifier = ">=6.0.3" },
+    { name = "requests", marker = "extra == 'comfyui'", specifier = ">=2.32.5" },
+    { name = "safetensors", marker = "extra == 'comfyui'", specifier = ">=0.4.2" },
+    { name = "scipy", marker = "extra == 'comfyui'", specifier = ">=1.17.1" },
+    { name = "sentencepiece", marker = "extra == 'comfyui'", specifier = ">=0.2.1" },
+    { name = "spandrel", marker = "extra == 'comfyui'", specifier = ">=0.4.2" },
+    { name = "sqlalchemy", marker = "extra == 'comfyui'", specifier = ">=2.0.48" },
+    { name = "tokenizers", marker = "extra == 'comfyui'", specifier = ">=0.13.3" },
+    { name = "torch", marker = "extra == 'comfyui' and extra == 'cpu'", specifier = ">=2.10.0", index = "https://download.pytorch.org/whl/cpu" },
+    { name = "torch", marker = "extra == 'comfyui' and extra != 'cpu' and extra == 'cuda'", specifier = ">=2.10.0", index = "https://download.pytorch.org/whl/cu124" },
+    { name = "torch", marker = "extra == 'comfyui' and extra != 'cpu' and extra != 'cuda'", specifier = ">=2.10.0" },
+    { name = "torch", marker = "extra == 'cpu'", index = "https://download.pytorch.org/whl/cpu" },
+    { name = "torch", marker = "extra != 'cpu' and extra == 'cuda'", index = "https://download.pytorch.org/whl/cu124" },
+    { name = "torch", marker = "extra == 'cpu' and extra == 'cuda'", index = "https://download.pytorch.org/whl/cpu" },
+    { name = "torchaudio", marker = "extra == 'comfyui' and extra == 'cpu'", specifier = ">=2.10.0", index = "https://download.pytorch.org/whl/cpu" },
+    { name = "torchaudio", marker = "extra == 'comfyui' and extra != 'cpu' and extra == 'cuda'", specifier = ">=2.10.0", index = "https://download.pytorch.org/whl/cu124" },
+    { name = "torchaudio", marker = "extra == 'comfyui' and extra != 'cpu' and extra != 'cuda'", specifier = ">=2.10.0" },
+    { name = "torchsde", marker = "extra == 'comfyui'", specifier = ">=0.2.6" },
+    { name = "torchvision", marker = "extra == 'comfyui' and extra == 'cpu'", specifier = ">=0.25.0", index = "https://download.pytorch.org/whl/cpu" },
+    { name = "torchvision", marker = "extra == 'comfyui' and extra != 'cpu' and extra == 'cuda'", specifier = ">=0.25.0", index = "https://download.pytorch.org/whl/cu124" },
+    { name = "torchvision", marker = "extra == 'comfyui' and extra != 'cpu' and extra != 'cuda'", specifier = ">=0.25.0" },
+    { name = "tqdm", marker = "extra == 'comfyui'", specifier = ">=4.67.3" },
+    { name = "transformers", marker = "extra == 'comfyui'", specifier = ">=4.50.3" },
+    { name = "yarl", marker = "extra == 'comfyui'", specifier = ">=1.18.0" },
+]
+provides-extras = ["cpu", "cuda", "comfyui"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "mypy", specifier = ">=1.10" },
+    { name = "pytest", specifier = ">=8.0" },
+    { name = "ruff", specifier = ">=0.4" },
+]
+
+[[package]]
 name = "comfy-kitchen"
 version = "0.2.7"
 source = { registry = "https://pypi.org/simple" }
@@ -1328,114 +1436,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/04/78/0acd37ca84ce3ddffaa92ef0f571e073faa6d8ff1f0559ab1272188ea2be/psutil-7.2.2-cp36-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:b58fabe35e80b264a4e3bb23e6b96f9e45a3df7fb7eed419ac0e5947c61e47cc", size = 148266, upload-time = "2026-01-28T18:15:31.597Z" },
     { url = "https://files.pythonhosted.org/packages/b4/90/e2159492b5426be0c1fef7acba807a03511f97c5f86b3caeda6ad92351a7/psutil-7.2.2-cp37-abi3-win_amd64.whl", hash = "sha256:eb7e81434c8d223ec4a219b5fc1c47d0417b12be7ea866e24fb5ad6e84b3d988", size = 137737, upload-time = "2026-01-28T18:15:33.849Z" },
     { url = "https://files.pythonhosted.org/packages/8c/c7/7bb2e321574b10df20cbde462a94e2b71d05f9bbda251ef27d104668306a/psutil-7.2.2-cp37-abi3-win_arm64.whl", hash = "sha256:8c233660f575a5a89e6d4cb65d9f938126312bca76d8fe087b947b3a1aaac9ee", size = 134617, upload-time = "2026-01-28T18:15:36.514Z" },
-]
-
-[[package]]
-name = "pycomfy"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "pillow" },
-    { name = "psutil" },
-]
-
-[package.optional-dependencies]
-comfyui = [
-    { name = "aiohttp" },
-    { name = "alembic" },
-    { name = "av" },
-    { name = "comfy-aimdo" },
-    { name = "comfy-kitchen" },
-    { name = "comfyui-embedded-docs" },
-    { name = "comfyui-frontend-package" },
-    { name = "comfyui-workflow-templates" },
-    { name = "einops" },
-    { name = "glfw" },
-    { name = "kornia" },
-    { name = "numpy" },
-    { name = "pillow" },
-    { name = "psutil" },
-    { name = "pydantic" },
-    { name = "pydantic-settings" },
-    { name = "pyopengl" },
-    { name = "pyyaml" },
-    { name = "requests" },
-    { name = "safetensors" },
-    { name = "scipy" },
-    { name = "sentencepiece" },
-    { name = "spandrel" },
-    { name = "sqlalchemy" },
-    { name = "tokenizers" },
-    { name = "torchsde" },
-    { name = "tqdm" },
-    { name = "transformers" },
-    { name = "yarl" },
-]
-cpu = [
-    { name = "torch", version = "2.10.0", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform == 'darwin'" },
-    { name = "torch", version = "2.10.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform != 'darwin'" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "mypy" },
-    { name = "pytest" },
-    { name = "ruff" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "aiohttp", marker = "extra == 'comfyui'", specifier = ">=3.11.8" },
-    { name = "alembic", marker = "extra == 'comfyui'", specifier = ">=1.18.4" },
-    { name = "av", marker = "extra == 'comfyui'", specifier = ">=14.2.0" },
-    { name = "comfy-aimdo", marker = "extra == 'comfyui'", specifier = ">=0.2.7" },
-    { name = "comfy-kitchen", marker = "extra == 'comfyui'", specifier = ">=0.2.7" },
-    { name = "comfyui-embedded-docs", marker = "extra == 'comfyui'", specifier = "==0.4.3" },
-    { name = "comfyui-frontend-package", marker = "extra == 'comfyui'", specifier = "==1.39.19" },
-    { name = "comfyui-workflow-templates", marker = "extra == 'comfyui'", specifier = "==0.9.10" },
-    { name = "einops", marker = "extra == 'comfyui'", specifier = ">=0.8.2" },
-    { name = "glfw", marker = "extra == 'comfyui'", specifier = ">=2.10.0" },
-    { name = "kornia", marker = "extra == 'comfyui'", specifier = ">=0.7.1" },
-    { name = "numpy", marker = "extra == 'comfyui'", specifier = ">=1.25.0" },
-    { name = "pillow", specifier = ">=12.1.1" },
-    { name = "pillow", marker = "extra == 'comfyui'", specifier = ">=12.1.1" },
-    { name = "psutil" },
-    { name = "psutil", marker = "extra == 'comfyui'", specifier = ">=7.2.2" },
-    { name = "pydantic", marker = "extra == 'comfyui'", specifier = "~=2.0" },
-    { name = "pydantic-settings", marker = "extra == 'comfyui'", specifier = "~=2.0" },
-    { name = "pyopengl", marker = "extra == 'comfyui'", specifier = ">=3.1.10" },
-    { name = "pyyaml", marker = "extra == 'comfyui'", specifier = ">=6.0.3" },
-    { name = "requests", marker = "extra == 'comfyui'", specifier = ">=2.32.5" },
-    { name = "safetensors", marker = "extra == 'comfyui'", specifier = ">=0.4.2" },
-    { name = "scipy", marker = "extra == 'comfyui'", specifier = ">=1.17.1" },
-    { name = "sentencepiece", marker = "extra == 'comfyui'", specifier = ">=0.2.1" },
-    { name = "spandrel", marker = "extra == 'comfyui'", specifier = ">=0.4.2" },
-    { name = "sqlalchemy", marker = "extra == 'comfyui'", specifier = ">=2.0.48" },
-    { name = "tokenizers", marker = "extra == 'comfyui'", specifier = ">=0.13.3" },
-    { name = "torch", marker = "extra == 'comfyui' and extra == 'cpu'", specifier = ">=2.10.0", index = "https://download.pytorch.org/whl/cpu" },
-    { name = "torch", marker = "extra == 'comfyui' and extra != 'cpu' and extra == 'cuda'", specifier = ">=2.10.0", index = "https://download.pytorch.org/whl/cu124" },
-    { name = "torch", marker = "extra == 'comfyui' and extra != 'cpu' and extra != 'cuda'", specifier = ">=2.10.0" },
-    { name = "torch", marker = "extra == 'cpu'", index = "https://download.pytorch.org/whl/cpu" },
-    { name = "torch", marker = "extra != 'cpu' and extra == 'cuda'", index = "https://download.pytorch.org/whl/cu124" },
-    { name = "torch", marker = "extra == 'cpu' and extra == 'cuda'", index = "https://download.pytorch.org/whl/cpu" },
-    { name = "torchaudio", marker = "extra == 'comfyui' and extra == 'cpu'", specifier = ">=2.10.0", index = "https://download.pytorch.org/whl/cpu" },
-    { name = "torchaudio", marker = "extra == 'comfyui' and extra != 'cpu' and extra == 'cuda'", specifier = ">=2.10.0", index = "https://download.pytorch.org/whl/cu124" },
-    { name = "torchaudio", marker = "extra == 'comfyui' and extra != 'cpu' and extra != 'cuda'", specifier = ">=2.10.0" },
-    { name = "torchsde", marker = "extra == 'comfyui'", specifier = ">=0.2.6" },
-    { name = "torchvision", marker = "extra == 'comfyui' and extra == 'cpu'", specifier = ">=0.25.0", index = "https://download.pytorch.org/whl/cpu" },
-    { name = "torchvision", marker = "extra == 'comfyui' and extra != 'cpu' and extra == 'cuda'", specifier = ">=0.25.0", index = "https://download.pytorch.org/whl/cu124" },
-    { name = "torchvision", marker = "extra == 'comfyui' and extra != 'cpu' and extra != 'cuda'", specifier = ">=0.25.0" },
-    { name = "tqdm", marker = "extra == 'comfyui'", specifier = ">=4.67.3" },
-    { name = "transformers", marker = "extra == 'comfyui'", specifier = ">=4.50.3" },
-    { name = "yarl", marker = "extra == 'comfyui'", specifier = ">=1.18.0" },
-]
-provides-extras = ["cpu", "cuda", "comfyui"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "mypy", specifier = ">=1.10" },
-    { name = "pytest", specifier = ">=8.0" },
-    { name = "ruff", specifier = ">=0.4" },
 ]
 
 [[package]]

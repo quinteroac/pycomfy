@@ -10,8 +10,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
-import pycomfy.audio as audio_module
-from pycomfy.audio import (
+import comfy_diffusion.audio as audio_module
+from comfy_diffusion.audio import (
     empty_ace_step_15_latent_audio,
     encode_ace_step_15_audio,
     ltxv_audio_vae_decode,
@@ -308,9 +308,9 @@ def test_empty_ace_step_15_latent_audio_wraps_logic_and_returns_audio_latent_dic
     assert fake_torch.zeros_calls == [([3, 64, 62], "fake-device")]
 
 
-def test_ltxv_audio_vae_encode_is_importable_from_pycomfy_audio() -> None:
+def test_ltxv_audio_vae_encode_is_importable_from_comfy_diffusion_audio() -> None:
     result = _run_python(
-        "from pycomfy.audio import ltxv_audio_vae_encode; "
+        "from comfy_diffusion.audio import ltxv_audio_vae_encode; "
         "assert ltxv_audio_vae_encode.__name__ == 'ltxv_audio_vae_encode'; "
         "print('ok')"
     )
@@ -319,9 +319,9 @@ def test_ltxv_audio_vae_encode_is_importable_from_pycomfy_audio() -> None:
     assert result.stdout.strip() == "ok"
 
 
-def test_ltxv_audio_vae_decode_is_importable_from_pycomfy_audio() -> None:
+def test_ltxv_audio_vae_decode_is_importable_from_comfy_diffusion_audio() -> None:
     result = _run_python(
-        "from pycomfy.audio import ltxv_audio_vae_decode; "
+        "from comfy_diffusion.audio import ltxv_audio_vae_decode; "
         "assert ltxv_audio_vae_decode.__name__ == 'ltxv_audio_vae_decode'; "
         "print('ok')"
     )
@@ -330,9 +330,9 @@ def test_ltxv_audio_vae_decode_is_importable_from_pycomfy_audio() -> None:
     assert result.stdout.strip() == "ok"
 
 
-def test_ltxv_empty_latent_audio_is_importable_from_pycomfy_audio() -> None:
+def test_ltxv_empty_latent_audio_is_importable_from_comfy_diffusion_audio() -> None:
     result = _run_python(
-        "from pycomfy.audio import ltxv_empty_latent_audio; "
+        "from comfy_diffusion.audio import ltxv_empty_latent_audio; "
         "assert ltxv_empty_latent_audio.__name__ == 'ltxv_empty_latent_audio'; "
         "print('ok')"
     )
@@ -341,9 +341,9 @@ def test_ltxv_empty_latent_audio_is_importable_from_pycomfy_audio() -> None:
     assert result.stdout.strip() == "ok"
 
 
-def test_encode_ace_step_15_audio_is_importable_from_pycomfy_audio() -> None:
+def test_encode_ace_step_15_audio_is_importable_from_comfy_diffusion_audio() -> None:
     result = _run_python(
-        "from pycomfy.audio import encode_ace_step_15_audio; "
+        "from comfy_diffusion.audio import encode_ace_step_15_audio; "
         "assert encode_ace_step_15_audio.__name__ == 'encode_ace_step_15_audio'; "
         "print('ok')"
     )
@@ -352,9 +352,9 @@ def test_encode_ace_step_15_audio_is_importable_from_pycomfy_audio() -> None:
     assert result.stdout.strip() == "ok"
 
 
-def test_empty_ace_step_15_latent_audio_is_importable_from_pycomfy_audio() -> None:
+def test_empty_ace_step_15_latent_audio_is_importable_from_comfy_diffusion_audio() -> None:
     result = _run_python(
-        "from pycomfy.audio import empty_ace_step_15_latent_audio; "
+        "from comfy_diffusion.audio import empty_ace_step_15_latent_audio; "
         "assert empty_ace_step_15_latent_audio.__name__ == 'empty_ace_step_15_latent_audio'; "
         "print('ok')"
     )
@@ -363,13 +363,13 @@ def test_empty_ace_step_15_latent_audio_is_importable_from_pycomfy_audio() -> No
     assert result.stdout.strip() == "ok"
 
 
-def test_import_pycomfy_audio_has_no_torch_or_comfy_side_effects() -> None:
+def test_import_comfy_diffusion_audio_has_no_torch_or_comfy_side_effects() -> None:
     result = _run_python(
         "import json\n"
         "import sys\n"
-        "import pycomfy\n"
+        "import comfy_diffusion\n"
         "baseline_modules = set(sys.modules)\n"
-        "from pycomfy.audio import (\n"
+        "from comfy_diffusion.audio import (\n"
         "  empty_ace_step_15_latent_audio,\n"
         "  encode_ace_step_15_audio,\n"
         "  ltxv_audio_vae_decode,\n"
@@ -401,5 +401,5 @@ def test_import_pycomfy_audio_has_no_torch_or_comfy_side_effects() -> None:
     assert payload["torch_loaded"] is False
     assert payload["comfy_loaded"] is False
     assert payload["comfy_sd_loaded"] is False
-    heavy = [module for module in payload["new_modules"] if module.startswith(("torch", "comfy"))]
+    heavy = [module for module in payload["new_modules"] if module.startswith(("torch", "comfy.")) or module == "comfy"]
     assert heavy == [], f"Unexpected heavy modules loaded on import: {heavy}"

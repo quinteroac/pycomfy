@@ -10,9 +10,9 @@ import sys
 from pathlib import Path
 from typing import Any
 
-import pycomfy
-import pycomfy.lora as lora_module
-from pycomfy import apply_lora
+import comfy_diffusion
+import comfy_diffusion.lora as lora_module
+from comfy_diffusion import apply_lora
 
 
 def _repo_root() -> Path:
@@ -111,8 +111,8 @@ def test_apply_lora_returns_patched_model_and_clip_tuple(
 
 def test_apply_lora_is_re_exported_from_package_root() -> None:
     assert callable(apply_lora)
-    assert pycomfy.apply_lora is apply_lora
-    assert "apply_lora" in pycomfy.__all__
+    assert comfy_diffusion.apply_lora is apply_lora
+    assert "apply_lora" in comfy_diffusion.__all__
 
 
 def test_apply_lora_supports_chaining_without_additional_api(
@@ -210,16 +210,16 @@ def test_apply_lora_supports_chaining_without_additional_api(
 
     # AC03: chaining uses only apply_lora; no new multi-LoRA API was added.
     assert not hasattr(lora_module, "apply_loras")
-    assert not hasattr(pycomfy, "apply_loras")
+    assert not hasattr(comfy_diffusion, "apply_loras")
 
 
-def test_import_pycomfy_lora_has_no_heavy_import_side_effects() -> None:
+def test_import_comfy_diffusion_lora_has_no_heavy_import_side_effects() -> None:
     result = _run_python(
         "import json\n"
         "import sys\n"
-        "import pycomfy\n"
+        "import comfy_diffusion\n"
         "baseline_modules = set(sys.modules)\n"
-        "from pycomfy.lora import apply_lora\n"
+        "from comfy_diffusion.lora import apply_lora\n"
         "post_modules = set(sys.modules)\n"
         "new_modules = sorted(post_modules - baseline_modules)\n"
         "payload = {\n"

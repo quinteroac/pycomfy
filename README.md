@@ -1,9 +1,9 @@
-# pycomfy
+# comfy-diffusion
 
 A Python library that exposes ComfyUI's inference engine as importable modules — no server, no node graph, no UI.
 
 ```python
-from pycomfy import check_runtime
+from comfy_diffusion import check_runtime
 
 print(check_runtime())
 # {"comfyui_version": "0.9.x", "device": "cuda:0", "vram_total_mb": 8192, ...}
@@ -19,23 +19,23 @@ The LoRAs on Civitai, the checkpoints people spend months training, the workflow
 
 The problem is ComfyUI wasn't built to be a library. It's an application. The only way to use it programmatically is to run it as a server and talk to it over HTTP — which means every project I build needs to depend on a full ComfyUI backend running somewhere. That's a separate process to manage, a separate service to deploy, and a monolith that loads every node and capability whether my app needs them or not.
 
-`pycomfy` is my answer to that. ComfyUI's inference engine — `comfy.model_management`, `comfy.samplers`, `comfy.sd`, all of it — is perfectly importable Python code. It just was never packaged as a library. So I'm packaging it as one.
+`comfy-diffusion` is my answer to that. ComfyUI's inference engine — `comfy.model_management`, `comfy.samplers`, `comfy.sd`, all of it — is perfectly importable Python code. It just was never packaged as a library. So I'm packaging it as one.
 
-I built this for myself, to use in my own projects. But I'm building it in the open because I suspect I'm not the only one who wants to write `import pycomfy` instead of running a server.
+I built this for myself, to use in my own projects. But I'm building it in the open because I suspect I'm not the only one who wants to write `import comfy_diffusion` instead of running a server.
 
 ---
 
 ## What it is
 
-`pycomfy` imports ComfyUI's internal modules directly — no server, no HTTP, no node system. ComfyUI is vendored as a git submodule and its internals are made transparently importable when you `import pycomfy`.
+`comfy-diffusion` imports ComfyUI's internal modules directly — no server, no HTTP, no node system. ComfyUI is vendored as a git submodule and its internals are made transparently importable when you `import comfy_diffusion`.
 
 The API exposes ComfyUI's building blocks as plain Python functions. You compose them directly — the same way you'd wire nodes in ComfyUI, but in code:
 
 ```python
-from pycomfy.models import ModelManager
-from pycomfy.conditioning import encode_prompt
-from pycomfy.sampling import sample
-from pycomfy import vae_decode, vae_encode, apply_lora
+from comfy_diffusion.models import ModelManager
+from comfy_diffusion.conditioning import encode_prompt
+from comfy_diffusion.sampling import sample
+from comfy_diffusion import vae_decode, vae_encode, apply_lora
 
 manager = ModelManager(models_dir="/path/to/models")
 checkpoint = manager.load_checkpoint("animagine-xl.safetensors")
@@ -128,7 +128,7 @@ uv pip install torch torchvision torchaudio --index-url https://download.pytorch
 # Verify: uv run python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
 ```
 
-> Requires Python 3.12+. ComfyUI is vendored — no separate installation needed. Once the package is on PyPI you can use `pip install pycomfy[cuda]` or `uv add pycomfy[cuda]`.
+> Requires Python 3.12+. ComfyUI is vendored — no separate installation needed. Once the package is on PyPI you can use `pip install comfy-diffusion[cuda]` or `uv add comfy-diffusion[cuda]`.
 
 ---
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Simple checkpoint example using pycomfy.
+Simple checkpoint example using comfy_diffusion.
 
 Runs the complete flow: runtime check → load checkpoint → encode prompts →
 then either txt2img (empty latent) or img2img (input image encoded with VAE) →
@@ -39,7 +39,7 @@ from PIL import Image
 
 def _empty_latent(width: int, height: int, batch_size: int = 1) -> dict:
     """Build an empty LATENT dict for txt2img (ComfyUI contract)."""
-    from pycomfy._runtime import ensure_comfyui_on_path
+    from comfy_diffusion._runtime import ensure_comfyui_on_path
 
     ensure_comfyui_on_path()
     import torch
@@ -199,10 +199,10 @@ def main() -> int:
             return 1
 
     # 1) Runtime check
-    from pycomfy import check_runtime, vae_decode_tiled, vae_encode, apply_lora
-    from pycomfy.conditioning import encode_prompt
-    from pycomfy.models import ModelManager
-    from pycomfy.sampling import sample
+    from comfy_diffusion import check_runtime, vae_decode_tiled, vae_encode, apply_lora
+    from comfy_diffusion.conditioning import encode_prompt
+    from comfy_diffusion.models import ModelManager
+    from comfy_diffusion.sampling import sample
 
     runtime = check_runtime()
     if runtime.get("error"):

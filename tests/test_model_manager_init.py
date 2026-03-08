@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from pycomfy.models import ModelManager
+from comfy_diffusion.models import ModelManager
 
 
 def test_model_manager_constructs_with_existing_models_dir(tmp_path: Path) -> None:

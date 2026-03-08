@@ -3,7 +3,7 @@ requires = ["setuptools>=69"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "pycomfy"
+name = "comfy-diffusion"
 version = "0.1.0"
 description = "ComfyUI inference engine as a standalone Python library (no server, no UI)."
 readme = "README.md"
@@ -57,7 +57,7 @@ comfyui = [
 dev = ["pytest>=8.0", "ruff>=0.4", "mypy>=1.10"]
 
 [tool.setuptools.packages.find]
-include = ["pycomfy*"]
+include = ["comfy_diffusion*"]
 
 [tool.uv]
 # This project uses uv for install, lock, and run. See README and AGENTS.md.

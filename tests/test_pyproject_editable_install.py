@@ -38,7 +38,7 @@ def test_pyproject_declares_required_project_metadata() -> None:
     pyproject = _read_pyproject()
     project = pyproject["project"]
 
-    assert project["name"] == "pycomfy"
+    assert project["name"] == "comfy-diffusion"
     assert project["version"]
     assert project["description"]
     assert project["requires-python"] == ">=3.12"
@@ -64,7 +64,7 @@ def test_torch_optional_dependencies_are_not_version_pinned() -> None:
             assert "<=" not in dependency
 
 
-def test_uv_editable_install_succeeds_and_allows_importing_pycomfy(tmp_path: Path) -> None:
+def test_uv_editable_install_succeeds_and_allows_importing_comfy_diffusion(tmp_path: Path) -> None:
     submodule_path = _repo_root() / "vendor" / "ComfyUI"
     assert submodule_path.is_dir()
 
@@ -79,8 +79,8 @@ def test_uv_editable_install_succeeds_and_allows_importing_pycomfy(tmp_path: Pat
         str(venv_python),
         "-c",
         (
-            "import pycomfy; "
-            "result = pycomfy.check_runtime(); "
+            "import comfy_diffusion; "
+            "result = comfy_diffusion.check_runtime(); "
             "assert isinstance(result, dict); "
             "assert 'python_version' in result"
         ),

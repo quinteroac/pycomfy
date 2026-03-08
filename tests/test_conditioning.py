@@ -9,8 +9,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pycomfy.conditioning as conditioning
-from pycomfy.conditioning import encode_prompt
+import comfy_diffusion.conditioning as conditioning
+from comfy_diffusion.conditioning import encode_prompt
 
 
 def _repo_root() -> Path:
@@ -35,7 +35,7 @@ def _run_python(code: str) -> subprocess.CompletedProcess[str]:
 
 def test_encode_prompt_imports_without_models_on_cpu() -> None:
     result = _run_python(
-        "from pycomfy.conditioning import encode_prompt; "
+        "from comfy_diffusion.conditioning import encode_prompt; "
         "assert encode_prompt.__name__ == 'encode_prompt'; "
         "print('ok')"
     )
@@ -167,13 +167,13 @@ def test_conditioning_public_api_has_single_encode_prompt_entrypoint() -> None:
     assert conditioning.__all__ == ["encode_prompt"]
 
 
-def test_import_pycomfy_conditioning_has_no_torch_or_loader_side_effects() -> None:
+def test_import_comfy_diffusion_conditioning_has_no_torch_or_loader_side_effects() -> None:
     result = _run_python(
         "import json\n"
         "import sys\n"
-        "import pycomfy\n"
+        "import comfy_diffusion\n"
         "baseline_modules = set(sys.modules)\n"
-        "from pycomfy.conditioning import encode_prompt\n"
+        "from comfy_diffusion.conditioning import encode_prompt\n"
         "post_modules = set(sys.modules)\n"
         "new_modules = sorted(post_modules - baseline_modules)\n"
         "payload = {\n"

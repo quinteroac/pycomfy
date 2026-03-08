@@ -31,11 +31,11 @@ def _run_python(code: str, cwd: Path) -> subprocess.CompletedProcess[str]:
     )
 
 
-def test_importing_pycomfy_makes_comfy_internals_discoverable() -> None:
+def test_importing_comfy_diffusion_makes_comfy_internals_discoverable() -> None:
     result = _run_python(
         (
             "import importlib.util\n"
-            "import pycomfy\n"
+            "import comfy_diffusion\n"
             "spec = importlib.util.find_spec('comfy.model_management')\n"
             "assert spec is not None\n"
         ),
@@ -50,10 +50,10 @@ def test_path_insertion_is_minimal_and_not_duplicated() -> None:
             "from pathlib import Path\n"
             "import importlib\n"
             "import json\n"
-            "import pycomfy\n"
+            "import comfy_diffusion\n"
             "import sys\n"
-            "expected = str(Path(pycomfy.__file__).resolve().parents[1] / 'vendor' / 'ComfyUI')\n"
-            "importlib.reload(pycomfy)\n"
+            "expected = str(Path(comfy_diffusion.__file__).resolve().parents[1] / 'vendor' / 'ComfyUI')\n"
+            "importlib.reload(comfy_diffusion)\n"
             "matches = [p for p in sys.path if p == expected]\n"
             "vendor_entries = [p for p in sys.path if '/vendor/' in p.replace('\\\\\\\\', '/')]\n"
             "print(json.dumps({'expected': expected, 'matches': len(matches),"
@@ -73,10 +73,10 @@ def test_import_works_from_any_working_directory(tmp_path: Path) -> None:
         (
             "from pathlib import Path\n"
             "import json\n"
-            "import pycomfy\n"
+            "import comfy_diffusion\n"
             "import sys\n"
             "comfyui_path = str("
-            "Path(pycomfy.__file__).resolve().parents[1] / 'vendor' / 'ComfyUI')\n"
+            "Path(comfy_diffusion.__file__).resolve().parents[1] / 'vendor' / 'ComfyUI')\n"
             "print(json.dumps({'cwd': str(Path.cwd()), 'comfyui_path': comfyui_path,"
             " 'on_path': comfyui_path in sys.path}))\n"
         ),

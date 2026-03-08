@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-ACE Step 1.5 text-to-audio example using pycomfy.
+ACE Step 1.5 text-to-audio example using comfy_diffusion.
 
 Supports two loading modes:
 
@@ -40,7 +40,7 @@ def _load_ltxav_text_encoder_two_paths(
     ACE Step 1.5 requires both a text encoder file and a checkpoint file.
     ModelManager must have been constructed first so folder_paths is configured.
     """
-    from pycomfy._runtime import ensure_comfyui_on_path
+    from comfy_diffusion._runtime import ensure_comfyui_on_path
 
     ensure_comfyui_on_path()
     import folder_paths
@@ -57,7 +57,7 @@ def _load_ltxav_text_encoder_two_paths(
 
 def _load_vae_only_from_checkpoint(checkpoint_name: str) -> Any:
     """Load only the VAE from an ACE checkpoint (model not loaded)."""
-    from pycomfy._runtime import ensure_comfyui_on_path
+    from comfy_diffusion._runtime import ensure_comfyui_on_path
 
     ensure_comfyui_on_path()
     import folder_paths
@@ -77,7 +77,7 @@ def _load_vae_only_from_checkpoint(checkpoint_name: str) -> Any:
 
 def _negative_conditioning_ace(clip: Any, duration: float) -> Any:
     """Return negative conditioning for ACE (empty tags, minimal duration)."""
-    from pycomfy.audio import encode_ace_step_15_audio
+    from comfy_diffusion.audio import encode_ace_step_15_audio
 
     return encode_ace_step_15_audio(
         clip,
@@ -96,7 +96,7 @@ def _negative_conditioning_ace(clip: Any, duration: float) -> Any:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="ACE Step 1.5 text-to-audio generation (pycomfy).",
+        description="ACE Step 1.5 text-to-audio generation (comfy_diffusion).",
     )
     parser.add_argument(
         "--models-dir",
@@ -220,10 +220,10 @@ def main() -> int:
             )
             return 1
 
-    from pycomfy import check_runtime
-    from pycomfy.audio import encode_ace_step_15_audio, empty_ace_step_15_latent_audio
-    from pycomfy.models import ModelManager
-    from pycomfy.sampling import sample
+    from comfy_diffusion import check_runtime
+    from comfy_diffusion.audio import encode_ace_step_15_audio, empty_ace_step_15_latent_audio
+    from comfy_diffusion.models import ModelManager
+    from comfy_diffusion.sampling import sample
 
     runtime = check_runtime()
     if runtime.get("error"):

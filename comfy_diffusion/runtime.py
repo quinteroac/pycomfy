@@ -1,4 +1,4 @@
-"""Runtime diagnostics for pycomfy."""
+"""Runtime diagnostics for comfy_diffusion."""
 
 from __future__ import annotations
 

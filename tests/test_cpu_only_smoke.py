@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from pycomfy.models import ModelManager
+from comfy_diffusion.models import ModelManager
 
 
 def _repo_root() -> Path:
@@ -32,7 +32,7 @@ def test_uv_run_python_imports_model_manager_on_cpu_smoke() -> None:
             "run",
             "python",
             "-c",
-            "from pycomfy.models import ModelManager; print('ok')",
+            "from comfy_diffusion.models import ModelManager; print('ok')",
         ],
         cwd=_repo_root(),
         env=_env_with_repo_pythonpath(),

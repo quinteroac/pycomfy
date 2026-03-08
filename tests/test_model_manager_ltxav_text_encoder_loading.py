@@ -10,7 +10,7 @@ from typing import Any
 
 import pytest
 
-from pycomfy.models import ModelManager
+from comfy_diffusion.models import ModelManager
 
 
 class _FakeCLIPType(enum.Enum):

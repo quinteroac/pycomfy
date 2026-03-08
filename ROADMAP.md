@@ -1,4 +1,4 @@
-# pycomfy Roadmap
+# comfy-diffusion Roadmap
 
 ## Iteration Plan
 
@@ -30,7 +30,7 @@
 
 ### Already covered (it_01–07)
 
-| pycomfy API | ComfyUI node |
+| comfy-diffusion API | ComfyUI node |
 |-------------|-------------|
 | `vae_decode()` | VAEDecode |
 | `vae_encode()` | VAEEncode |
@@ -123,8 +123,8 @@
 
 | Extra | Libraries | Use case |
 |-------|-----------|----------|
-| `pycomfy[cuda]` | torch + CUDA | GPU inference |
-| `pycomfy[cpu]` | torch CPU | CPU inference |
-| `pycomfy[video]` | opencv-python, imageio | Video I/O, mask morphology |
-| `pycomfy[audio]` | torchaudio | Audio pipelines |
-| `pycomfy[all]` | all of the above | Full installation |
+| `comfy-diffusion[cuda]` | torch + CUDA | GPU inference |
+| `comfy-diffusion[cpu]` | torch CPU | CPU inference |
+| `comfy-diffusion[video]` | opencv-python, imageio | Video I/O, mask morphology |
+| `comfy-diffusion[audio]` | torchaudio | Audio pipelines |
+| `comfy-diffusion[all]` | all of the above | Full installation |

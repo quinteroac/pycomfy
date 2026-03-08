@@ -1,4 +1,4 @@
-"""Public package entrypoint for pycomfy."""
+"""Public package entrypoint for comfy_diffusion."""
 
 from ._runtime import ensure_comfyui_on_path
 from .lora import apply_lora

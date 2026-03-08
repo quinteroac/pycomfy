@@ -1,4 +1,4 @@
-"""Tests for US-001 import safety of pycomfy.models."""
+"""Tests for US-001 import safety of comfy_diffusion.models."""
 
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ def _run_python(code: str) -> subprocess.CompletedProcess[str]:
 
 def test_model_manager_import_succeeds_on_cpu_only_machine() -> None:
     result = _run_python(
-        "from pycomfy.models import ModelManager; "
+        "from comfy_diffusion.models import ModelManager; "
         "assert ModelManager.__name__ == 'ModelManager'; "
         "print('ok')"
     )
@@ -40,14 +40,14 @@ def test_model_manager_import_succeeds_on_cpu_only_machine() -> None:
     assert result.stdout.strip() == "ok"
 
 
-def test_import_has_no_additional_side_effects_beyond_import_pycomfy() -> None:
+def test_import_has_no_additional_side_effects_beyond_import_comfy_diffusion() -> None:
     result = _run_python(
         "import json\n"
         "import sys\n"
-        "import pycomfy\n"
+        "import comfy_diffusion\n"
         "baseline_path = list(sys.path)\n"
         "baseline_modules = set(sys.modules)\n"
-        "from pycomfy.models import ModelManager\n"
+        "from comfy_diffusion.models import ModelManager\n"
         "post_modules = set(sys.modules)\n"
         "new_modules = sorted(post_modules - baseline_modules)\n"
         "payload = {\n"
@@ -65,7 +65,7 @@ def test_import_has_no_additional_side_effects_beyond_import_pycomfy() -> None:
     assert payload["path_unchanged"] is True
     assert payload["torch_loaded"] is False
     assert payload["comfy_sd_loaded"] is False
-    # Only pycomfy.models and lightweight stdlib helpers (e.g. dataclasses) may be added.
+    # Only comfy_diffusion.models and lightweight stdlib helpers (e.g. dataclasses) may be added.
     # Heavy modules (torch, comfy.*) must not appear.
-    heavy = [m for m in payload["new_modules"] if m.startswith(("torch", "comfy", "numpy"))]
+    heavy = [m for m in payload["new_modules"] if m.startswith(("torch", "comfy.", "numpy")) or m == "comfy"]
     assert heavy == [], f"Unexpected heavy modules loaded on import: {heavy}"

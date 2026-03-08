@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Example using pycomfy with diffusion model, CLIP, and VAE loaded separately.
+Example using comfy_diffusion with diffusion model, CLIP, and VAE loaded separately.
 
 Runs txt2img or img2img (same as simple_checkpoint_example) but loads the three
 components from distinct files via ModelManager.load_unet(), load_clip(),
@@ -51,7 +51,7 @@ def _resolve_path(models_dir: Path, value: str, subdirs: list[str]) -> Path:
 
 def _empty_latent(width: int, height: int, batch_size: int = 1) -> dict:
     """Build an empty LATENT dict for txt2img (ComfyUI contract)."""
-    from pycomfy._runtime import ensure_comfyui_on_path
+    from comfy_diffusion._runtime import ensure_comfyui_on_path
 
     ensure_comfyui_on_path()
     import torch
@@ -206,10 +206,10 @@ def main() -> int:
             return 1
 
     # 1) Runtime check
-    from pycomfy import check_runtime, vae_decode, vae_encode
-    from pycomfy.conditioning import encode_prompt
-    from pycomfy.models import ModelManager
-    from pycomfy.sampling import sample
+    from comfy_diffusion import check_runtime, vae_decode, vae_encode
+    from comfy_diffusion.conditioning import encode_prompt
+    from comfy_diffusion.models import ModelManager
+    from comfy_diffusion.sampling import sample
 
     runtime = check_runtime()
     if runtime.get("error"):

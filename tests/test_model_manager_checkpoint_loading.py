@@ -9,8 +9,8 @@ from typing import Any
 
 import pytest
 
-import pycomfy.models as models_module
-from pycomfy.models import CheckpointResult, ModelManager
+import comfy_diffusion.models as models_module
+from comfy_diffusion.models import CheckpointResult, ModelManager
 
 
 def _install_fake_loader_modules(

@@ -20,8 +20,8 @@
 ## Code Standards
 - Style: PEP 8, type hints on public API
 - Error handling: `check_runtime()` returns error dicts (no exceptions for expected failures)
-- Module organisation: src-less layout — `pycomfy/` package at repo root, vendored deps in `vendor/`
-- Forbidden patterns: no hardcoded torch versions; no manual `sys.path` manipulation outside pycomfy internals; no pip/venv commands
+- Module organisation: src-less layout — `comfy_diffusion/` package at repo root, vendored deps in `vendor/`
+- Forbidden patterns: no hardcoded torch versions; no manual `sys.path` manipulation outside comfy_diffusion internals; no pip/venv commands
 
 ## Testing Strategy
 - Approach: critical paths only
@@ -31,18 +31,18 @@
 - Constraint: CI is CPU-only — all tests must pass without GPU
 
 ## Product Architecture
-- pycomfy is a standalone Python library exposing ComfyUI's inference engine as importable modules
+- comfy-diffusion is a standalone Python library exposing ComfyUI's inference engine as importable modules
 - No server, no UI, no application layer — import and run inference in your own code
 - ComfyUI vendored as git submodule at `vendor/ComfyUI`, pinned to a stable release tag
 
 ### Data Flow
-1. Consumer does `import pycomfy`
-2. `pycomfy/__init__.py` adds `vendor/ComfyUI` to `sys.path` (absolute paths from `__file__`)
+1. Consumer does `import comfy_diffusion`
+2. `comfy_diffusion/__init__.py` adds `vendor/ComfyUI` to `sys.path` (absolute paths from `__file__`)
 3. ComfyUI internals (e.g. `comfy.model_management`) become importable
-4. Consumer calls `pycomfy.check_runtime()` → returns structured diagnostics dict
+4. Consumer calls `comfy_diffusion.check_runtime()` → returns structured diagnostics dict
 
 ## Modular Structure
-- `pycomfy/`: main package — public API, path management, runtime diagnostics
+- `comfy_diffusion/`: main package — public API, path management, runtime diagnostics
 - `vendor/ComfyUI/`: vendored ComfyUI submodule (not edited directly)
 - `tests/`: pytest test files
 

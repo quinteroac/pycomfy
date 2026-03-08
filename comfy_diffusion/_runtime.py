@@ -1,4 +1,4 @@
-"""Internal runtime bootstrap for pycomfy.
+"""Internal runtime bootstrap for comfy_diffusion.
 
 Path insertion is intentionally lightweight and import-safe: this module must not
 import torch or comfy internals just to make ComfyUI discoverable.

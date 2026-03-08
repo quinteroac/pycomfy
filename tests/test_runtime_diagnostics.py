@@ -9,7 +9,7 @@ from typing import Any
 
 import pytest
 
-from pycomfy.runtime import check_runtime
+from comfy_diffusion.runtime import check_runtime
 
 
 @dataclass
@@ -159,7 +159,7 @@ def test_runtime_smoke_one_liner_succeeds() -> None:
             "run",
             "python",
             "-c",
-            "from pycomfy import check_runtime; print(check_runtime())",
+            "from comfy_diffusion import check_runtime; print(check_runtime())",
         ],
         check=True,
         text=True,

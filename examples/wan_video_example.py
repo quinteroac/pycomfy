@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Wan image-to-video (I2V) example using pycomfy.
+Wan image-to-video (I2V) example using comfy_diffusion.
 
 Uses the exact logic of ComfyUI node WanImageToVideo: empty 16ch @ 1/8 latent +
 concat_latent_image/concat_mask in conditioning. Two diffusion models (--unet-high,
@@ -31,7 +31,7 @@ def _wan22_latent_to_wan21_for_decode(latent: dict, width: int, height: int) -> 
     - If the sampler returns 16ch @ 1/16: only 2x spatial upsample to 1/8.
     Without this, decode would treat 1/16 spatial as 1/8 and output half resolution.
     """
-    from pycomfy._runtime import ensure_comfyui_on_path
+    from comfy_diffusion._runtime import ensure_comfyui_on_path
 
     ensure_comfyui_on_path()
     import torch
@@ -79,7 +79,7 @@ def wan_image_to_video(
     Returns (positive, negative, out_latent). Latent is empty 16ch @ 1/8; when start_image
     is provided, encodes it and injects concat_latent_image + concat_mask into conditioning.
     """
-    from pycomfy._runtime import ensure_comfyui_on_path
+    from comfy_diffusion._runtime import ensure_comfyui_on_path
 
     ensure_comfyui_on_path()
     import torch
@@ -135,7 +135,7 @@ def _apply_model_sampling_shift(model: Any, shift: float = 5.0, multiplier: floa
     Same logic as ComfyUI node ModelSamplingSD3: clone model, create ModelSamplingDiscreteFlow+CONST,
     set_parameters(shift=shift, multiplier=multiplier), add_object_patch. Wan uses FLOW sampling.
     """
-    from pycomfy._runtime import ensure_comfyui_on_path
+    from comfy_diffusion._runtime import ensure_comfyui_on_path
 
     ensure_comfyui_on_path()
     import comfy.model_sampling
@@ -199,7 +199,7 @@ def _save_frames_as_video(
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Wan 2.2 image-to-video (I2V) example (pycomfy).",
+        description="Wan 2.2 image-to-video (I2V) example (comfy_diffusion).",
     )
     parser.add_argument(
         "--models-dir",
@@ -353,10 +353,10 @@ def main() -> int:
         return 1
 
     # 1) Runtime check
-    from pycomfy import check_runtime, vae_decode_batch
-    from pycomfy.conditioning import encode_prompt
-    from pycomfy.models import ModelManager
-    from pycomfy.sampling import sample_advanced
+    from comfy_diffusion import check_runtime, vae_decode_batch
+    from comfy_diffusion.conditioning import encode_prompt
+    from comfy_diffusion.models import ModelManager
+    from comfy_diffusion.sampling import sample_advanced
 
     runtime = check_runtime()
     if runtime.get("error"):
@@ -378,7 +378,7 @@ def main() -> int:
     negative = encode_prompt(clip, args.negative_prompt)
 
     # 4) WanImageToVideo: conditioning + empty latent (exact ComfyUI node logic)
-    from pycomfy._runtime import ensure_comfyui_on_path
+    from comfy_diffusion._runtime import ensure_comfyui_on_path
 
     ensure_comfyui_on_path()
     import numpy as np

@@ -12,8 +12,8 @@ from typing import Any
 
 import pytest
 
-import pycomfy.sampling as sampling_module
-from pycomfy.sampling import (
+import comfy_diffusion.sampling as sampling_module
+from comfy_diffusion.sampling import (
     ays_scheduler,
     basic_guider,
     basic_scheduler,
@@ -1007,7 +1007,7 @@ def test_uv_run_python_imports_sample_on_cpu_only_machine_smoke() -> None:
             "run",
             "python",
             "-c",
-            "from pycomfy.sampling import sample; print('ok')",
+            "from comfy_diffusion.sampling import sample; print('ok')",
         ],
         cwd=_repo_root(),
         env=os.environ.copy(),
@@ -1027,7 +1027,7 @@ def test_uv_run_python_imports_sample_advanced_on_cpu_only_machine_smoke() -> No
             "run",
             "python",
             "-c",
-            "from pycomfy.sampling import sample_advanced; print('ok')",
+            "from comfy_diffusion.sampling import sample_advanced; print('ok')",
         ],
         cwd=_repo_root(),
         env=os.environ.copy(),
@@ -1047,7 +1047,7 @@ def test_uv_run_python_imports_sample_custom_on_cpu_only_machine_smoke() -> None
             "run",
             "python",
             "-c",
-            "from pycomfy.sampling import sample_custom; print('ok')",
+            "from comfy_diffusion.sampling import sample_custom; print('ok')",
         ],
         cwd=_repo_root(),
         env=os.environ.copy(),
@@ -1067,7 +1067,7 @@ def test_uv_run_python_imports_basic_guider_on_cpu_only_machine_smoke() -> None:
             "run",
             "python",
             "-c",
-            "from pycomfy.sampling import basic_guider; print('ok')",
+            "from comfy_diffusion.sampling import basic_guider; print('ok')",
         ],
         cwd=_repo_root(),
         env=os.environ.copy(),
@@ -1087,7 +1087,7 @@ def test_uv_run_python_imports_cfg_guider_on_cpu_only_machine_smoke() -> None:
             "run",
             "python",
             "-c",
-            "from pycomfy.sampling import cfg_guider; print('ok')",
+            "from comfy_diffusion.sampling import cfg_guider; print('ok')",
         ],
         cwd=_repo_root(),
         env=os.environ.copy(),
@@ -1107,7 +1107,7 @@ def test_uv_run_python_imports_random_noise_on_cpu_only_machine_smoke() -> None:
             "run",
             "python",
             "-c",
-            "from pycomfy.sampling import random_noise; print('ok')",
+            "from comfy_diffusion.sampling import random_noise; print('ok')",
         ],
         cwd=_repo_root(),
         env=os.environ.copy(),
@@ -1127,7 +1127,7 @@ def test_uv_run_python_imports_disable_noise_on_cpu_only_machine_smoke() -> None
             "run",
             "python",
             "-c",
-            "from pycomfy.sampling import disable_noise; print('ok')",
+            "from comfy_diffusion.sampling import disable_noise; print('ok')",
         ],
         cwd=_repo_root(),
         env=os.environ.copy(),
@@ -1147,7 +1147,7 @@ def test_uv_run_python_imports_basic_scheduler_on_cpu_only_machine_smoke() -> No
             "run",
             "python",
             "-c",
-            "from pycomfy.sampling import basic_scheduler; print('ok')",
+            "from comfy_diffusion.sampling import basic_scheduler; print('ok')",
         ],
         cwd=_repo_root(),
         env=os.environ.copy(),
@@ -1167,7 +1167,7 @@ def test_uv_run_python_imports_karras_scheduler_on_cpu_only_machine_smoke() -> N
             "run",
             "python",
             "-c",
-            "from pycomfy.sampling import karras_scheduler; print('ok')",
+            "from comfy_diffusion.sampling import karras_scheduler; print('ok')",
         ],
         cwd=_repo_root(),
         env=os.environ.copy(),
@@ -1187,7 +1187,7 @@ def test_uv_run_python_imports_ays_scheduler_on_cpu_only_machine_smoke() -> None
             "run",
             "python",
             "-c",
-            "from pycomfy.sampling import ays_scheduler; print('ok')",
+            "from comfy_diffusion.sampling import ays_scheduler; print('ok')",
         ],
         cwd=_repo_root(),
         env=os.environ.copy(),
@@ -1207,7 +1207,7 @@ def test_uv_run_python_imports_flux2_scheduler_on_cpu_only_machine_smoke() -> No
             "run",
             "python",
             "-c",
-            "from pycomfy.sampling import flux2_scheduler; print('ok')",
+            "from comfy_diffusion.sampling import flux2_scheduler; print('ok')",
         ],
         cwd=_repo_root(),
         env=os.environ.copy(),
@@ -1227,7 +1227,7 @@ def test_uv_run_python_imports_ltxv_scheduler_on_cpu_only_machine_smoke() -> Non
             "run",
             "python",
             "-c",
-            "from pycomfy.sampling import ltxv_scheduler; print('ok')",
+            "from comfy_diffusion.sampling import ltxv_scheduler; print('ok')",
         ],
         cwd=_repo_root(),
         env=os.environ.copy(),
@@ -1247,7 +1247,7 @@ def test_uv_run_python_imports_split_sigmas_on_cpu_only_machine_smoke() -> None:
             "run",
             "python",
             "-c",
-            "from pycomfy.sampling import split_sigmas; print('ok')",
+            "from comfy_diffusion.sampling import split_sigmas; print('ok')",
         ],
         cwd=_repo_root(),
         env=os.environ.copy(),
@@ -1267,7 +1267,7 @@ def test_uv_run_python_imports_split_sigmas_denoise_on_cpu_only_machine_smoke() 
             "run",
             "python",
             "-c",
-            "from pycomfy.sampling import split_sigmas_denoise; print('ok')",
+            "from comfy_diffusion.sampling import split_sigmas_denoise; print('ok')",
         ],
         cwd=_repo_root(),
         env=os.environ.copy(),
@@ -1287,7 +1287,7 @@ def test_uv_run_python_imports_get_sampler_on_cpu_only_machine_smoke() -> None:
             "run",
             "python",
             "-c",
-            "from pycomfy.sampling import get_sampler; print('ok')",
+            "from comfy_diffusion.sampling import get_sampler; print('ok')",
         ],
         cwd=_repo_root(),
         env=os.environ.copy(),
@@ -1300,14 +1300,14 @@ def test_uv_run_python_imports_get_sampler_on_cpu_only_machine_smoke() -> None:
     assert result.stdout.strip() == "ok"
 
 
-def test_import_pycomfy_sampling_has_no_additional_heavy_side_effects() -> None:
+def test_import_comfy_diffusion_sampling_has_no_additional_heavy_side_effects() -> None:
     result = _run_python(
         "import json\n"
         "import sys\n"
-        "import pycomfy\n"
+        "import comfy_diffusion\n"
         "baseline_path = list(sys.path)\n"
         "baseline_modules = set(sys.modules)\n"
-        "from pycomfy.sampling import "
+        "from comfy_diffusion.sampling import "
         "ays_scheduler, basic_guider, basic_scheduler, cfg_guider, disable_noise, "
         "flux2_scheduler, get_sampler, karras_scheduler, ltxv_scheduler, random_noise, "
         "sample, sample_advanced, sample_custom, split_sigmas, split_sigmas_denoise\n"
