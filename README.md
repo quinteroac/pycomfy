@@ -1,5 +1,10 @@
 # comfy-diffusion
 
+[![PyPI version](https://img.shields.io/pypi/v/comfy-diffusion.svg)](https://pypi.org/project/comfy-diffusion/)
+[![Python](https://img.shields.io/pypi/pyversions/comfy-diffusion.svg)](https://pypi.org/project/comfy-diffusion/)
+[![CI](https://github.com/quinteroac/comfy-diffusion/actions/workflows/publish.yml/badge.svg)](https://github.com/quinteroac/comfy-diffusion/actions/workflows/publish.yml)
+[![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
+
 A Python library that exposes ComfyUI's inference engine as importable modules — no server, no node graph, no UI.
 
 ```python
@@ -97,38 +102,52 @@ Early development. Built iteratively, one capability block at a time. The full n
 | 05 | `vae` | VAE decode latent→PIL via `vae_decode()` | ✅ Done |
 | 06 | `lora` | LoRA loading and stacking via `apply_lora()` | ✅ Done |
 | 07 | `vae` + `models` | VAE encode + standalone loaders (`load_vae`, `load_clip`, `load_unet`) | ✅ Done |
-| 08 | `vae` — tiled | Tiled VAE encode/decode for large images without OOM | ⬜ Next |
-| 09 | `vae` — batch/video | Batch VAE encode/decode for video frame sequences | ⬜ |
-| 10 | `sampling` — advanced | `SamplerCustomAdvanced`, schedulers, sigma manipulation | ⬜ |
-| 11 | `audio` | Stable Audio, WAN sound-to-video, LTXV audio, ACE Step | ⬜ |
-| — | **`v0.1.0-preview`** | **Preview release milestone** | ⬜ |
+| 08 | `vae` — tiled | Tiled VAE encode/decode for large images without OOM | ✅ Done |
+| 09 | `vae` — batch/video | Batch VAE encode/decode for video frame sequences | ✅ Done |
+| 10 | `sampling` — advanced | `SamplerCustomAdvanced`, schedulers, sigma manipulation | ✅ Done |
+| 11 | `audio` | Stable Audio, WAN sound-to-video, LTXV audio, ACE Step | ✅ Done |
+| — | **`v0.1.0-preview`** | **Preview release milestone** | ✅ Done |
 | 12–18 | conditioning, controlnet, latent, image, mask, model patches, packaging | Post-preview | ⬜ |
 
 ---
 
 ## Installation
 
-The package is **not published on PyPI yet**. Install from the repo (clone + submodule + uv).
+Requires Python 3.12+. ComfyUI is vendored inside the package — no separate ComfyUI installation needed.
 
-ComfyUI deps come from `vendor/ComfyUI/requirements.txt` (extra `comfyui`).
-
-**Note:** `uv.lock` is kept with the CPU variant of torch so CI (no GPU) can run `uv sync` and get reproducible tests. One sync installs CPU torch for everyone; GPU users replace torch with the step below.
+### From PyPI (recommended)
 
 ```bash
-# 1. ComfyUI submodule (required after clone)
-git submodule update --init
+# CPU
+pip install "comfy-diffusion[cpu,comfyui]"
+# or with uv
+uv add "comfy-diffusion[cpu,comfyui]"
 
-# 2. Same for everyone (installs CPU torch)
-uv sync --extra comfyui
+# CUDA (RTX 30xx / 40xx — cu124)
+pip install "comfy-diffusion[cuda,comfyui]"
 
-# 3. GPU only: replace torch with CUDA build (required after every uv sync)
+# CUDA (RTX 50xx / Blackwell — cu128)
+pip install "comfy-diffusion[cuda,comfyui]" --extra-index-url https://download.pytorch.org/whl/cu128
+```
+
+### From source
+
+```bash
+# 1. Clone with submodule
+git clone --recurse-submodules https://github.com/quinteroac/comfy-diffusion.git
+cd comfy-diffusion
+
+# 2. Install (CPU torch — works on all machines including CI)
+uv sync --extra cpu --extra comfyui
+
+# 3. GPU only: replace torch with CUDA build (run after every uv sync)
 uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124 --force-reinstall
 # RTX 50xx (Blackwell): use cu128
 uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128 --force-reinstall
 # Verify: uv run python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
 ```
 
-> Requires Python 3.12+. ComfyUI is vendored — no separate installation needed. Once the package is on PyPI you can use `pip install comfy-diffusion[cuda]` or `uv add comfy-diffusion[cuda]`.
+> **Note:** `uv.lock` pins the CPU variant of torch so that CI (no GPU) can run `uv sync` reproducibly. GPU users replace torch after syncing with the command above.
 
 ---
 
