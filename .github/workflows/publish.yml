@@ -21,6 +21,9 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Fetch submodule tags
+        run: git -C vendor/ComfyUI fetch --tags --quiet
+
       - name: Install uv
         uses: astral-sh/setup-uv@v5
         with:
