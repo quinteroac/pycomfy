@@ -202,5 +202,31 @@ class ModelManager:
         )
         return AudioVAE(state_dict, metadata)
 
+    def load_ltxav_text_encoder(self, path: str | Path) -> object:
+        """Load an LTXAV text encoder from a path or filename.
+
+        If ``path`` is an absolute path to an existing file, that file is loaded.
+        Otherwise ``path`` is treated as a filename under the ``text_encoders`` folder.
+        """
+        ensure_comfyui_on_path()
+
+        import folder_paths
+        from comfy import sd as comfy_sd
+
+        p = Path(path)
+        if p.is_absolute() and p.is_file():
+            text_encoder_path = str(p.resolve())
+        elif p.is_absolute():
+            raise FileNotFoundError(f"ltxav text encoder file not found: {p}")
+        else:
+            name = path if isinstance(path, str) else p.name
+            text_encoder_path = folder_paths.get_full_path_or_raise("text_encoders", name)
+
+        return comfy_sd.load_clip(
+            ckpt_paths=[text_encoder_path],
+            embedding_directory=folder_paths.get_folder_paths("embeddings"),
+            clip_type=comfy_sd.CLIPType.LTXV,
+        )
+
 
 __all__ = ["CheckpointResult", "ModelManager"]
