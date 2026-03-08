@@ -21,6 +21,29 @@ class _LtxvAudioVae(Protocol):
     def num_of_latents_from_frames(self, frames_number: int, frame_rate: int) -> int: ...
 
 
+class _AceStep15Clip(Protocol):
+    def tokenize(
+        self,
+        tags: str,
+        *,
+        lyrics: str,
+        bpm: int,
+        duration: float,
+        timesignature: int,
+        language: str,
+        keyscale: str,
+        seed: int,
+        generate_audio_codes: bool,
+        cfg_scale: float,
+        temperature: float,
+        top_p: float,
+        top_k: int,
+        min_p: float,
+    ) -> Any: ...
+
+    def encode_from_tokens_scheduled(self, tokens: Any) -> Any: ...
+
+
 def _get_ltxv_empty_latent_audio_type() -> Any:
     """Resolve ComfyUI LTXVEmptyLatentAudio node at call time."""
     from ._runtime import ensure_comfyui_on_path
@@ -71,8 +94,46 @@ def ltxv_empty_latent_audio(
     )
 
 
+def encode_ace_step_15_audio(
+    clip: _AceStep15Clip,
+    tags: str,
+    lyrics: str = "",
+    seed: int = 0,
+    bpm: int = 120,
+    duration: float = 120.0,
+    timesignature: str = "4",
+    language: str = "en",
+    keyscale: str = "C major",
+    generate_audio_codes: bool = True,
+    cfg_scale: float = 2.0,
+    temperature: float = 0.85,
+    top_p: float = 0.9,
+    top_k: int = 0,
+    min_p: float = 0.0,
+) -> Any:
+    """Encode ACE Step 1.5 text/audio metadata conditioning."""
+    tokens = clip.tokenize(
+        tags,
+        lyrics=lyrics,
+        bpm=bpm,
+        duration=duration,
+        timesignature=int(timesignature),
+        language=language,
+        keyscale=keyscale,
+        seed=seed,
+        generate_audio_codes=generate_audio_codes,
+        cfg_scale=cfg_scale,
+        temperature=temperature,
+        top_p=top_p,
+        top_k=top_k,
+        min_p=min_p,
+    )
+    return clip.encode_from_tokens_scheduled(tokens)
+
+
 __all__ = [
     "ltxv_audio_vae_encode",
     "ltxv_audio_vae_decode",
     "ltxv_empty_latent_audio",
+    "encode_ace_step_15_audio",
 ]
