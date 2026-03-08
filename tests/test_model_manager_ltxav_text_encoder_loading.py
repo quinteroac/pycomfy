@@ -23,6 +23,7 @@ def _install_fake_ltxav_text_encoder_loader_modules(
     embeddings_paths: list[str],
     clip_object: Any,
     resolved_text_encoder_path: str,
+    resolved_checkpoint_path: str,
 ) -> dict[str, list[Any]]:
     calls: dict[str, list[Any]] = {
         "add_model_folder_path": [],
@@ -40,9 +41,11 @@ def _install_fake_ltxav_text_encoder_loader_modules(
 
     def get_full_path_or_raise(folder_name: str, filename: str) -> str:
         calls["get_full_path_or_raise"].append((folder_name, filename))
-        if folder_name != "text_encoders":
-            raise AssertionError(f"unexpected folder name: {folder_name}")
-        return resolved_text_encoder_path
+        if folder_name == "text_encoders":
+            return resolved_text_encoder_path
+        if folder_name == "checkpoints":
+            return resolved_checkpoint_path
+        raise AssertionError(f"unexpected folder name: {folder_name}")
 
     def get_folder_paths(folder_name: str) -> list[str]:
         calls["get_folder_paths"].append(folder_name)
@@ -87,25 +90,35 @@ def test_load_ltxav_text_encoder_calls_loader_and_returns_raw_object(
     text_encoder_file.parent.mkdir(parents=True)
     text_encoder_file.write_text("stub ltxav text encoder")
 
+    checkpoint_file = tmp_path / "weights" / "ltxav_checkpoint.safetensors"
+    checkpoint_file.parent.mkdir(parents=True)
+    checkpoint_file.write_text("stub ltxav checkpoint")
+
     embeddings_paths = [str(embeddings_dir)]
     fake_clip = object()
     calls = _install_fake_ltxav_text_encoder_loader_modules(
         monkeypatch,
         embeddings_paths=embeddings_paths,
         clip_object=fake_clip,
-        resolved_text_encoder_path="/unused/for/absolute/path.safetensors",
+        resolved_text_encoder_path="/unused/for/absolute/te.safetensors",
+        resolved_checkpoint_path="/unused/for/absolute/ckpt.safetensors",
     )
 
     manager = ModelManager(models_dir=models_dir)
     result = manager.load_ltxav_text_encoder(
-        text_encoder_file.parent / "." / text_encoder_file.name
+        text_encoder_file.parent / "." / text_encoder_file.name,
+        checkpoint_file.parent / "." / checkpoint_file.name,
     )
 
     assert result is fake_clip
     assert calls["get_full_path_or_raise"] == []
     assert calls["get_folder_paths"] == ["embeddings"]
     assert calls["load_clip"] == [
-        ([str(text_encoder_file.resolve())], embeddings_paths, _FakeCLIPType.LTXV)
+        (
+            [str(text_encoder_file.resolve()), str(checkpoint_file.resolve())],
+            embeddings_paths,
+            _FakeCLIPType.LTXV,
+        )
     ]
     assert calls["add_model_folder_path"] == [
         ("checkpoints", str(checkpoints_dir), True),
@@ -126,28 +139,42 @@ def test_load_ltxav_text_encoder_is_callable_from_models_import(
     (models_dir / "checkpoints").mkdir(parents=True)
     (models_dir / "embeddings").mkdir(parents=True)
 
-    expected_resolved = str(
+    resolved_te = str(
         (models_dir / "text_encoders" / "ltxav_text_encoder.safetensors").resolve()
+    )
+    resolved_ckpt = str(
+        (models_dir / "checkpoints" / "ltxav_checkpoint.safetensors").resolve()
     )
     fake_clip = object()
     calls = _install_fake_ltxav_text_encoder_loader_modules(
         monkeypatch,
         embeddings_paths=[str(models_dir / "embeddings")],
         clip_object=fake_clip,
-        resolved_text_encoder_path=expected_resolved,
+        resolved_text_encoder_path=resolved_te,
+        resolved_checkpoint_path=resolved_ckpt,
     )
 
     manager = ModelManager(models_dir=models_dir)
-    result = manager.load_ltxav_text_encoder("ltxav_text_encoder.safetensors")
+    result = manager.load_ltxav_text_encoder(
+        "ltxav_text_encoder.safetensors",
+        "ltxav_checkpoint.safetensors",
+    )
 
     assert result is fake_clip
-    assert calls["get_full_path_or_raise"] == [("text_encoders", "ltxav_text_encoder.safetensors")]
+    assert calls["get_full_path_or_raise"] == [
+        ("text_encoders", "ltxav_text_encoder.safetensors"),
+        ("checkpoints", "ltxav_checkpoint.safetensors"),
+    ]
     assert calls["load_clip"] == [
-        ([expected_resolved], [str(models_dir / "embeddings")], _FakeCLIPType.LTXV)
+        (
+            [resolved_te, resolved_ckpt],
+            [str(models_dir / "embeddings")],
+            _FakeCLIPType.LTXV,
+        )
     ]
 
 
-def test_load_ltxav_text_encoder_raises_file_not_found_before_loader(
+def test_load_ltxav_text_encoder_raises_file_not_found_for_missing_text_encoder(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -160,19 +187,54 @@ def test_load_ltxav_text_encoder_raises_file_not_found_before_loader(
         embeddings_paths=[str(models_dir / "embeddings")],
         clip_object=object(),
         resolved_text_encoder_path="/unused/path.safetensors",
+        resolved_checkpoint_path="/unused/ckpt.safetensors",
     )
 
-    missing_text_encoder_path = (
-        tmp_path / "text_encoders" / "missing_ltxav_text_encoder.safetensors"
-    )
-    expected_path = str(missing_text_encoder_path.resolve())
+    missing_te_path = tmp_path / "text_encoders" / "missing_ltxav_text_encoder.safetensors"
+    existing_ckpt = tmp_path / "weights" / "ltxav_checkpoint.safetensors"
+    existing_ckpt.parent.mkdir(parents=True)
+    existing_ckpt.write_text("stub")
 
     with pytest.raises(FileNotFoundError, match="ltxav text encoder file not found") as exc_info:
         ModelManager(models_dir=models_dir).load_ltxav_text_encoder(
-            str(missing_text_encoder_path)
+            str(missing_te_path),
+            str(existing_ckpt),
         )
 
-    assert expected_path in str(exc_info.value)
+    assert str(missing_te_path.resolve()) in str(exc_info.value)
+    assert calls["get_full_path_or_raise"] == []
+    assert calls["get_folder_paths"] == []
+    assert calls["load_clip"] == []
+
+
+def test_load_ltxav_text_encoder_raises_file_not_found_for_missing_checkpoint(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    models_dir = tmp_path / "models"
+    (models_dir / "checkpoints").mkdir(parents=True)
+    (models_dir / "embeddings").mkdir(parents=True)
+
+    calls = _install_fake_ltxav_text_encoder_loader_modules(
+        monkeypatch,
+        embeddings_paths=[str(models_dir / "embeddings")],
+        clip_object=object(),
+        resolved_text_encoder_path="/unused/path.safetensors",
+        resolved_checkpoint_path="/unused/ckpt.safetensors",
+    )
+
+    existing_te = tmp_path / "text_encoders" / "ltxav_text_encoder.safetensors"
+    existing_te.parent.mkdir(parents=True)
+    existing_te.write_text("stub")
+    missing_ckpt_path = tmp_path / "weights" / "missing_checkpoint.safetensors"
+
+    with pytest.raises(FileNotFoundError, match="ltxav checkpoint file not found") as exc_info:
+        ModelManager(models_dir=models_dir).load_ltxav_text_encoder(
+            str(existing_te),
+            str(missing_ckpt_path),
+        )
+
+    assert str(missing_ckpt_path.resolve()) in str(exc_info.value)
     assert calls["get_full_path_or_raise"] == []
     assert calls["get_folder_paths"] == []
     assert calls["load_clip"] == []

@@ -52,14 +52,16 @@ def test_audio_module_exports_ltxv_audio_vae_helpers() -> None:
 
 def test_ltxv_audio_vae_encode_signature_matches_contract() -> None:
     signature = inspect.signature(ltxv_audio_vae_encode)
-    assert str(signature) == "(vae: '_LtxvAudioVaeEncoder', audio: 'Any') -> 'Any'"
+    assert str(signature) == "(vae: '_LtxvAudioVaeEncoder', audio: 'Any') -> 'dict[str, Any]'"
 
 
-def test_ltxv_audio_vae_encode_calls_vae_encode_and_returns_raw_latent() -> None:
+def test_ltxv_audio_vae_encode_calls_vae_encode_and_returns_latent_dict() -> None:
     expected_audio = object()
     expected_latent = object()
 
     class FakeAudioVae:
+        sample_rate = 44100
+
         def __init__(self) -> None:
             self.calls: list[Any] = []
 
@@ -70,32 +72,61 @@ def test_ltxv_audio_vae_encode_calls_vae_encode_and_returns_raw_latent() -> None
     vae = FakeAudioVae()
     result = ltxv_audio_vae_encode(vae, expected_audio)
 
-    assert result is expected_latent
+    assert result == {"samples": expected_latent, "sample_rate": 44100, "type": "audio"}
     assert vae.calls == [expected_audio]
 
 
 def test_ltxv_audio_vae_decode_signature_matches_contract() -> None:
     signature = inspect.signature(ltxv_audio_vae_decode)
-    assert str(signature) == "(vae: '_LtxvAudioVaeDecoder', latent: 'Any') -> 'Any'"
+    assert str(signature) == "(vae: '_LtxvAudioVaeDecoder', latent: 'Any') -> 'dict[str, Any]'"
 
 
-def test_ltxv_audio_vae_decode_calls_vae_decode_and_returns_raw_audio_tensor() -> None:
-    expected_latent = object()
-    expected_audio_tensor = object()
+def test_ltxv_audio_vae_decode_calls_vae_decode_and_returns_audio_dict() -> None:
+    expected_device = "fake-device"
+
+    class FakeAudioTensor:
+        device = expected_device
+        to_calls: list[Any] = []
+
+        def to(self, device: Any) -> "FakeAudioTensor":
+            FakeAudioTensor.to_calls.append(device)
+            return self
+
+    expected_raw_latent = object()
+    fake_audio = FakeAudioTensor()
+
+    class FakeLatentTensor:
+        device = expected_device
+
+    fake_latent_tensor = FakeLatentTensor()
 
     class FakeAudioVae:
+        output_sample_rate = 22050
+
         def __init__(self) -> None:
             self.calls: list[Any] = []
 
-        def decode(self, latent: Any) -> Any:
+        def decode(self, latent: Any) -> FakeAudioTensor:
             self.calls.append(latent)
-            return expected_audio_tensor
+            return fake_audio
 
+    # Test 1: raw tensor input
     vae = FakeAudioVae()
-    result = ltxv_audio_vae_decode(vae, expected_latent)
+    result = ltxv_audio_vae_decode(vae, fake_latent_tensor)
 
-    assert result is expected_audio_tensor
-    assert vae.calls == [expected_latent]
+    assert result["waveform"] is fake_audio
+    assert result["sample_rate"] == 22050
+    assert vae.calls == [fake_latent_tensor]
+
+    # Test 2: dict latent input (as produced by ltxv_audio_vae_encode)
+    vae2 = FakeAudioVae()
+    FakeAudioTensor.to_calls.clear()
+    latent_dict = {"samples": fake_latent_tensor, "sample_rate": 44100, "type": "audio"}
+    result2 = ltxv_audio_vae_decode(vae2, latent_dict)
+
+    assert result2["waveform"] is fake_audio
+    assert result2["sample_rate"] == 22050
+    assert vae2.calls == [fake_latent_tensor]
 
 
 def test_ltxv_empty_latent_audio_signature_matches_contract() -> None:
