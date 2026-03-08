@@ -176,5 +176,31 @@ class ModelManager:
 
         return comfy_sd.load_diffusion_model(full_path)
 
+    def load_ltxv_audio_vae(self, path: str | Path) -> object:
+        """Load an LTXV audio VAE checkpoint from a path or filename.
+
+        If ``path`` is an absolute path to an existing file, that file is loaded.
+        Otherwise ``path`` is treated as a filename under the ``checkpoints`` folder.
+        """
+        ensure_comfyui_on_path()
+
+        import folder_paths
+        from comfy import utils as comfy_utils
+        from comfy.ldm.lightricks.vae.audio_vae import AudioVAE
+
+        p = Path(path)
+        if p.is_absolute() and p.is_file():
+            checkpoint_path = str(p.resolve())
+        elif p.is_absolute():
+            raise FileNotFoundError(f"ltxv audio vae file not found: {p}")
+        else:
+            name = path if isinstance(path, str) else p.name
+            checkpoint_path = folder_paths.get_full_path_or_raise("checkpoints", name)
+
+        state_dict, metadata = comfy_utils.load_torch_file(
+            checkpoint_path, return_metadata=True
+        )
+        return AudioVAE(state_dict, metadata)
+
 
 __all__ = ["CheckpointResult", "ModelManager"]
