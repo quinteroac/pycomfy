@@ -1,0 +1,225 @@
+{
+  "goals": [
+    "Provide a complete `comfy_diffusion.image` module for image loading, transformation, and batch manipulation",
+    "Provide video I/O helpers using `opencv-python` / `imageio` (behind `[video]` extra)",
+    "Maintain BHWC tensor format and `{\"samples\": tensor}` dict conventions throughout",
+    "All functions CPU-testable with no GPU requirement"
+  ],
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Load image from disk",
+      "description": "As a Python developer, I want to load an image file into a ComfyUI-compatible BHWC float32 tensor so that I can feed it into conditioning, VAE encode, or other comfy-diffusion functions.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-001-AC01",
+          "text": "`load_image(path)` returns a tuple `(image_tensor, mask_tensor)` where image is BHWC float32 [0,1] and mask is HW float32 from alpha channel"
+        },
+        {
+          "id": "US-001-AC02",
+          "text": "Supports common formats (PNG, JPEG, WEBP) via Pillow"
+        },
+        {
+          "id": "US-001-AC03",
+          "text": "Images without alpha produce an all-zeros mask (fully opaque)"
+        },
+        {
+          "id": "US-001-AC04",
+          "text": "EXIF orientation is applied automatically"
+        },
+        {
+          "id": "US-001-AC05",
+          "text": "Typecheck / lint passes"
+        }
+      ]
+    },
+    {
+      "id": "US-002",
+      "title": "Pad image for outpainting",
+      "description": "As a Python developer, I want to pad an image's edges with feathered borders so that I can use it for outpainting workflows.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-002-AC01",
+          "text": "`image_pad_for_outpaint(image, left, top, right, bottom, feathering)` returns `(padded_image, padded_mask)`"
+        },
+        {
+          "id": "US-002-AC02",
+          "text": "Padded regions are filled and the mask indicates the original content area"
+        },
+        {
+          "id": "US-002-AC03",
+          "text": "Feathering produces a gradient transition at the border"
+        },
+        {
+          "id": "US-002-AC04",
+          "text": "Output tensors maintain BHWC format"
+        },
+        {
+          "id": "US-002-AC05",
+          "text": "Typecheck / lint passes"
+        }
+      ]
+    },
+    {
+      "id": "US-003",
+      "title": "Upscale image with model",
+      "description": "As a Python developer, I want to upscale an image using an upscale model (e.g. RealESRGAN) so that I can enhance resolution before further processing.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-003-AC01",
+          "text": "`image_upscale_with_model(upscale_model, image)` returns an upscaled BHWC tensor"
+        },
+        {
+          "id": "US-003-AC02",
+          "text": "Wraps ComfyUI's `ImageUpscaleWithModel` node logic"
+        },
+        {
+          "id": "US-003-AC03",
+          "text": "Works with any ComfyUI-compatible upscale model object"
+        },
+        {
+          "id": "US-003-AC04",
+          "text": "Typecheck / lint passes"
+        }
+      ]
+    },
+    {
+      "id": "US-004",
+      "title": "Image batch operations",
+      "description": "As a Python developer, I want to extract a frame from an image batch and repeat an image into a batch so that I can manipulate image sequences for video workflows.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-004-AC01",
+          "text": "`image_from_batch(image, batch_index, length)` extracts a contiguous subset from the batch dimension"
+        },
+        {
+          "id": "US-004-AC02",
+          "text": "`repeat_image_batch(image, amount)` repeats the image tensor along the batch dimension"
+        },
+        {
+          "id": "US-004-AC03",
+          "text": "Both preserve BHWC format and return tensors"
+        },
+        {
+          "id": "US-004-AC04",
+          "text": "Typecheck / lint passes"
+        }
+      ]
+    },
+    {
+      "id": "US-005",
+      "title": "Video I/O",
+      "description": "As a Python developer, I want to load video frames and save tensors as video files so that I can integrate video generation pipelines end-to-end.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-005-AC01",
+          "text": "`load_video(path)` returns a BHWC tensor of frames (or list of PIL images)"
+        },
+        {
+          "id": "US-005-AC02",
+          "text": "`save_video(frames, path, fps)` writes frames to a video file"
+        },
+        {
+          "id": "US-005-AC03",
+          "text": "`get_video_components(video_path)` returns metadata (frame count, fps, width, height)"
+        },
+        {
+          "id": "US-005-AC04",
+          "text": "Uses `opencv-python` or `imageio` — imports are conditional on `[video]` extra"
+        },
+        {
+          "id": "US-005-AC05",
+          "text": "Raises a clear error if opencv/imageio is not installed"
+        },
+        {
+          "id": "US-005-AC06",
+          "text": "Typecheck / lint passes"
+        }
+      ]
+    },
+    {
+      "id": "US-006",
+      "title": "Composite image with mask",
+      "description": "As a Python developer, I want to composite one image onto another using a mask so that I can blend inpainted regions or layer images.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-006-AC01",
+          "text": "`image_composite_masked(destination, source, mask, x, y)` composites source onto destination at given coordinates"
+        },
+        {
+          "id": "US-006-AC02",
+          "text": "Mask controls blending (1.0 = full source, 0.0 = full destination)"
+        },
+        {
+          "id": "US-006-AC03",
+          "text": "Output is BHWC tensor"
+        },
+        {
+          "id": "US-006-AC04",
+          "text": "Typecheck / lint passes"
+        }
+      ]
+    },
+    {
+      "id": "US-007",
+      "title": "LTXV image preprocessing",
+      "description": "As a Python developer, I want to preprocess an image for LTXV video generation so that the image is correctly formatted before passing to `ltxv_img_to_video`.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-007-AC01",
+          "text": "`ltxv_preprocess(image, width, height)` returns a resized/padded BHWC tensor suitable for LTXV"
+        },
+        {
+          "id": "US-007-AC02",
+          "text": "Matches ComfyUI's `LTXVPreprocess` node behavior"
+        },
+        {
+          "id": "US-007-AC03",
+          "text": "Typecheck / lint passes"
+        }
+      ]
+    }
+  ],
+  "functionalRequirements": [
+    {
+      "id": "FR-1",
+      "description": "All public functions use lazy imports — no `torch`, `comfy.*`, `cv2`, or `imageio` at module top level"
+    },
+    {
+      "id": "FR-2",
+      "description": "Image tensors follow ComfyUI's BHWC convention (batch, height, width, channels) with float32 values in [0, 1]"
+    },
+    {
+      "id": "FR-3",
+      "description": "Video I/O functions depend on `opencv-python` / `imageio`, which are optional dependencies under the `[video]` extra"
+    },
+    {
+      "id": "FR-4",
+      "description": "When optional dependencies are missing, functions raise `ImportError` with a message indicating which extra to install"
+    },
+    {
+      "id": "FR-5",
+      "description": "All functions must be testable on CPU-only environments — tests use small synthetic images or lightweight fixtures"
+    },
+    {
+      "id": "FR-6",
+      "description": "The `load_image` function must handle EXIF orientation metadata to match ComfyUI's `LoadImage` behavior"
+    },
+    {
+      "id": "FR-7",
+      "description": "Module is exposed as `comfy_diffusion.image` — functions are not auto-imported from `__init__.py`"
+    },
+    {
+      "id": "FR-8",
+      "description": "`save_video` accepts a file path and infers the codec from the extension (`.webm` → VP9, `.mp4` → H.264) — one function, no format-specific variants"
+    },
+    {
+      "id": "FR-9",
+      "description": "`load_image` accepts `str | Path` only (file paths). A separate `image_to_tensor(image: Image) -> Tensor` helper is provided for callers who already have a PIL `Image` object"
+    },
+    {
+      "id": "FR-10",
+      "description": "`ltxv_preprocess` lives in `comfy_diffusion.image`, not in `conditioning.py` — it is an image transform, not a conditioning operation"
+    }
+  ]
+}
