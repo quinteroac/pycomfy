@@ -30,6 +30,7 @@ from comfy_diffusion.sampling import (
     split_sigmas,
     split_sigmas_denoise,
     video_linear_cfg_guidance,
+    video_triangle_cfg_guidance,
 )
 
 
@@ -70,6 +71,7 @@ def test_sampling_public_api_exports_all_entrypoints() -> None:
     assert split_sigmas_denoise.__name__ == "split_sigmas_denoise"
     assert get_sampler.__name__ == "get_sampler"
     assert video_linear_cfg_guidance.__name__ == "video_linear_cfg_guidance"
+    assert video_triangle_cfg_guidance.__name__ == "video_triangle_cfg_guidance"
     assert sampling_module.__all__ == [
         "sample",
         "sample_advanced",
@@ -77,6 +79,7 @@ def test_sampling_public_api_exports_all_entrypoints() -> None:
         "basic_guider",
         "cfg_guider",
         "video_linear_cfg_guidance",
+        "video_triangle_cfg_guidance",
         "random_noise",
         "disable_noise",
         "basic_scheduler",
@@ -207,6 +210,12 @@ def test_get_sampler_signature_matches_contract() -> None:
 
 def test_video_linear_cfg_guidance_signature_matches_contract() -> None:
     signature = inspect.signature(video_linear_cfg_guidance)
+
+    assert str(signature) == "(model: 'Any', min_cfg: 'float') -> 'Any'"
+
+
+def test_video_triangle_cfg_guidance_signature_matches_contract() -> None:
+    signature = inspect.signature(video_triangle_cfg_guidance)
 
     assert str(signature) == "(model: 'Any', min_cfg: 'float') -> 'Any'"
 
@@ -352,6 +361,59 @@ def test_video_linear_cfg_guidance_scales_from_full_cfg_to_min_cfg_linearly() ->
 
     assert cond.created_scale_values == [4.0, 3.0, 2.0, 1.0]
     assert output.values == [34.0, 56.0, 58.0, 40.0]
+
+
+def test_video_triangle_cfg_guidance_returns_patched_model_clone() -> None:
+    class FakePatchedModel:
+        def __init__(self) -> None:
+            self.cfg_function: Any = None
+
+        def set_model_sampler_cfg_function(self, cfg_function: Any) -> None:
+            self.cfg_function = cfg_function
+
+    class FakeModel:
+        def __init__(self) -> None:
+            self.clone_calls = 0
+            self.patched = FakePatchedModel()
+
+        def clone(self) -> FakePatchedModel:
+            self.clone_calls += 1
+            return self.patched
+
+    model = FakeModel()
+
+    patched = video_triangle_cfg_guidance(model, min_cfg=1.25)
+
+    assert model.clone_calls == 1
+    assert patched is model.patched
+    assert callable(patched.cfg_function)
+
+
+def test_video_triangle_cfg_guidance_scales_from_min_cfg_to_middle_peak() -> None:
+    class FakePatchedModel:
+        def __init__(self) -> None:
+            self.cfg_function: Any = None
+
+        def set_model_sampler_cfg_function(self, cfg_function: Any) -> None:
+            self.cfg_function = cfg_function
+
+    class FakeModel:
+        def __init__(self) -> None:
+            self.patched = FakePatchedModel()
+
+        def clone(self) -> FakePatchedModel:
+            return self.patched
+
+    cond = _FakeVectorTensor([12.0, 14.0, 16.0, 18.0, 20.0])
+    uncond = _FakeVectorTensor([2.0, 2.0, 2.0, 2.0, 2.0])
+
+    patched = video_triangle_cfg_guidance(FakeModel(), min_cfg=1.0)
+    assert callable(patched.cfg_function)
+
+    output = patched.cfg_function({"cond": cond, "uncond": uncond, "cond_scale": 4.0})
+
+    assert cond.created_scale_values == [1.0, 2.5, 4.0, 2.5, 1.0]
+    assert output.values == [12.0, 32.0, 58.0, 42.0, 20.0]
 
 
 def test_random_noise_wraps_random_noise_type(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1218,6 +1280,26 @@ def test_uv_run_python_imports_video_linear_cfg_guidance_on_cpu_only_machine_smo
     assert result.stdout.strip() == "ok"
 
 
+def test_uv_run_python_imports_video_triangle_cfg_guidance_on_cpu_only_machine_smoke() -> None:
+    result = subprocess.run(
+        [
+            "uv",
+            "run",
+            "python",
+            "-c",
+            "from comfy_diffusion.sampling import video_triangle_cfg_guidance; print('ok')",
+        ],
+        cwd=_repo_root(),
+        env=os.environ.copy(),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert result.stdout.strip() == "ok"
+
+
 def test_uv_run_python_imports_random_noise_on_cpu_only_machine_smoke() -> None:
     result = subprocess.run(
         [
@@ -1429,7 +1511,7 @@ def test_import_comfy_diffusion_sampling_has_no_additional_heavy_side_effects() 
         "ays_scheduler, basic_guider, basic_scheduler, cfg_guider, disable_noise, "
         "flux2_scheduler, get_sampler, karras_scheduler, ltxv_scheduler, random_noise, "
         "sample, sample_advanced, sample_custom, split_sigmas, split_sigmas_denoise, "
-        "video_linear_cfg_guidance\n"
+        "video_linear_cfg_guidance, video_triangle_cfg_guidance\n"
         "post_modules = set(sys.modules)\n"
         "new_modules = sorted(post_modules - baseline_modules)\n"
         "payload = {\n"
@@ -1447,6 +1529,7 @@ def test_import_comfy_diffusion_sampling_has_no_additional_heavy_side_effects() 
         "  'split_denoise_name': split_sigmas_denoise.__name__,\n"
         "  'sampler_name': get_sampler.__name__,\n"
         "  'video_linear_cfg_name': video_linear_cfg_guidance.__name__,\n"
+        "  'video_triangle_cfg_name': video_triangle_cfg_guidance.__name__,\n"
         "  'random_name': random_noise.__name__,\n"
         "  'disable_name': disable_noise.__name__,\n"
         "  'path_unchanged': baseline_path == list(sys.path),\n"
@@ -1473,6 +1556,7 @@ def test_import_comfy_diffusion_sampling_has_no_additional_heavy_side_effects() 
     assert payload["split_denoise_name"] == "split_sigmas_denoise"
     assert payload["sampler_name"] == "get_sampler"
     assert payload["video_linear_cfg_name"] == "video_linear_cfg_guidance"
+    assert payload["video_triangle_cfg_name"] == "video_triangle_cfg_guidance"
     assert payload["random_name"] == "random_noise"
     assert payload["disable_name"] == "disable_noise"
     assert payload["path_unchanged"] is True

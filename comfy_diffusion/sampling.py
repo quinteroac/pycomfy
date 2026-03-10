@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 
@@ -188,6 +189,35 @@ def video_linear_cfg_guidance(model: Any, min_cfg: float) -> Any:
 
     patched_model = model.clone()
     patched_model.set_model_sampler_cfg_function(linear_cfg)
+    return patched_model
+
+
+def video_triangle_cfg_guidance(model: Any, min_cfg: float) -> Any:
+    """Patch a model clone with a frame-wise triangle CFG guidance ramp."""
+
+    def triangle_cfg(args: dict[str, Any]) -> Any:
+        cond = args["cond"]
+        uncond = args["uncond"]
+        cond_scale = args["cond_scale"]
+
+        frame_count = cond.shape[0]
+        if frame_count <= 1:
+            scale_values = [cond_scale]
+        else:
+            positions = [index / (frame_count - 1) for index in range(frame_count)]
+            triangle_values = [
+                2.0 * abs(position - math.floor(position + 0.5))
+                for position in positions
+            ]
+            scale_values = [
+                (value * (cond_scale - min_cfg)) + min_cfg for value in triangle_values
+            ]
+
+        scale = cond.new_tensor(scale_values).reshape((frame_count, 1, 1, 1))
+        return uncond + scale * (cond - uncond)
+
+    patched_model = model.clone()
+    patched_model.set_model_sampler_cfg_function(triangle_cfg)
     return patched_model
 
 
@@ -394,6 +424,7 @@ __all__ = [
     "basic_guider",
     "cfg_guider",
     "video_linear_cfg_guidance",
+    "video_triangle_cfg_guidance",
     "random_noise",
     "disable_noise",
     "basic_scheduler",
