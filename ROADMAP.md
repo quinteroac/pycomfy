@@ -15,7 +15,7 @@
 | 09 | `vae` — batch/video | `vae_decode_batch`, `vae_encode_batch` for video frame sequences (WAN, LTX2) | ✅ Done |
 | 10 | `sampling` — advanced | `KSamplerAdvanced`, `SamplerCustomAdvanced`, guiders, schedulers, sigma manipulation | ✅ Done |
 | 11 | `audio` | Stable Audio, WAN sound-to-video, LTXV audio, ACE Step text-to-audio | ✅ Done |
-| — | **`v0.1.0-preview`** | **Preview release — ACE Step Studio minimum viable stack. Publish after it_11.** | ✅ Done |
+| — | **`v0.1.1-preview`** | **Preview release — ACE Step Studio minimum viable stack. Publish after it_11.** | ✅ Done |
 | 12 | `conditioning` — advanced | `ConditioningCombine`, `ConditioningSetMask`, `ConditioningSetTimestepRange`, Flux, WAN, LTXV | ⬜ |
 | 13 | `controlnet` | `ControlNetLoader`, `ControlNetApplyAdvanced`, `SetUnionControlNetType` | ⬜ |
 | 14 | `latent` — utilities | `EmptyLatentImage`, `LatentUpscale`, `LatentCrop`, `LatentComposite`, batch ops, video ops | ⬜ |
