@@ -15,6 +15,7 @@ from comfy_diffusion.image import (
     image_composite_masked,
     image_from_batch,
     image_pad_for_outpaint,
+    image_to_tensor,
     image_upscale_with_model,
     load_image,
     ltxv_preprocess,
@@ -199,6 +200,7 @@ def _fake_torch_dependency(monkeypatch: Any) -> None:
 def test_image_module_exports_expected_entrypoints() -> None:
     assert image_module.__all__ == [
         "load_image",
+        "image_to_tensor",
         "image_pad_for_outpaint",
         "image_upscale_with_model",
         "image_from_batch",
@@ -206,6 +208,42 @@ def test_image_module_exports_expected_entrypoints() -> None:
         "image_composite_masked",
         "ltxv_preprocess",
     ]
+
+
+def test_image_to_tensor_converts_pil_image_to_bhwc_float32() -> None:
+    # 2×3 image: top row red, bottom row blue
+    pil_image = Image.new("RGB", (3, 2))
+    pil_image.putpixel((0, 0), (255, 0, 0))
+    pil_image.putpixel((1, 0), (255, 0, 0))
+    pil_image.putpixel((2, 0), (255, 0, 0))
+    pil_image.putpixel((0, 1), (0, 0, 255))
+    pil_image.putpixel((1, 1), (0, 0, 255))
+    pil_image.putpixel((2, 1), (0, 0, 255))
+
+    tensor = image_to_tensor(pil_image)
+
+    # Shape: (B=1, H=2, W=3, C=3)
+    assert tensor.shape == (1, 2, 3, 3)
+    assert tensor.dtype == _FakeTorch.float32
+    values = tensor.tolist()
+    # Batch 0, row 0 → red
+    assert values[0][0][0] == pytest.approx([1.0, 0.0, 0.0])
+    assert values[0][0][2] == pytest.approx([1.0, 0.0, 0.0])
+    # Batch 0, row 1 → blue
+    assert values[0][1][0] == pytest.approx([0.0, 0.0, 1.0])
+
+
+def test_image_to_tensor_converts_non_rgb_mode_to_rgb() -> None:
+    # L-mode (grayscale) image with value 128 → RGB (128, 128, 128) → ~0.502
+    pil_image = Image.new("L", (2, 2), color=128)
+
+    tensor = image_to_tensor(pil_image)
+
+    assert tensor.shape == (1, 2, 2, 3)
+    values = tensor.tolist()
+    for row in values[0]:
+        for pixel in row:
+            assert pixel == pytest.approx([128 / 255.0] * 3, abs=1e-5)
 
 
 def test_load_image_signature_matches_contract() -> None:
