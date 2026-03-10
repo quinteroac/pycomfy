@@ -18,11 +18,14 @@ from comfy_diffusion.latent import (
     empty_latent_image,
     latent_composite,
     latent_composite_masked,
+    latent_concat,
     latent_crop,
+    latent_cut_to_batch,
     latent_from_batch,
     latent_upscale,
     latent_upscale_by,
     repeat_latent_batch,
+    replace_video_latent_frames,
     set_latent_noise_mask,
 )
 from comfy_diffusion.sampling import sample
@@ -52,7 +55,10 @@ def test_latent_module_exports_empty_latent_image() -> None:
     assert latent_module.__all__ == [
         "empty_latent_image",
         "latent_from_batch",
+        "latent_cut_to_batch",
         "repeat_latent_batch",
+        "latent_concat",
+        "replace_video_latent_frames",
         "latent_upscale",
         "latent_upscale_by",
         "latent_crop",
@@ -103,6 +109,26 @@ def test_latent_from_batch_signature_matches_contract() -> None:
 def test_repeat_latent_batch_signature_matches_contract() -> None:
     signature = inspect.signature(repeat_latent_batch)
     assert str(signature) == "(latent: 'dict[str, Any]', amount: 'int') -> 'dict[str, Any]'"
+
+
+def test_latent_concat_signature_matches_contract() -> None:
+    signature = inspect.signature(latent_concat)
+    assert str(signature) == "(*latents: 'dict[str, Any]', dim: 'str' = 't') -> 'dict[str, Any]'"
+
+
+def test_latent_cut_to_batch_signature_matches_contract() -> None:
+    signature = inspect.signature(latent_cut_to_batch)
+    assert str(signature) == (
+        "(latent: 'dict[str, Any]', start: 'int', length: 'int') -> 'dict[str, Any]'"
+    )
+
+
+def test_replace_video_latent_frames_signature_matches_contract() -> None:
+    signature = inspect.signature(replace_video_latent_frames)
+    assert str(signature) == (
+        "(latent: 'dict[str, Any]', replacement: 'dict[str, Any]', "
+        "start_frame: 'int') -> 'dict[str, Any]'"
+    )
 
 
 def test_latent_composite_signature_matches_contract() -> None:
@@ -492,6 +518,207 @@ def test_repeat_latent_batch_repeats_batch_and_is_sample_compatible(monkeypatch:
     assert repeated_latent["batch_index"] == [0, 1, 2, 3, 4, 5]
     assert denoised is repeated_latent
     assert FakeRepeatLatentBatch.calls == [(latent, 3)]
+
+
+@pytest.mark.parametrize("dim", ["x", "-x", "y", "-y", "t", "-t"])
+def test_latent_concat_supports_all_dimensions(dim: str, monkeypatch: Any) -> None:
+    latent_a = {"samples": "a"}
+    latent_b = {"samples": "b"}
+    calls: list[tuple[dict[str, Any], dict[str, Any], str]] = []
+
+    class FakeLatentConcat:
+        @classmethod
+        def execute(
+            cls, samples1: dict[str, Any], samples2: dict[str, Any], dim: str
+        ) -> tuple[dict[str, Any]]:
+            calls.append((samples1, samples2, dim))
+            return ({"samples": f"{samples1['samples']}|{samples2['samples']}|{dim}"},)
+
+    monkeypatch.setattr(latent_module, "_get_latent_concat_type", lambda: FakeLatentConcat)
+
+    output = latent_concat(latent_a, latent_b, dim=dim)
+
+    assert output["samples"] == f"a|b|{dim}"
+    assert calls == [(latent_a, latent_b, dim)]
+
+
+def test_latent_concat_accepts_variadic_latents_and_is_sample_compatible(monkeypatch: Any) -> None:
+    latent_a = {"samples": "a", "batch_index": [0]}
+    latent_b = {"samples": "b", "batch_index": [1]}
+    latent_c = {"samples": "c", "batch_index": [2]}
+
+    class FakeLatentConcat:
+        @classmethod
+        def execute(
+            cls, samples1: dict[str, Any], samples2: dict[str, Any], dim: str
+        ) -> tuple[dict[str, Any]]:
+            return (
+                {
+                    "samples": f"{samples1['samples']}+{samples2['samples']}@{dim}",
+                    "batch_index": [0],
+                },
+            )
+
+    def fake_common_ksampler(
+        model: Any,
+        seed: int,
+        steps: Any,
+        cfg: Any,
+        sampler_name: str,
+        scheduler: str,
+        positive: Any,
+        negative: Any,
+        latent: Any,
+        denoise: float = 1.0,
+    ) -> tuple[dict[str, Any]]:
+        return (latent,)
+
+    monkeypatch.setattr(latent_module, "_get_latent_concat_type", lambda: FakeLatentConcat)
+    monkeypatch.setattr(sampling_module, "_get_common_ksampler", lambda: fake_common_ksampler)
+
+    concatenated = latent_concat(latent_a, latent_b, latent_c, dim="t")
+    denoised = sample(
+        model=object(),
+        positive=object(),
+        negative=object(),
+        latent=concatenated,
+        steps=20,
+        cfg=7.0,
+        sampler_name="euler",
+        scheduler="normal",
+        seed=99,
+    )
+
+    assert concatenated["samples"] == "a+b@t+c@t"
+    assert denoised is concatenated
+
+
+def test_latent_concat_rejects_invalid_dim() -> None:
+    with pytest.raises(ValueError, match="dim must be one of"):
+        latent_concat({"samples": "a"}, {"samples": "b"}, dim="z")
+
+
+def test_latent_concat_requires_at_least_two_latents() -> None:
+    with pytest.raises(ValueError, match="at least two latents are required"):
+        latent_concat({"samples": "a"})
+
+
+def test_latent_cut_to_batch_extracts_segment_and_is_sample_compatible(monkeypatch: Any) -> None:
+    latent = {"samples": ["f0", "f1", "f2", "f3"], "batch_index": [0, 1, 2, 3]}
+
+    class FakeLatentFromBatch:
+        calls: list[tuple[dict[str, Any], int, int]] = []
+
+        def frombatch(
+            self,
+            samples: dict[str, Any],
+            batch_index: int,
+            length: int,
+        ) -> tuple[dict[str, Any]]:
+            self.calls.append((samples, batch_index, length))
+            return (
+                {
+                    "samples": samples["samples"][batch_index : batch_index + length],
+                    "batch_index": samples["batch_index"][batch_index : batch_index + length],
+                },
+            )
+
+    def fake_common_ksampler(
+        model: Any,
+        seed: int,
+        steps: Any,
+        cfg: Any,
+        sampler_name: str,
+        scheduler: str,
+        positive: Any,
+        negative: Any,
+        latent: Any,
+        denoise: float = 1.0,
+    ) -> tuple[dict[str, Any]]:
+        return (latent,)
+
+    monkeypatch.setattr(latent_module, "_get_latent_from_batch_type", lambda: FakeLatentFromBatch)
+    monkeypatch.setattr(sampling_module, "_get_common_ksampler", lambda: fake_common_ksampler)
+
+    sliced_latent = latent_cut_to_batch(latent=latent, start=1, length=2)
+    denoised = sample(
+        model=object(),
+        positive=object(),
+        negative=object(),
+        latent=sliced_latent,
+        steps=20,
+        cfg=7.0,
+        sampler_name="euler",
+        scheduler="normal",
+        seed=1337,
+    )
+
+    assert sliced_latent["samples"] == ["f1", "f2"]
+    assert sliced_latent["batch_index"] == [1, 2]
+    assert denoised is sliced_latent
+    assert FakeLatentFromBatch.calls == [(latent, 1, 2)]
+
+
+def test_replace_video_latent_frames_replaces_at_start_frame_and_is_sample_compatible(
+    monkeypatch: Any,
+) -> None:
+    latent = {"samples": ["d0", "d1", "d2", "d3"], "batch_index": [0, 1, 2, 3]}
+    replacement = {"samples": ["r0", "r1"], "batch_index": [10, 11]}
+    calls: list[tuple[dict[str, Any], dict[str, Any], int]] = []
+
+    class FakeReplaceVideoLatentFrames:
+        @classmethod
+        def execute(
+            cls, destination: dict[str, Any], source: dict[str, Any], index: int
+        ) -> tuple[dict[str, Any]]:
+            calls.append((destination, source, index))
+            output = dict(destination)
+            merged = list(destination["samples"])
+            merged[index : index + len(source["samples"])] = source["samples"]
+            output["samples"] = merged
+            return (output,)
+
+    def fake_common_ksampler(
+        model: Any,
+        seed: int,
+        steps: Any,
+        cfg: Any,
+        sampler_name: str,
+        scheduler: str,
+        positive: Any,
+        negative: Any,
+        latent: Any,
+        denoise: float = 1.0,
+    ) -> tuple[dict[str, Any]]:
+        return (latent,)
+
+    monkeypatch.setattr(
+        latent_module,
+        "_get_replace_video_latent_frames_type",
+        lambda: FakeReplaceVideoLatentFrames,
+    )
+    monkeypatch.setattr(sampling_module, "_get_common_ksampler", lambda: fake_common_ksampler)
+
+    replaced = replace_video_latent_frames(
+        latent=latent,
+        replacement=replacement,
+        start_frame=1,
+    )
+    denoised = sample(
+        model=object(),
+        positive=object(),
+        negative=object(),
+        latent=replaced,
+        steps=20,
+        cfg=7.0,
+        sampler_name="euler",
+        scheduler="normal",
+        seed=5,
+    )
+
+    assert replaced["samples"] == ["d0", "r0", "r1", "d3"]
+    assert denoised is replaced
+    assert calls == [(latent, replacement, 1)]
 
 
 def test_latent_composite_returns_new_latent_with_source_positioned_using_pixel_coordinates(
