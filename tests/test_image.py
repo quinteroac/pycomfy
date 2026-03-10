@@ -12,6 +12,7 @@ from PIL import Image, ImageOps, features
 import comfy_diffusion
 import comfy_diffusion.image as image_module
 from comfy_diffusion.image import (
+    image_composite_masked,
     image_from_batch,
     image_pad_for_outpaint,
     image_upscale_with_model,
@@ -201,6 +202,7 @@ def test_image_module_exports_expected_entrypoints() -> None:
         "image_upscale_with_model",
         "image_from_batch",
         "repeat_image_batch",
+        "image_composite_masked",
     ]
 
 
@@ -238,6 +240,18 @@ def test_repeat_image_batch_signature_matches_contract() -> None:
 
 def test_repeat_image_batch_not_re_exported_from_package_root() -> None:
     assert not hasattr(comfy_diffusion, "repeat_image_batch")
+
+
+def test_image_composite_masked_signature_matches_contract() -> None:
+    signature = inspect.signature(image_composite_masked)
+    expected_signature = (
+        "(destination: 'Any', source: 'Any', mask: 'Any', x: 'int', y: 'int') -> 'Any'"
+    )
+    assert str(signature) == expected_signature
+
+
+def test_image_composite_masked_not_re_exported_from_package_root() -> None:
+    assert not hasattr(comfy_diffusion, "image_composite_masked")
 
 
 def test_image_upscale_with_model_wraps_comfyui_node_and_returns_bhwc_tensor(
@@ -336,6 +350,132 @@ def test_repeat_image_batch_repeats_batch_dimension_and_returns_bhwc_tensor(
     assert isinstance(repeated, _FakeTensor)
     assert repeated.shape == (6, 1, 2, 3)
     assert repeated.tolist() == image.tolist() * 3
+
+
+def test_image_composite_masked_composites_source_using_coordinates_and_mask(
+    monkeypatch: Any,
+) -> None:
+    destination = _FakeTorch.tensor(
+        [
+            [
+                [[0.0, 0.0, 0.0], [0.1, 0.1, 0.1]],
+                [[0.2, 0.2, 0.2], [0.3, 0.3, 0.3]],
+            ]
+        ],
+        dtype=_FakeTorch.float32,
+    )
+    source = _FakeTorch.tensor(
+        [[[[0.9, 0.9, 0.9]]]],
+        dtype=_FakeTorch.float32,
+    )
+    mask = _FakeTorch.tensor(
+        [[[1.0]]],
+        dtype=_FakeTorch.float32,
+    )
+
+    class FakeImageCompositeMasked:
+        @classmethod
+        def execute(
+            cls,
+            destination: Any,
+            source: Any,
+            x: int,
+            y: int,
+            resize_source: bool,
+            mask: Any = None,
+        ) -> tuple[Any]:
+            assert x == 1
+            assert y == 0
+            assert resize_source is False
+            assert mask is not None
+
+            output = _FakeTorch.tensor(destination.tolist(), dtype=_FakeTorch.float32)
+            destination_pixel = destination.tolist()[0][y][x]
+            source_pixel = source.tolist()[0][0][0]
+            alpha = mask.tolist()[0][0][0]
+            blended_pixel = [
+                alpha * source_channel + (1.0 - alpha) * destination_channel
+                for source_channel, destination_channel in zip(source_pixel, destination_pixel)
+            ]
+            output[0, y, x, :] = _FakeTorch.tensor(blended_pixel, dtype=_FakeTorch.float32)
+            return (output,)
+
+    monkeypatch.setattr(
+        image_module,
+        "_get_image_composite_masked_type",
+        lambda: FakeImageCompositeMasked,
+    )
+
+    composited = image_composite_masked(
+        destination=destination,
+        source=source,
+        mask=mask,
+        x=1,
+        y=0,
+    )
+
+    assert isinstance(composited, _FakeTensor)
+    assert composited.shape == (1, 2, 2, 3)
+    assert composited.tolist() == [
+        [
+            [[0.0, 0.0, 0.0], [0.9, 0.9, 0.9]],
+            [[0.2, 0.2, 0.2], [0.3, 0.3, 0.3]],
+        ]
+    ]
+
+
+@pytest.mark.parametrize(
+    ("mask_value", "expected_pixel"),
+    [
+        (1.0, [0.8, 0.6, 0.4]),
+        (0.0, [0.1, 0.2, 0.3]),
+    ],
+)
+def test_image_composite_masked_mask_controls_blending(
+    monkeypatch: Any,
+    mask_value: float,
+    expected_pixel: list[float],
+) -> None:
+    destination = _FakeTorch.tensor([[[[0.1, 0.2, 0.3]]]], dtype=_FakeTorch.float32)
+    source = _FakeTorch.tensor([[[[0.8, 0.6, 0.4]]]], dtype=_FakeTorch.float32)
+    mask = _FakeTorch.tensor([[[mask_value]]], dtype=_FakeTorch.float32)
+
+    class FakeImageCompositeMasked:
+        @classmethod
+        def execute(
+            cls,
+            destination: Any,
+            source: Any,
+            x: int,
+            y: int,
+            resize_source: bool,
+            mask: Any = None,
+        ) -> tuple[Any]:
+            alpha = mask.tolist()[0][0][0]
+            source_pixel = source.tolist()[0][0][0]
+            destination_pixel = destination.tolist()[0][0][0]
+            blended_pixel = [
+                alpha * source_channel + (1.0 - alpha) * destination_channel
+                for source_channel, destination_channel in zip(source_pixel, destination_pixel)
+            ]
+            return (_FakeTorch.tensor([[[blended_pixel]]], dtype=_FakeTorch.float32),)
+
+    monkeypatch.setattr(
+        image_module,
+        "_get_image_composite_masked_type",
+        lambda: FakeImageCompositeMasked,
+    )
+
+    composited = image_composite_masked(
+        destination=destination,
+        source=source,
+        mask=mask,
+        x=0,
+        y=0,
+    )
+
+    assert composited.shape == (1, 1, 1, 3)
+    assert composited.tolist()[0][0][0] == expected_pixel
 
 
 def test_image_upscale_with_model_supports_comfyui_v3_result_output(

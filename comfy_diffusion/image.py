@@ -46,6 +46,15 @@ def _get_image_from_batch_type() -> Any:
     return ImageFromBatch
 
 
+def _get_image_composite_masked_type() -> Any:
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    from comfy_extras.nodes_mask import ImageCompositeMasked
+
+    return ImageCompositeMasked
+
+
 def _unwrap_node_output(output: Any) -> Any:
     result = getattr(output, "result", output)
     return result[0]
@@ -175,10 +184,26 @@ def repeat_image_batch(image: Any, amount: int) -> Any:
     return _unwrap_node_output(repeat_image_batch_type.execute(image=image, amount=amount))
 
 
+def image_composite_masked(destination: Any, source: Any, mask: Any, x: int, y: int) -> Any:
+    """Composite source image onto destination image with mask-guided blending."""
+    image_composite_masked_type = _get_image_composite_masked_type()
+    return _unwrap_node_output(
+        image_composite_masked_type.execute(
+            destination=destination,
+            source=source,
+            x=x,
+            y=y,
+            resize_source=False,
+            mask=mask,
+        )
+    )
+
+
 __all__ = [
     "load_image",
     "image_pad_for_outpaint",
     "image_upscale_with_model",
     "image_from_batch",
     "repeat_image_batch",
+    "image_composite_masked",
 ]
