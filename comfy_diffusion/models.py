@@ -153,6 +153,26 @@ class ModelManager:
             clip_type=clip_type_enum,
         )
 
+    def load_clip_vision(self, path: str | Path) -> Any:
+        """Load a CLIP vision model from a path or filename."""
+        ensure_comfyui_on_path()
+
+        import comfy.clip_vision
+
+        p = Path(path)
+        if p.is_absolute() and p.is_file():
+            full_path = str(p.resolve())
+        elif p.is_absolute():
+            raise FileNotFoundError(f"clip vision file not found: {p}")
+        else:
+            name = path if isinstance(path, str) else p.name
+            candidate = self.models_dir / "clip_vision" / name
+            if not candidate.is_file():
+                raise FileNotFoundError(f"clip vision file not found: {candidate.resolve()}")
+            full_path = str(candidate.resolve())
+
+        return comfy.clip_vision.load(full_path)
+
     def load_unet(self, path: str | Path) -> Any:
         """Load a standalone diffusion model (UNet) from a path or filename.
 

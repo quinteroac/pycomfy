@@ -2,10 +2,10 @@
 """
 Wan image-to-video (I2V) example using comfy_diffusion.
 
-Uses the exact logic of ComfyUI node WanImageToVideo: empty 16ch @ 1/8 latent +
-concat_latent_image/concat_mask in conditioning. Two diffusion models (--unet-high,
---unet-low), two-stage sampling. Matches the official ComfyUI I2V workflow (no LoRA;
-models can be merged).
+Uses comfy_diffusion.conditioning.wan_image_to_video for I2V conditioning (empty
+16ch @ 1/8 latent + concat_latent_image/concat_mask when a start image is given).
+Two diffusion models (--unet-high, --unet-low), two-stage sampling. Matches the
+official ComfyUI I2V workflow (no LoRA; models can be merged).
 
   uv sync --extra comfyui
   uv run python examples/wan_video_example.py --unet-high ... --unet-low ... --clip ... --vae wan_2.1_vae.safetensors --image first_frame.png [--width 832 --height 480 --length 81]
@@ -61,72 +61,6 @@ def _wan22_latent_to_wan21_for_decode(latent: dict, width: int, height: int) -> 
     out = latent.copy()
     out["samples"] = s16
     return out
-
-
-def wan_image_to_video(
-    positive: Any,
-    negative: Any,
-    vae: Any,
-    width: int,
-    height: int,
-    length: int,
-    batch_size: int,
-    start_image: Any | None = None,
-    clip_vision_output: Any | None = None,
-) -> tuple[Any, Any, dict]:
-    """Exact logic of ComfyUI node WanImageToVideo (conditioning/video_models).
-
-    Returns (positive, negative, out_latent). Latent is empty 16ch @ 1/8; when start_image
-    is provided, encodes it and injects concat_latent_image + concat_mask into conditioning.
-    """
-    from comfy_diffusion._runtime import ensure_comfyui_on_path
-
-    ensure_comfyui_on_path()
-    import torch
-    import comfy.model_management
-    import comfy.utils
-    import node_helpers
-
-    latent = torch.zeros(
-        [batch_size, 16, ((length - 1) // 4) + 1, height // 8, width // 8],
-        device=comfy.model_management.intermediate_device(),
-    )
-    if start_image is not None:
-        start_image = comfy.utils.common_upscale(
-            start_image[:length].movedim(-1, 1), width, height, "bilinear", "center"
-        ).movedim(1, -1)
-        image = torch.ones(
-            (length, height, width, start_image.shape[-1]),
-            device=start_image.device,
-            dtype=start_image.dtype,
-        ) * 0.5
-        image[: start_image.shape[0]] = start_image
-
-        concat_latent_image = vae.encode(image[:, :, :, :3])
-        mask = torch.ones(
-            (1, 1, latent.shape[2], concat_latent_image.shape[-2], concat_latent_image.shape[-1]),
-            device=start_image.device,
-            dtype=start_image.dtype,
-        )
-        mask[:, :, : ((start_image.shape[0] - 1) // 4) + 1] = 0.0
-
-        positive = node_helpers.conditioning_set_values(
-            positive, {"concat_latent_image": concat_latent_image, "concat_mask": mask}
-        )
-        negative = node_helpers.conditioning_set_values(
-            negative, {"concat_latent_image": concat_latent_image, "concat_mask": mask}
-        )
-
-    if clip_vision_output is not None:
-        positive = node_helpers.conditioning_set_values(
-            positive, {"clip_vision_output": clip_vision_output}
-        )
-        negative = node_helpers.conditioning_set_values(
-            negative, {"clip_vision_output": clip_vision_output}
-        )
-
-    out_latent = {"samples": latent}
-    return positive, negative, out_latent
 
 
 def _apply_model_sampling_shift(model: Any, shift: float = 5.0, multiplier: float = 1000.0) -> Any:
@@ -354,7 +288,7 @@ def main() -> int:
 
     # 1) Runtime check
     from comfy_diffusion import check_runtime, vae_decode_batch
-    from comfy_diffusion.conditioning import encode_prompt
+    from comfy_diffusion.conditioning import encode_prompt, wan_image_to_video
     from comfy_diffusion.models import ModelManager
     from comfy_diffusion.sampling import sample_advanced
 
@@ -377,7 +311,7 @@ def main() -> int:
     positive = encode_prompt(clip, args.prompt)
     negative = encode_prompt(clip, args.negative_prompt)
 
-    # 4) WanImageToVideo: conditioning + empty latent (exact ComfyUI node logic)
+    # 4) WAN image-to-video conditioning + empty latent (comfy_diffusion.conditioning)
     from comfy_diffusion._runtime import ensure_comfyui_on_path
 
     ensure_comfyui_on_path()
@@ -388,6 +322,7 @@ def main() -> int:
     pil_img = Image.open(image_path).convert("RGB")
     arr = np.array(pil_img)
     device = comfy.model_management.intermediate_device()
+    # start_image must be a tensor (batch, height, width, channels), float in [0, 1]
     start_image_tensor = (
         torch.from_numpy(arr).float().to(device=device) / 255.0
     ).unsqueeze(0)

@@ -139,7 +139,7 @@ Early development. Built iteratively, one capability block at a time. The full n
 | 09 | `vae` — batch/video | Batch VAE encode/decode for video frame sequences | ✅ Done |
 | 10 | `sampling` — advanced | `SamplerCustomAdvanced`, schedulers, sigma manipulation | ✅ Done |
 | 11 | `audio` | Stable Audio, WAN sound-to-video, LTXV audio, ACE Step | ✅ Done |
-| — | **`v0.1.0-preview`** | **Preview release milestone** | ✅ Done |
+| — | **`v0.1.1-preview`** | **Preview release milestone** | ✅ Done |
 | 12–18 | conditioning, controlnet, latent, image, mask, model patches, packaging | Post-preview | ⬜ |
 
 ---
