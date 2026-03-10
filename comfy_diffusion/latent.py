@@ -115,6 +115,23 @@ def _get_torch_tensor_type() -> Any:
     return torch.Tensor
 
 
+def _get_torch_module() -> Any:
+    """Resolve torch at call time."""
+    import torch
+
+    return torch
+
+
+def _get_node_helpers_module() -> Any:
+    """Resolve node_helpers at call time."""
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    import node_helpers
+
+    return node_helpers
+
+
 def _unwrap_node_output(output: Any) -> Any:
     """Return first output for ComfyUI V3 nodes and tuple-style APIs."""
     if hasattr(output, "result"):
@@ -315,6 +332,41 @@ def set_latent_noise_mask(latent: dict[str, Any], mask: Any) -> dict[str, Any]:
     return latent_with_noise_mask
 
 
+def inpaint_model_conditioning(
+    model: Any,
+    latent: dict[str, Any],
+    vae: Any,
+    positive: Any,
+    negative: Any,
+) -> tuple[Any, Any, Any]:
+    """Patch model and conditioning with inpaint latent metadata."""
+    node_helpers = _get_node_helpers_module()
+
+    latent_image = latent["samples"]
+    mask = latent.get("noise_mask")
+
+    if mask is None:
+        torch = _get_torch_module()
+        downscale_ratio = vae.spacial_compression_encode()
+        mask = torch.ones(
+            (
+                latent_image.shape[0],
+                1,
+                latent_image.shape[-2] * downscale_ratio,
+                latent_image.shape[-1] * downscale_ratio,
+            ),
+            dtype=latent_image.dtype,
+            device=latent_image.device,
+        )
+
+    values = {"concat_latent_image": latent_image, "concat_mask": mask}
+    patched_positive = node_helpers.conditioning_set_values(positive, values)
+    patched_negative = node_helpers.conditioning_set_values(negative, values)
+
+    patched_model = model.clone() if hasattr(model, "clone") else model
+    return patched_model, patched_positive, patched_negative
+
+
 __all__ = [
     "empty_latent_image",
     "latent_from_batch",
@@ -328,4 +380,5 @@ __all__ = [
     "latent_composite",
     "latent_composite_masked",
     "set_latent_noise_mask",
+    "inpaint_model_conditioning",
 ]

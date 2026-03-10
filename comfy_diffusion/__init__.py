@@ -11,6 +11,7 @@ from .vae import (
     vae_encode,
     vae_encode_batch,
     vae_encode_batch_tiled,
+    vae_encode_for_inpaint,
     vae_encode_tiled,
 )
 
@@ -23,6 +24,7 @@ __all__ = [
     "vae_decode_batch_tiled",
     "vae_decode_tiled",
     "vae_encode",
+    "vae_encode_for_inpaint",
     "vae_encode_batch",
     "vae_encode_batch_tiled",
     "vae_encode_tiled",

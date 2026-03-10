@@ -15,10 +15,12 @@ import pytest
 from PIL import Image
 
 import comfy_diffusion
+import comfy_diffusion.sampling as sampling_module
 import comfy_diffusion.vae as vae_module
 from comfy_diffusion import (
     vae_decode,
     vae_decode_tiled,
+    vae_encode_for_inpaint,
     vae_encode_tiled,
 )
 from comfy_diffusion import (
@@ -34,12 +36,16 @@ from comfy_diffusion import (
     vae_encode_batch_tiled as vae_encode_batch_tiled_from_root,
 )
 from comfy_diffusion.models import CheckpointResult
+from comfy_diffusion.sampling import sample
 from comfy_diffusion.vae import (
     vae_decode_batch,
     vae_decode_batch_tiled,
     vae_encode,
     vae_encode_batch,
     vae_encode_batch_tiled,
+)
+from comfy_diffusion.vae import (
+    vae_encode_for_inpaint as vae_encode_for_inpaint_from_module,
 )
 from comfy_diffusion.vae import vae_encode_tiled as vae_encode_tiled_from_module
 
@@ -109,6 +115,7 @@ def test_vae_module_exports_decode_and_encode() -> None:
         "vae_decode_batch",
         "vae_decode_batch_tiled",
         "vae_encode",
+        "vae_encode_for_inpaint",
         "vae_encode_batch",
         "vae_encode_tiled",
         "vae_encode_batch_tiled",
@@ -131,6 +138,12 @@ def test_vae_encode_is_re_exported_from_package_root() -> None:
     assert callable(vae_encode)
     assert comfy_diffusion.vae_encode is vae_encode
     assert "vae_encode" in comfy_diffusion.__all__
+
+
+def test_vae_encode_for_inpaint_is_re_exported_from_package_root() -> None:
+    assert callable(vae_encode_for_inpaint)
+    assert comfy_diffusion.vae_encode_for_inpaint is vae_encode_for_inpaint
+    assert "vae_encode_for_inpaint" in comfy_diffusion.__all__
 
 
 def test_vae_encode_tiled_is_exported_from_module_and_package_root() -> None:
@@ -691,6 +704,90 @@ def test_vae_encode_tiled_has_expected_type_signature() -> None:
     )
 
 
+def test_vae_encode_for_inpaint_has_expected_type_signature() -> None:
+    fn_signature = signature(vae_module.vae_encode_for_inpaint)
+
+    assert str(fn_signature) == (
+        "(vae: '_VaeEncoderForInpaint', image: 'Image.Image', mask: 'Any', "
+        "grow_mask_by: 'int' = 6) -> 'dict[str, Any]'"
+    )
+
+
+def test_vae_encode_for_inpaint_masks_pixels_and_attaches_noise_mask() -> None:
+    torch = pytest.importorskip("torch")
+    encode_inputs: list[Any] = []
+
+    class _MockVae:
+        def spacial_compression_encode(self) -> int:
+            return 8
+
+        def encode(self, pixel_samples: Any) -> str:
+            encode_inputs.append(pixel_samples)
+            return "encoded-inpaint"
+
+    image = Image.new("RGB", (8, 8), color=(12, 34, 56))
+    mask = torch.ones((8, 8), dtype=torch.float32)
+
+    result = vae_encode_for_inpaint_from_module(_MockVae(), image, mask, grow_mask_by=0)
+
+    assert result["samples"] == "encoded-inpaint"
+    assert tuple(result["noise_mask"].shape) == (1, 1, 8, 8)
+    assert torch.all(result["noise_mask"] == 1)
+    assert len(encode_inputs) == 1
+    assert tuple(encode_inputs[0].shape) == (1, 8, 8, 3)
+    assert torch.allclose(encode_inputs[0][0, 0, 0], torch.tensor([0.5, 0.5, 0.5]))
+
+
+def test_vae_encode_for_inpaint_output_is_compatible_with_sample(
+    monkeypatch: Any,
+) -> None:
+    torch = pytest.importorskip("torch")
+
+    class _MockVae:
+        def spacial_compression_encode(self) -> int:
+            return 8
+
+        def encode(self, _pixel_samples: Any) -> Any:
+            return torch.zeros((1, 4, 1, 1), dtype=torch.float32)
+
+    def fake_common_ksampler(
+        model: Any,
+        seed: int,
+        steps: Any,
+        cfg: Any,
+        sampler_name: str,
+        scheduler: str,
+        positive: Any,
+        negative: Any,
+        latent: Any,
+        denoise: float = 1.0,
+    ) -> tuple[dict[str, Any]]:
+        return (latent,)
+
+    monkeypatch.setattr(sampling_module, "_get_common_ksampler", lambda: fake_common_ksampler)
+
+    latent = vae_encode_for_inpaint(
+        _MockVae(),
+        Image.new("RGB", (8, 8), color=(20, 30, 40)),
+        torch.zeros((8, 8), dtype=torch.float32),
+        grow_mask_by=0,
+    )
+    denoised = sample(
+        model=object(),
+        positive=object(),
+        negative=object(),
+        latent=latent,
+        steps=20,
+        cfg=7.0,
+        sampler_name="euler",
+        scheduler="normal",
+        seed=123,
+    )
+
+    assert denoised is latent
+    assert "noise_mask" in latent
+
+
 def test_vae_encode_batch_tiled_has_expected_type_signature() -> None:
     fn_signature = signature(vae_module.vae_encode_batch_tiled)
 
@@ -794,7 +891,8 @@ def test_import_comfy_diffusion_vae_has_no_heavy_import_side_effects() -> None:
         "baseline_torch_loaded = 'torch' in sys.modules\n"
         "from comfy_diffusion.vae import "
         "vae_decode, vae_decode_batch, vae_decode_batch_tiled, vae_decode_tiled, "
-        "vae_encode, vae_encode_batch, vae_encode_batch_tiled, vae_encode_tiled\n"
+        "vae_encode, vae_encode_batch, vae_encode_batch_tiled, vae_encode_for_inpaint, "
+        "vae_encode_tiled\n"
         "post_modules = set(sys.modules)\n"
         "new_modules = sorted(post_modules - baseline_modules)\n"
         "payload = {\n"
@@ -804,6 +902,7 @@ def test_import_comfy_diffusion_vae_has_no_heavy_import_side_effects() -> None:
         "  'encode_func_name': vae_encode.__name__,\n"
         "  'encode_batch_func_name': vae_encode_batch.__name__,\n"
         "  'encode_batch_tiled_func_name': vae_encode_batch_tiled.__name__,\n"
+        "  'encode_inpaint_func_name': vae_encode_for_inpaint.__name__,\n"
         "  'encode_tiled_func_name': vae_encode_tiled.__name__,\n"
         "  'tiled_func_name': vae_decode_tiled.__name__,\n"
         "  'baseline_torch_loaded': baseline_torch_loaded,\n"
@@ -824,6 +923,7 @@ def test_import_comfy_diffusion_vae_has_no_heavy_import_side_effects() -> None:
     assert payload["encode_func_name"] == "vae_encode"
     assert payload["encode_batch_func_name"] == "vae_encode_batch"
     assert payload["encode_batch_tiled_func_name"] == "vae_encode_batch_tiled"
+    assert payload["encode_inpaint_func_name"] == "vae_encode_for_inpaint"
     assert payload["encode_tiled_func_name"] == "vae_encode_tiled"
     assert payload["torch_loaded"] == payload["baseline_torch_loaded"]
     assert payload["nodes_loaded"] is False

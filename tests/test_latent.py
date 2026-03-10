@@ -14,8 +14,10 @@ import pytest
 
 import comfy_diffusion.latent as latent_module
 import comfy_diffusion.sampling as sampling_module
+from comfy_diffusion.conditioning import conditioning_combine
 from comfy_diffusion.latent import (
     empty_latent_image,
+    inpaint_model_conditioning,
     latent_composite,
     latent_composite_masked,
     latent_concat,
@@ -65,6 +67,7 @@ def test_latent_module_exports_empty_latent_image() -> None:
         "latent_composite",
         "latent_composite_masked",
         "set_latent_noise_mask",
+        "inpaint_model_conditioning",
     ]
 
 
@@ -150,6 +153,14 @@ def test_latent_composite_masked_signature_matches_contract() -> None:
 def test_set_latent_noise_mask_signature_matches_contract() -> None:
     signature = inspect.signature(set_latent_noise_mask)
     assert str(signature) == "(latent: 'dict[str, Any]', mask: 'Any') -> 'dict[str, Any]'"
+
+
+def test_inpaint_model_conditioning_signature_matches_contract() -> None:
+    signature = inspect.signature(inpaint_model_conditioning)
+    assert str(signature) == (
+        "(model: 'Any', latent: 'dict[str, Any]', vae: 'Any', positive: 'Any', "
+        "negative: 'Any') -> 'tuple[Any, Any, Any]'"
+    )
 
 
 def test_empty_latent_image_returns_latent_dict_compatible_with_sample(
@@ -871,3 +882,114 @@ def test_set_latent_noise_mask_rejects_non_tensor_mask(monkeypatch: Any) -> None
 
     with pytest.raises(TypeError, match="mask must be a torch.Tensor"):
         set_latent_noise_mask(latent={"samples": object()}, mask=object())
+
+
+def test_inpaint_model_conditioning_patches_model_and_conditionings(monkeypatch: Any) -> None:
+    calls: list[tuple[Any, dict[str, Any]]] = []
+
+    class FakeNodeHelpers:
+        @staticmethod
+        def conditioning_set_values(conditioning: Any, values: dict[str, Any]) -> Any:
+            calls.append((conditioning, values))
+            return [conditioning, values]
+
+    class FakeModel:
+        def __init__(self, name: str) -> None:
+            self.name = name
+
+        def clone(self) -> FakeModel:
+            return FakeModel(f"{self.name}-patched")
+
+    monkeypatch.setattr(latent_module, "_get_node_helpers_module", lambda: FakeNodeHelpers)
+
+    latent = {"samples": "latent-samples", "noise_mask": "latent-mask"}
+    model = FakeModel("base-model")
+    positive = [["pos", {}]]
+    negative = [["neg", {}]]
+
+    patched_model, patched_positive, patched_negative = inpaint_model_conditioning(
+        model=model,
+        latent=latent,
+        vae=object(),
+        positive=positive,
+        negative=negative,
+    )
+
+    assert isinstance(patched_model, FakeModel)
+    assert patched_model.name == "base-model-patched"
+    assert patched_positive == [
+        positive,
+        {"concat_latent_image": "latent-samples", "concat_mask": "latent-mask"},
+    ]
+    assert patched_negative == [
+        negative,
+        {"concat_latent_image": "latent-samples", "concat_mask": "latent-mask"},
+    ]
+    assert calls == [
+        (positive, {"concat_latent_image": "latent-samples", "concat_mask": "latent-mask"}),
+        (negative, {"concat_latent_image": "latent-samples", "concat_mask": "latent-mask"}),
+    ]
+
+
+def test_inpaint_model_conditioning_outputs_are_compatible_with_sampling_and_conditioning(
+    monkeypatch: Any,
+) -> None:
+    class FakeNodeHelpers:
+        @staticmethod
+        def conditioning_set_values(conditioning: Any, values: dict[str, Any]) -> list[Any]:
+            output: list[Any] = []
+            for token, metadata in conditioning:
+                merged = dict(metadata)
+                merged.update(values)
+                output.append([token, merged])
+            return output
+
+    def fake_common_ksampler(
+        model: Any,
+        seed: int,
+        steps: Any,
+        cfg: Any,
+        sampler_name: str,
+        scheduler: str,
+        positive: Any,
+        negative: Any,
+        latent: Any,
+        denoise: float = 1.0,
+    ) -> tuple[dict[str, Any]]:
+        return (latent,)
+
+    monkeypatch.setattr(latent_module, "_get_node_helpers_module", lambda: FakeNodeHelpers)
+    monkeypatch.setattr(sampling_module, "_get_common_ksampler", lambda: fake_common_ksampler)
+
+    class FakeModel:
+        def clone(self) -> FakeModel:
+            return self
+
+    latent = {"samples": object(), "noise_mask": object()}
+    positive = [["p", {"base": True}]]
+    negative = [["n", {"base": False}]]
+
+    patched_model, patched_positive, patched_negative = inpaint_model_conditioning(
+        model=FakeModel(),
+        latent=latent,
+        vae=object(),
+        positive=positive,
+        negative=negative,
+    )
+    combined = conditioning_combine(patched_positive, [["p2", {"extra": True}]])
+    denoised = sample(
+        model=patched_model,
+        positive=combined,
+        negative=patched_negative,
+        latent=latent,
+        steps=20,
+        cfg=7.0,
+        sampler_name="euler",
+        scheduler="normal",
+        seed=777,
+    )
+
+    assert denoised is latent
+    assert patched_positive[0][1]["concat_mask"] is latent["noise_mask"]
+    assert patched_negative[0][1]["concat_latent_image"] is latent["samples"]
+    assert len(combined) == 2
