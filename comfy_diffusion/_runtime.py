@@ -12,7 +12,16 @@ from pathlib import Path
 
 def _comfyui_root() -> Path:
     """Return the absolute path to the vendored ComfyUI directory."""
-    return Path(__file__).resolve().parent / "vendor" / "ComfyUI"
+    package_dir = Path(__file__).resolve().parent
+
+    # Preferred layout: repo_root/vendor/ComfyUI (vendored git submodule).
+    repo_vendor = package_dir.parent / "vendor" / "ComfyUI"
+    if repo_vendor.exists():
+        return repo_vendor
+
+    # Back-compat layout (older iterations): comfy_diffusion/vendor/ComfyUI.
+    package_vendor = package_dir / "vendor" / "ComfyUI"
+    return package_vendor
 
 
 def ensure_comfyui_on_path() -> Path:

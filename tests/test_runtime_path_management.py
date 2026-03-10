@@ -52,7 +52,7 @@ def test_path_insertion_is_minimal_and_not_duplicated() -> None:
             "import json\n"
             "import comfy_diffusion\n"
             "import sys\n"
-            "expected = str(Path(comfy_diffusion.__file__).resolve().parent / 'vendor' / 'ComfyUI')\n"
+            "expected = str(Path(comfy_diffusion.__file__).resolve().parent.parent / 'vendor' / 'ComfyUI')\n"
             "importlib.reload(comfy_diffusion)\n"
             "matches = [p for p in sys.path if p == expected]\n"
             "vendor_entries = [p for p in sys.path if '/vendor/' in p.replace('\\\\\\\\', '/')]\n"
@@ -76,7 +76,7 @@ def test_import_works_from_any_working_directory(tmp_path: Path) -> None:
             "import comfy_diffusion\n"
             "import sys\n"
             "comfyui_path = str("
-            "Path(comfy_diffusion.__file__).resolve().parent / 'vendor' / 'ComfyUI')\n"
+            "Path(comfy_diffusion.__file__).resolve().parent.parent / 'vendor' / 'ComfyUI')\n"
             "print(json.dumps({'cwd': str(Path.cwd()), 'comfyui_path': comfyui_path,"
             " 'on_path': comfyui_path in sys.path}))\n"
         ),
