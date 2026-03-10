@@ -96,4 +96,34 @@ def apply_controlnet(
     return outputs[0], outputs[1]
 
 
-__all__ = ["load_controlnet", "load_diff_controlnet", "apply_controlnet"]
+def set_union_controlnet_type(control_net: Any, type: str) -> Any:
+    """Configure a union ControlNet with the requested control type."""
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+
+    from comfy.cldm.control_types import UNION_CONTROLNET_TYPES
+
+    control_net = control_net.copy()
+    if type == "auto":
+        control_net.set_extra_arg("control_type", [])
+        return control_net
+
+    type_number = UNION_CONTROLNET_TYPES.get(type)
+    if type_number is None:
+        supported_types = ["auto", *UNION_CONTROLNET_TYPES]
+        supported_values = ", ".join(repr(item) for item in supported_types)
+        raise ValueError(
+            f"unsupported union controlnet type {type!r}; supported types: {supported_values}"
+        )
+
+    control_net.set_extra_arg("control_type", [type_number])
+    return control_net
+
+
+__all__ = [
+    "load_controlnet",
+    "load_diff_controlnet",
+    "apply_controlnet",
+    "set_union_controlnet_type",
+]

@@ -14,7 +14,12 @@ from typing import Any
 import pytest
 
 import comfy_diffusion.controlnet as controlnet_module
-from comfy_diffusion.controlnet import apply_controlnet, load_controlnet, load_diff_controlnet
+from comfy_diffusion.controlnet import (
+    apply_controlnet,
+    load_controlnet,
+    load_diff_controlnet,
+    set_union_controlnet_type,
+)
 
 
 def _repo_root() -> Path:
@@ -52,11 +57,30 @@ def _install_fake_comfy_controlnet(
     monkeypatch.setitem(sys.modules, "comfy.controlnet", comfy_controlnet_module)
 
 
+def _install_fake_comfy_control_types(
+    monkeypatch: Any,
+    union_controlnet_types: dict[str, int],
+) -> None:
+    import types
+
+    comfy_module: Any = types.ModuleType("comfy")
+    comfy_cldm_module: Any = types.ModuleType("comfy.cldm")
+    comfy_control_types_module: Any = types.ModuleType("comfy.cldm.control_types")
+    comfy_control_types_module.UNION_CONTROLNET_TYPES = union_controlnet_types
+    comfy_cldm_module.control_types = comfy_control_types_module
+    comfy_module.cldm = comfy_cldm_module
+
+    monkeypatch.setitem(sys.modules, "comfy", comfy_module)
+    monkeypatch.setitem(sys.modules, "comfy.cldm", comfy_cldm_module)
+    monkeypatch.setitem(sys.modules, "comfy.cldm.control_types", comfy_control_types_module)
+
+
 def test_controlnet_module_exports_only_load_controlnet() -> None:
     assert controlnet_module.__all__ == [
         "load_controlnet",
         "load_diff_controlnet",
         "apply_controlnet",
+        "set_union_controlnet_type",
     ]
 
 
@@ -78,6 +102,88 @@ def test_apply_controlnet_signature_matches_contract() -> None:
         "strength: 'float' = 1.0, start_percent: 'float' = 0.0, "
         "end_percent: 'float' = 1.0, vae: 'Any' = None) -> 'tuple[Any, Any]'"
     )
+
+
+def test_set_union_controlnet_type_signature_matches_contract() -> None:
+    signature = inspect.signature(set_union_controlnet_type)
+    assert str(signature) == "(control_net: 'Any', type: 'str') -> 'Any'"
+
+
+def test_set_union_controlnet_type_auto_sets_empty_control_type(monkeypatch: Any) -> None:
+    _install_fake_comfy_control_types(monkeypatch, {"openpose": 0, "depth": 1})
+
+    class FakeControlNet:
+        def __init__(self) -> None:
+            self.copy_calls = 0
+            self.extra_args: dict[str, Any] = {}
+
+        def copy(self) -> FakeControlNet:
+            self.copy_calls += 1
+            return FakeControlNet()
+
+        def set_extra_arg(self, argument: str, value: Any = None) -> None:
+            self.extra_args[argument] = value
+
+    control_net = FakeControlNet()
+
+    configured = set_union_controlnet_type(control_net, "auto")
+
+    assert configured is not control_net
+    assert control_net.copy_calls == 1
+    assert configured.extra_args == {"control_type": []}
+
+
+def test_set_union_controlnet_type_supports_all_defined_union_types(
+    monkeypatch: Any,
+) -> None:
+    union_controlnet_types = {
+        "openpose": 0,
+        "depth": 1,
+        "hed/pidi/scribble/ted": 2,
+        "canny/lineart/anime_lineart/mlsd": 3,
+        "normal": 4,
+        "segment": 5,
+        "tile": 6,
+        "repaint": 7,
+    }
+    _install_fake_comfy_control_types(monkeypatch, union_controlnet_types)
+
+    class FakeControlNet:
+        def __init__(self) -> None:
+            self.copy_calls = 0
+            self.extra_args: dict[str, Any] = {}
+
+        def copy(self) -> FakeControlNet:
+            self.copy_calls += 1
+            return FakeControlNet()
+
+        def set_extra_arg(self, argument: str, value: Any = None) -> None:
+            self.extra_args[argument] = value
+
+    for control_type, type_number in union_controlnet_types.items():
+        control_net = FakeControlNet()
+        configured = set_union_controlnet_type(control_net, control_type)
+
+        assert configured is not control_net
+        assert control_net.copy_calls == 1
+        assert configured.extra_args == {"control_type": [type_number]}
+
+
+def test_set_union_controlnet_type_rejects_unsupported_type(monkeypatch: Any) -> None:
+    _install_fake_comfy_control_types(monkeypatch, {"openpose": 0, "depth": 1})
+
+    class FakeControlNet:
+        def copy(self) -> FakeControlNet:
+            return FakeControlNet()
+
+        def set_extra_arg(self, argument: str, value: Any = None) -> None:
+            raise AssertionError("set_extra_arg should not be called for invalid type")
+
+    with pytest.raises(ValueError, match="unsupported union controlnet type") as exc_info:
+        set_union_controlnet_type(FakeControlNet(), "invalid-type")
+
+    assert "invalid-type" in str(exc_info.value)
+    assert "'auto'" in str(exc_info.value)
 
 
 def test_apply_controlnet_applies_to_positive_and_negative_with_defaults() -> None:
@@ -407,6 +513,7 @@ def test_import_comfy_diffusion_controlnet_has_no_heavy_import_side_effects() ->
         "  apply_controlnet,\n"
         "  load_controlnet,\n"
         "  load_diff_controlnet,\n"
+        "  set_union_controlnet_type,\n"
         ")\n"
         "post_modules = set(sys.modules)\n"
         "new_modules = sorted(post_modules - baseline_modules)\n"
@@ -414,6 +521,7 @@ def test_import_comfy_diffusion_controlnet_has_no_heavy_import_side_effects() ->
         "  'apply_func_name': apply_controlnet.__name__,\n"
         "  'func_name': load_controlnet.__name__,\n"
         "  'diff_func_name': load_diff_controlnet.__name__,\n"
+        "  'union_func_name': set_union_controlnet_type.__name__,\n"
         "  'torch_loaded': 'torch' in sys.modules,\n"
         "  'comfy_controlnet_loaded': 'comfy.controlnet' in sys.modules,\n"
         "  'new_modules': new_modules,\n"
@@ -425,6 +533,7 @@ def test_import_comfy_diffusion_controlnet_has_no_heavy_import_side_effects() ->
     assert payload["apply_func_name"] == "apply_controlnet"
     assert payload["func_name"] == "load_controlnet"
     assert payload["diff_func_name"] == "load_diff_controlnet"
+    assert payload["union_func_name"] == "set_union_controlnet_type"
     assert payload["torch_loaded"] is False
     assert payload["comfy_controlnet_loaded"] is False
     heavy = [
