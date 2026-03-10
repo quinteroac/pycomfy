@@ -268,6 +268,51 @@ def grow_mask(mask: Any, expand: int, tapered_corners: bool) -> Any:
     )
 
 
+def feather_mask(mask: Any, left: int, top: int, right: int, bottom: int) -> Any:
+    """Feather mask edges by independent pixel amounts for each side."""
+    if left < 0 or top < 0 or right < 0 or bottom < 0:
+        raise ValueError("left, top, right, and bottom must be non-negative integers")
+    if len(mask.shape) != 3:
+        raise ValueError("mask tensor must have shape (B, H, W)")
+
+    _, height, width = mask.shape
+    left = min(left, width)
+    right = min(right, width)
+    top = min(top, height)
+    bottom = min(bottom, height)
+
+    mask_values = mask.tolist()
+    feathered_values: list[list[list[float]]] = []
+
+    for batch in mask_values:
+        feathered_batch: list[list[float]] = []
+        for y, row in enumerate(batch):
+            feathered_row: list[float] = []
+            for x, value in enumerate(row):
+                feather_rate = 1.0
+
+                if left > 0 and x < left:
+                    feather_rate *= (x + 1.0) / left
+                if right > 0:
+                    distance_from_right = width - 1 - x
+                    if distance_from_right < right:
+                        feather_rate *= (distance_from_right + 1.0) / right
+                if top > 0 and y < top:
+                    feather_rate *= (y + 1.0) / top
+                if bottom > 0:
+                    distance_from_bottom = height - 1 - y
+                    if distance_from_bottom < bottom:
+                        feather_rate *= (distance_from_bottom + 1.0) / bottom
+
+                feathered_value = float(value) * feather_rate
+                feathered_row.append(min(1.0, max(0.0, feathered_value)))
+            feathered_batch.append(feathered_row)
+        feathered_values.append(feathered_batch)
+
+    torch = _get_torch_module()
+    return torch.tensor(feathered_values, dtype=torch.float32)
+
+
 def image_to_tensor(image: PILImage.Image) -> Any:
     """Convert a PIL Image to a BHWC float32 tensor with shape (1, H, W, 3)."""
     torch = _get_torch_module()
@@ -345,5 +390,6 @@ __all__ = [
     "repeat_image_batch",
     "image_composite_masked",
     "grow_mask",
+    "feather_mask",
     "ltxv_preprocess",
 ]

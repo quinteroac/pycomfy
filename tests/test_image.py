@@ -12,6 +12,7 @@ from PIL import Image, ImageOps, features
 import comfy_diffusion
 import comfy_diffusion.image as image_module
 from comfy_diffusion.image import (
+    feather_mask,
     grow_mask,
     image_composite_masked,
     image_from_batch,
@@ -214,6 +215,7 @@ def test_image_module_exports_expected_entrypoints() -> None:
         "repeat_image_batch",
         "image_composite_masked",
         "grow_mask",
+        "feather_mask",
         "ltxv_preprocess",
     ]
 
@@ -336,6 +338,18 @@ def test_grow_mask_signature_matches_contract() -> None:
 
 def test_grow_mask_not_re_exported_from_package_root() -> None:
     assert not hasattr(comfy_diffusion, "grow_mask")
+
+
+def test_feather_mask_signature_matches_contract() -> None:
+    signature = inspect.signature(feather_mask)
+    expected_signature = (
+        "(mask: 'Any', left: 'int', top: 'int', right: 'int', bottom: 'int') -> 'Any'"
+    )
+    assert str(signature) == expected_signature
+
+
+def test_feather_mask_not_re_exported_from_package_root() -> None:
+    assert not hasattr(comfy_diffusion, "feather_mask")
 
 
 def test_ltxv_preprocess_signature_matches_contract() -> None:
@@ -712,6 +726,64 @@ def test_grow_mask_tapered_corners_affects_corner_growth(
 
     assert rounded.tolist()[0][1][1] == 0.0
     assert square.tolist()[0][1][1] == 1.0
+
+
+def test_feather_mask_applies_side_amounts() -> None:
+    mask = _FakeTorch.tensor(
+        [
+            [
+                [1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+                [1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+                [1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+                [1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+                [1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+            ]
+        ],
+        dtype=_FakeTorch.float32,
+    )
+
+    feathered = feather_mask(mask=mask, left=2, top=1, right=3, bottom=2)
+    values = feathered.tolist()[0]
+
+    assert feathered.shape == (1, 5, 6)
+    assert values[0][0] == pytest.approx(0.5)
+    assert values[2][2] == pytest.approx(1.0)
+    assert values[4][5] == pytest.approx(1.0 / 6.0)
+
+
+def test_feather_mask_supports_independent_edge_amounts() -> None:
+    mask = _FakeTorch.tensor(
+        [
+            [
+                [1.0, 1.0, 1.0, 1.0],
+                [1.0, 1.0, 1.0, 1.0],
+                [1.0, 1.0, 1.0, 1.0],
+                [1.0, 1.0, 1.0, 1.0],
+            ]
+        ],
+        dtype=_FakeTorch.float32,
+    )
+
+    left_only = feather_mask(mask=mask, left=2, top=0, right=0, bottom=0).tolist()[0]
+    top_only = feather_mask(mask=mask, left=0, top=2, right=0, bottom=0).tolist()[0]
+
+    assert left_only[0][0] == pytest.approx(0.5)
+    assert left_only[0][3] == pytest.approx(1.0)
+    assert top_only[0][0] == pytest.approx(0.5)
+    assert top_only[3][0] == pytest.approx(1.0)
+
+
+def test_feather_mask_clamps_output_values_to_zero_one_range() -> None:
+    mask = _FakeTorch.tensor(
+        [[[1.2, -0.2], [0.6, 2.0]]],
+        dtype=_FakeTorch.float32,
+    )
+
+    feathered = feather_mask(mask=mask, left=0, top=0, right=0, bottom=0)
+    flattened = _flatten(feathered.tolist())
+
+    assert all(0.0 <= value <= 1.0 for value in flattened)
+    assert feathered.tolist() == [[[1.0, 0.0], [0.6, 1.0]]]
 
 
 def test_image_upscale_with_model_supports_comfyui_v3_result_output(
