@@ -46,4 +46,54 @@ def load_diff_controlnet(model: Any, path: str | Path) -> Any:
     return controlnet
 
 
-__all__ = ["load_controlnet", "load_diff_controlnet"]
+def apply_controlnet(
+    positive: Any,
+    negative: Any,
+    control_net: Any,
+    image: Any,
+    strength: float = 1.0,
+    start_percent: float = 0.0,
+    end_percent: float = 1.0,
+    vae: Any = None,
+) -> tuple[Any, Any]:
+    """Apply ControlNet to positive and negative conditioning.
+
+    ``image`` should be a torch Tensor control hint map.
+    Mirrors ComfyUI's ``ControlNetApplyAdvanced`` behavior.
+    """
+    if strength == 0:
+        return positive, negative
+
+    control_hint = image.movedim(-1, 1)
+    cached_controlnets: dict[Any, Any] = {}
+    outputs: list[Any] = []
+
+    for conditioning in (positive, negative):
+        updated_conditioning: list[Any] = []
+        for token, metadata in conditioning:
+            updated_metadata = metadata.copy()
+            previous_controlnet = updated_metadata.get("control")
+
+            if previous_controlnet in cached_controlnets:
+                controlnet_instance = cached_controlnets[previous_controlnet]
+            else:
+                controlnet_instance = control_net.copy().set_cond_hint(
+                    control_hint,
+                    strength,
+                    (start_percent, end_percent),
+                    vae=vae,
+                    extra_concat=[],
+                )
+                controlnet_instance.set_previous_controlnet(previous_controlnet)
+                cached_controlnets[previous_controlnet] = controlnet_instance
+
+            updated_metadata["control"] = controlnet_instance
+            updated_metadata["control_apply_to_uncond"] = False
+            updated_conditioning.append([token, updated_metadata])
+
+        outputs.append(updated_conditioning)
+
+    return outputs[0], outputs[1]
+
+
+__all__ = ["load_controlnet", "load_diff_controlnet", "apply_controlnet"]
