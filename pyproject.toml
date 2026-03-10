@@ -9,7 +9,6 @@ description = "ComfyUI inference engine as a standalone Python library (no serve
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "opencv-python>=4.13.0.92",
     "pillow>=12.1.1",
     "psutil",
 ]
@@ -18,6 +17,10 @@ dependencies = [
 # torch from pytorch-cpu / pytorch-cuda index (see [tool.uv.sources])
 cpu = ["torch"]
 cuda = ["torch"]
+video = [
+    "opencv-python>=4.13.0.92",
+    "imageio>=2.37.2",
+]
 # ComfyUI runtime deps (from vendor/ComfyUI/requirements.txt via: uv add -r vendor/ComfyUI/requirements.txt --optional comfyui)
 comfyui = [
     "aiohttp>=3.11.8",
