@@ -37,6 +37,16 @@ def _get_latent_upscale_by_type() -> Any:
     return nodes.LatentUpscaleBy
 
 
+def _get_latent_crop_type() -> Any:
+    """Resolve ComfyUI LatentCrop node at call time."""
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    import nodes
+
+    return nodes.LatentCrop
+
+
 def _unwrap_node_output(output: Any) -> Any:
     """Return first output for ComfyUI V3 nodes and tuple-style APIs."""
     if hasattr(output, "result"):
@@ -101,4 +111,17 @@ def latent_upscale_by(latent: dict[str, Any], method: str, scale_by: float) -> d
     )
 
 
-__all__ = ["empty_latent_image", "latent_upscale", "latent_upscale_by"]
+def latent_crop(
+    latent: dict[str, Any], x: int, y: int, width: int, height: int
+) -> dict[str, Any]:
+    """Crop a LATENT dict using pixel-space coordinates and dimensions."""
+    latent_crop_type = _get_latent_crop_type()
+    return cast(
+        dict[str, Any],
+        _unwrap_node_output(
+            latent_crop_type().crop(samples=latent, width=width, height=height, x=x, y=y)
+        ),
+    )
+
+
+__all__ = ["empty_latent_image", "latent_upscale", "latent_upscale_by", "latent_crop"]

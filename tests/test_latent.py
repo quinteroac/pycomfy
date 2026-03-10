@@ -14,7 +14,12 @@ import pytest
 
 import comfy_diffusion.latent as latent_module
 import comfy_diffusion.sampling as sampling_module
-from comfy_diffusion.latent import empty_latent_image, latent_upscale, latent_upscale_by
+from comfy_diffusion.latent import (
+    empty_latent_image,
+    latent_crop,
+    latent_upscale,
+    latent_upscale_by,
+)
 from comfy_diffusion.sampling import sample
 
 
@@ -39,7 +44,12 @@ def _run_python(code: str) -> subprocess.CompletedProcess[str]:
 
 
 def test_latent_module_exports_empty_latent_image() -> None:
-    assert latent_module.__all__ == ["empty_latent_image", "latent_upscale", "latent_upscale_by"]
+    assert latent_module.__all__ == [
+        "empty_latent_image",
+        "latent_upscale",
+        "latent_upscale_by",
+        "latent_crop",
+    ]
 
 
 def test_empty_latent_image_signature_matches_contract() -> None:
@@ -61,6 +71,14 @@ def test_latent_upscale_by_signature_matches_contract() -> None:
     signature = inspect.signature(latent_upscale_by)
     assert str(signature) == (
         "(latent: 'dict[str, Any]', method: 'str', scale_by: 'float') -> 'dict[str, Any]'"
+    )
+
+
+def test_latent_crop_signature_matches_contract() -> None:
+    signature = inspect.signature(latent_crop)
+    assert str(signature) == (
+        "(latent: 'dict[str, Any]', x: 'int', y: 'int', width: 'int', "
+        "height: 'int') -> 'dict[str, Any]'"
     )
 
 
@@ -290,3 +308,30 @@ def test_latent_upscale_rejects_unknown_method() -> None:
 def test_latent_upscale_by_rejects_unknown_method() -> None:
     with pytest.raises(ValueError, match="method must be one of"):
         latent_upscale_by(latent={"samples": object()}, method="lanczos", scale_by=2.0)
+
+
+def test_latent_crop_returns_cropped_latent_dict_and_uses_pixel_space_inputs(
+    monkeypatch: Any,
+) -> None:
+    latent = {"samples": object(), "batch_index": [0]}
+    expected = {"samples": object(), "batch_index": [0]}
+    calls: list[tuple[dict[str, Any], int, int, int, int]] = []
+
+    class FakeLatentCrop:
+        def crop(
+            self,
+            samples: dict[str, Any],
+            width: int,
+            height: int,
+            x: int,
+            y: int,
+        ) -> tuple[dict[str, Any]]:
+            calls.append((samples, width, height, x, y))
+            return (expected,)
+
+    monkeypatch.setattr(latent_module, "_get_latent_crop_type", lambda: FakeLatentCrop)
+
+    output = latent_crop(latent=latent, x=24, y=40, width=256, height=320)
+
+    assert output is expected
+    assert calls == [(latent, 256, 320, 24, 40)]
