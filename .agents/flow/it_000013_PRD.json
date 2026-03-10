@@ -1,0 +1,152 @@
+{
+  "goals": [
+    "Expose ControlNet loading and application as simple Python functions in a new `comfy_diffusion/controlnet.py` module",
+    "Support both standalone ControlNet loading and model-aware (diff) ControlNet loading",
+    "Allow users to control strength, start percent, and end percent when applying ControlNet to conditioning",
+    "Support union ControlNet type configuration for multi-type union models"
+  ],
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Load ControlNet from file path",
+      "description": "As a Python developer, I want to load a ControlNet model from a local file path so that I can use it for spatially guided generation.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-001-AC01",
+          "text": "`load_controlnet(path)` loads a ControlNet model and returns a ControlNet object usable by `apply_controlnet`"
+        },
+        {
+          "id": "US-001-AC02",
+          "text": "Accepts `str | Path` for the file path (consistent with existing API pattern)"
+        },
+        {
+          "id": "US-001-AC03",
+          "text": "Raises or returns a clear error when the file does not exist or is not a valid ControlNet checkpoint"
+        },
+        {
+          "id": "US-001-AC04",
+          "text": "Lazy imports — no `torch` or `comfy.*` at module top level"
+        },
+        {
+          "id": "US-001-AC05",
+          "text": "Typecheck / lint passes"
+        }
+      ]
+    },
+    {
+      "id": "US-002",
+      "title": "Load diff ControlNet for a specific model",
+      "description": "As a Python developer, I want to load a ControlNet that is paired with a specific diffusion model so that the ControlNet is compatible with my base model.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-002-AC01",
+          "text": "`load_diff_controlnet(model, path)` loads a diff ControlNet, taking the base model and a file path"
+        },
+        {
+          "id": "US-002-AC02",
+          "text": "Returns a ControlNet object usable by `apply_controlnet`"
+        },
+        {
+          "id": "US-002-AC03",
+          "text": "Accepts `str | Path` for the file path"
+        },
+        {
+          "id": "US-002-AC04",
+          "text": "Lazy imports — no `torch` or `comfy.*` at module top level"
+        },
+        {
+          "id": "US-002-AC05",
+          "text": "Typecheck / lint passes"
+        }
+      ]
+    },
+    {
+      "id": "US-003",
+      "title": "Apply ControlNet to conditioning",
+      "description": "As a Python developer, I want to apply a loaded ControlNet to my positive/negative conditioning with configurable strength and step range so that I can control how strongly and when the ControlNet influences generation.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-003-AC01",
+          "text": "`apply_controlnet(positive, negative, control_net, image, strength, start_percent, end_percent, vae=None)` returns updated `(positive, negative)` conditioning"
+        },
+        {
+          "id": "US-003-AC02",
+          "text": "`strength` defaults to `1.0`, `start_percent` defaults to `0.0`, `end_percent` defaults to `1.0`"
+        },
+        {
+          "id": "US-003-AC03",
+          "text": "`vae` is an optional parameter for pixel-space ControlNets (defaults to `None`)"
+        },
+        {
+          "id": "US-003-AC04",
+          "text": "`image` is a torch Tensor (the control image / hint map)"
+        },
+        {
+          "id": "US-003-AC05",
+          "text": "Mirrors `ControlNetApplyAdvanced` node behavior (applies to both positive and negative conditioning)"
+        },
+        {
+          "id": "US-003-AC06",
+          "text": "Lazy imports — no `torch` or `comfy.*` at module top level"
+        },
+        {
+          "id": "US-003-AC07",
+          "text": "Typecheck / lint passes"
+        }
+      ]
+    },
+    {
+      "id": "US-004",
+      "title": "Set union ControlNet type",
+      "description": "As a Python developer, I want to configure a union ControlNet model with a specific control type (e.g. openpose, depth, canny) so that I can use multi-type union ControlNet models with the correct mode.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-004-AC01",
+          "text": "`set_union_controlnet_type(control_net, type)` returns a configured ControlNet object"
+        },
+        {
+          "id": "US-004-AC02",
+          "text": "Supported types: `\"auto\"`, `\"openpose\"`, `\"depth\"`, `\"hed/pidi/scribble/ted\"`, `\"canny/lineart/anime_lineart/mlsd\"`, `\"normal\"`, `\"segment\"`, `\"tile\"`, `\"repaint\"` (sourced from `comfy.cldm.control_types.UNION_CONTROLNET_TYPES`)"
+        },
+        {
+          "id": "US-004-AC03",
+          "text": "Returns a clear error for unsupported type strings"
+        },
+        {
+          "id": "US-004-AC04",
+          "text": "Lazy imports — no `torch` or `comfy.*` at module top level"
+        },
+        {
+          "id": "US-004-AC05",
+          "text": "Typecheck / lint passes"
+        }
+      ]
+    }
+  ],
+  "functionalRequirements": [
+    {
+      "id": "FR-1",
+      "description": "All public functions live in `comfy_diffusion/controlnet.py`"
+    },
+    {
+      "id": "FR-2",
+      "description": "All functions use lazy imports (no `torch` or `comfy.*` at module top level)"
+    },
+    {
+      "id": "FR-3",
+      "description": "File path parameters use `str | Path` type annotation"
+    },
+    {
+      "id": "FR-4",
+      "description": "Functions are not auto-imported from `comfy_diffusion/__init__.py` — consumers use `from comfy_diffusion.controlnet import ...`"
+    },
+    {
+      "id": "FR-5",
+      "description": "All tests pass on CPU-only environments"
+    },
+    {
+      "id": "FR-6",
+      "description": "An example script demonstrates a ControlNet-guided generation pipeline end-to-end"
+    }
+  ]
+}

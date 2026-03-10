@@ -23,6 +23,7 @@
 | 16 | `mask` | `LoadImageMask`, `ImageToMask`, `MaskToImage`, `GrowMask`, `FeatherMask`, inpaint masks | ⬜ |
 | 17 | `model` — patches | `ModelSamplingFlux`, `ModelSamplingSD3`, `ModelSamplingAuraFlow`, video CFG guidance | ⬜ |
 | 18 | packaging | pip-installable, type stubs, DX polish, extras (`[video]`, `[audio]`, `[all]`) | ⬜ |
+| 19 | `custom-node-importer` skill | Agent skill for automated custom node onboarding: discovery → classification → PRD → implementation | ⬜ |
 
 ---
 
