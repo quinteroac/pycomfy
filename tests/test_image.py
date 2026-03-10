@@ -12,6 +12,7 @@ from PIL import Image, ImageOps, features
 import comfy_diffusion
 import comfy_diffusion.image as image_module
 from comfy_diffusion.image import (
+    grow_mask,
     image_composite_masked,
     image_from_batch,
     image_pad_for_outpaint,
@@ -212,6 +213,7 @@ def test_image_module_exports_expected_entrypoints() -> None:
         "image_from_batch",
         "repeat_image_batch",
         "image_composite_masked",
+        "grow_mask",
         "ltxv_preprocess",
     ]
 
@@ -325,6 +327,15 @@ def test_image_composite_masked_signature_matches_contract() -> None:
 
 def test_image_composite_masked_not_re_exported_from_package_root() -> None:
     assert not hasattr(comfy_diffusion, "image_composite_masked")
+
+
+def test_grow_mask_signature_matches_contract() -> None:
+    signature = inspect.signature(grow_mask)
+    assert str(signature) == "(mask: 'Any', expand: 'int', tapered_corners: 'bool') -> 'Any'"
+
+
+def test_grow_mask_not_re_exported_from_package_root() -> None:
+    assert not hasattr(comfy_diffusion, "grow_mask")
 
 
 def test_ltxv_preprocess_signature_matches_contract() -> None:
@@ -630,6 +641,77 @@ def test_image_composite_masked_mask_controls_blending(
 
     assert composited.shape == (1, 1, 1, 3)
     assert composited.tolist()[0][0][0] == expected_pixel
+
+
+@pytest.mark.parametrize(
+    ("expand", "tapered_corners", "expected_output"),
+    [
+        (2, True, [[[0.0, 1.0], [1.0, 1.0]]]),
+        (-1, False, [[[0.0, 0.0], [0.0, 0.0]]]),
+    ],
+)
+def test_grow_mask_forwards_expand_and_tapered_corners_to_comfyui_node(
+    monkeypatch: Any,
+    expand: int,
+    tapered_corners: bool,
+    expected_output: list[list[list[float]]],
+) -> None:
+    mask = _FakeTorch.tensor(
+        [[[0.0, 0.0], [0.0, 1.0]]],
+        dtype=_FakeTorch.float32,
+    )
+    calls: list[dict[str, Any]] = []
+
+    class FakeGrowMask:
+        @classmethod
+        def execute(cls, *, mask: Any, expand: int, tapered_corners: bool) -> tuple[Any]:
+            calls.append(
+                {
+                    "mask": mask,
+                    "expand": expand,
+                    "tapered_corners": tapered_corners,
+                }
+            )
+            return (_FakeTorch.tensor(expected_output, dtype=_FakeTorch.float32),)
+
+    monkeypatch.setattr(image_module, "_get_grow_mask_type", lambda: FakeGrowMask)
+
+    result = grow_mask(mask=mask, expand=expand, tapered_corners=tapered_corners)
+
+    assert calls == [
+        {
+            "mask": mask,
+            "expand": expand,
+            "tapered_corners": tapered_corners,
+        }
+    ]
+    assert result.shape == (1, 2, 2)
+    assert result.tolist() == expected_output
+
+
+def test_grow_mask_tapered_corners_affects_corner_growth(
+    monkeypatch: Any,
+) -> None:
+    mask = _FakeTorch.tensor(
+        [[[1.0, 0.0], [0.0, 0.0]]],
+        dtype=_FakeTorch.float32,
+    )
+
+    class FakeGrowMask:
+        @classmethod
+        def execute(cls, *, mask: Any, expand: int, tapered_corners: bool) -> tuple[Any]:
+            assert expand == 1
+            if tapered_corners:
+                return (_FakeTorch.tensor([[[1.0, 1.0], [1.0, 0.0]]], dtype=_FakeTorch.float32),)
+            return (_FakeTorch.tensor([[[1.0, 1.0], [1.0, 1.0]]], dtype=_FakeTorch.float32),)
+
+    monkeypatch.setattr(image_module, "_get_grow_mask_type", lambda: FakeGrowMask)
+
+    rounded = grow_mask(mask=mask, expand=1, tapered_corners=True)
+    square = grow_mask(mask=mask, expand=1, tapered_corners=False)
+
+    assert rounded.tolist()[0][1][1] == 0.0
+    assert square.tolist()[0][1][1] == 1.0
 
 
 def test_image_upscale_with_model_supports_comfyui_v3_result_output(

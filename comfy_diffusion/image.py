@@ -57,6 +57,15 @@ def _get_image_composite_masked_type() -> Any:
     return ImageCompositeMasked
 
 
+def _get_grow_mask_type() -> Any:
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    from comfy_extras.nodes_mask import GrowMask
+
+    return GrowMask
+
+
 def _get_ltxv_preprocess_dependencies() -> tuple[Any, Any]:
     from ._runtime import ensure_comfyui_on_path
 
@@ -251,6 +260,14 @@ def image_composite_masked(destination: Any, source: Any, mask: Any, x: int, y: 
     )
 
 
+def grow_mask(mask: Any, expand: int, tapered_corners: bool) -> Any:
+    """Grow or shrink a mask by pixel radius using ComfyUI's GrowMask semantics."""
+    grow_mask_type = _get_grow_mask_type()
+    return _unwrap_node_output(
+        grow_mask_type.execute(mask=mask, expand=expand, tapered_corners=tapered_corners)
+    )
+
+
 def image_to_tensor(image: PILImage.Image) -> Any:
     """Convert a PIL Image to a BHWC float32 tensor with shape (1, H, W, 3)."""
     torch = _get_torch_module()
@@ -327,5 +344,6 @@ __all__ = [
     "image_from_batch",
     "repeat_image_batch",
     "image_composite_masked",
+    "grow_mask",
     "ltxv_preprocess",
 ]
