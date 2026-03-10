@@ -13,6 +13,12 @@ def _get_load_image_dependencies() -> tuple[Any, Any, Any]:
     return Image, ImageOps, torch
 
 
+def _get_torch_module() -> Any:
+    import torch
+
+    return torch
+
+
 def _pixels_to_float_rows(image: Any, *, channels: int) -> list[list[list[float]]]:
     width, height = image.size
     pixels = image.load()
@@ -73,4 +79,48 @@ def load_image(path: str | Path) -> tuple[Any, Any]:
     return image_tensor, mask_tensor
 
 
-__all__ = ["load_image"]
+def image_pad_for_outpaint(
+    image: Any, left: int, top: int, right: int, bottom: int, feathering: int
+) -> tuple[Any, Any]:
+    """Pad an image and return a corresponding outpaint mask."""
+    if left < 0 or top < 0 or right < 0 or bottom < 0:
+        raise ValueError("left, top, right, and bottom must be non-negative integers")
+    if feathering < 0:
+        raise ValueError("feathering must be a non-negative integer")
+
+    torch = _get_torch_module()
+
+    batch, height, width, channels = image.size()
+
+    padded_image = torch.ones(
+        (batch, height + top + bottom, width + left + right, channels),
+        dtype=torch.float32,
+    ) * 0.5
+    padded_image[:, top : top + height, left : left + width, :] = image
+
+    padded_mask = torch.ones(
+        (height + top + bottom, width + left + right),
+        dtype=torch.float32,
+    )
+    inner_mask = torch.zeros((height, width), dtype=torch.float32)
+
+    if feathering > 0 and feathering * 2 < height and feathering * 2 < width:
+        for row in range(height):
+            for col in range(width):
+                distance_top = row if top != 0 else height
+                distance_bottom = height - row if bottom != 0 else height
+                distance_left = col if left != 0 else width
+                distance_right = width - col if right != 0 else width
+
+                distance = min(distance_top, distance_bottom, distance_left, distance_right)
+                if distance >= feathering:
+                    continue
+
+                blend = (feathering - distance) / feathering
+                inner_mask[row, col] = blend * blend
+
+    padded_mask[top : top + height, left : left + width] = inner_mask
+    return padded_image, padded_mask.unsqueeze(0)
+
+
+__all__ = ["load_image", "image_pad_for_outpaint"]
