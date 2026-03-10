@@ -314,9 +314,28 @@ def model_sampling_sd3(model: Any, shift: float) -> Any:
     return patched_model
 
 
+def model_sampling_aura_flow(model: Any, shift: float) -> Any:
+    """Patch a model clone with AuraFlow continuous V-prediction shift settings."""
+    ensure_comfyui_on_path()
+    import comfy.model_sampling
+
+    patched_model = model.clone()
+
+    model_sampling_type = type(
+        "ModelSamplingAdvanced",
+        (comfy.model_sampling.ModelSamplingDiscreteFlow, comfy.model_sampling.CONST),
+        {},
+    )
+    model_sampling = model_sampling_type(model.model.model_config)
+    model_sampling.set_parameters(shift=shift, multiplier=1.0)
+    patched_model.add_object_patch("model_sampling", model_sampling)
+    return patched_model
+
+
 __all__ = [
     "CheckpointResult",
     "ModelManager",
+    "model_sampling_aura_flow",
     "model_sampling_flux",
     "model_sampling_sd3",
 ]
