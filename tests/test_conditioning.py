@@ -17,9 +17,12 @@ from comfy_diffusion.conditioning import (
     conditioning_combine,
     conditioning_set_mask,
     conditioning_set_timestep_range,
+    encode_clip_vision,
     encode_prompt,
     encode_prompt_flux,
     flux_guidance,
+    wan_first_last_frame_to_video,
+    wan_image_to_video,
 )
 
 
@@ -268,9 +271,15 @@ def test_conditioning_public_api_exports_expected_entrypoints() -> None:
     assert conditioning_set_mask.__name__ == "conditioning_set_mask"
     assert conditioning_set_timestep_range.__name__ == "conditioning_set_timestep_range"
     assert flux_guidance.__name__ == "flux_guidance"
+    assert encode_clip_vision.__name__ == "encode_clip_vision"
+    assert wan_image_to_video.__name__ == "wan_image_to_video"
+    assert wan_first_last_frame_to_video.__name__ == "wan_first_last_frame_to_video"
     assert conditioning.__all__ == [
         "encode_prompt",
         "encode_prompt_flux",
+        "encode_clip_vision",
+        "wan_image_to_video",
+        "wan_first_last_frame_to_video",
         "conditioning_combine",
         "conditioning_set_mask",
         "conditioning_set_timestep_range",
