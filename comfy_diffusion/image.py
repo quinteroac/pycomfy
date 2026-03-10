@@ -289,6 +289,24 @@ def image_to_mask(image: Any, channel: str) -> Any:
     return torch.tensor(mask_values, dtype=torch.float32)
 
 
+def mask_to_image(mask: Any) -> Any:
+    """Convert a BHW float32 mask tensor to a BHWC float32 image tensor."""
+    if len(mask.shape) != 3:
+        raise ValueError("mask tensor must have shape (B, H, W)")
+
+    mask_values = mask.tolist()
+    image_values = [
+        [
+            [[float(value), float(value), float(value)] for value in row]
+            for row in batch
+        ]
+        for batch in mask_values
+    ]
+
+    torch = _get_torch_module()
+    return torch.tensor(image_values, dtype=torch.float32)
+
+
 def ltxv_preprocess(image: Any, width: int, height: int) -> Any:
     """Preprocess image batch for LTXV img2vid with center resize and node compression."""
     comfy_utils, ltxv_preprocess_type = _get_ltxv_preprocess_dependencies()
@@ -303,6 +321,7 @@ __all__ = [
     "load_image_mask",
     "image_to_tensor",
     "image_to_mask",
+    "mask_to_image",
     "image_pad_for_outpaint",
     "image_upscale_with_model",
     "image_from_batch",

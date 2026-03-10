@@ -21,6 +21,7 @@ from comfy_diffusion.image import (
     load_image,
     load_image_mask,
     ltxv_preprocess,
+    mask_to_image,
     repeat_image_batch,
 )
 
@@ -205,6 +206,7 @@ def test_image_module_exports_expected_entrypoints() -> None:
         "load_image_mask",
         "image_to_tensor",
         "image_to_mask",
+        "mask_to_image",
         "image_pad_for_outpaint",
         "image_upscale_with_model",
         "image_from_batch",
@@ -265,6 +267,11 @@ def test_image_to_mask_signature_matches_contract() -> None:
     assert str(signature) == "(image: 'Any', channel: 'str') -> 'Any'"
 
 
+def test_mask_to_image_signature_matches_contract() -> None:
+    signature = inspect.signature(mask_to_image)
+    assert str(signature) == "(mask: 'Any') -> 'Any'"
+
+
 def test_load_image_not_re_exported_from_package_root() -> None:
     assert not hasattr(comfy_diffusion, "load_image")
 
@@ -275,6 +282,10 @@ def test_load_image_mask_not_re_exported_from_package_root() -> None:
 
 def test_image_to_mask_not_re_exported_from_package_root() -> None:
     assert not hasattr(comfy_diffusion, "image_to_mask")
+
+
+def test_mask_to_image_not_re_exported_from_package_root() -> None:
+    assert not hasattr(comfy_diffusion, "mask_to_image")
 
 
 def test_image_upscale_with_model_signature_matches_contract() -> None:
@@ -827,6 +838,38 @@ def test_image_to_mask_rejects_unsupported_channel() -> None:
 
     with pytest.raises(ValueError, match="channel must be one of: red, green, blue"):
         image_to_mask(image=image, channel="alpha")
+
+
+def test_mask_to_image_replicates_mask_values_across_rgb_channels() -> None:
+    mask = _FakeTorch.tensor(
+        [
+            [[0.0, 0.25], [0.5, 1.0]],
+            [[1.0, 0.5], [0.25, 0.0]],
+        ],
+        dtype=_FakeTorch.float32,
+    )
+
+    image = mask_to_image(mask)
+
+    assert image.dtype == _FakeTorch.float32
+    assert image.shape == (2, 2, 2, 3)
+    assert image.tolist() == [
+        [
+            [[0.0, 0.0, 0.0], [0.25, 0.25, 0.25]],
+            [[0.5, 0.5, 0.5], [1.0, 1.0, 1.0]],
+        ],
+        [
+            [[1.0, 1.0, 1.0], [0.5, 0.5, 0.5]],
+            [[0.25, 0.25, 0.25], [0.0, 0.0, 0.0]],
+        ],
+    ]
+
+
+def test_mask_to_image_rejects_non_bhw_shape() -> None:
+    mask = _FakeTorch.tensor([[[[0.5]]]], dtype=_FakeTorch.float32)
+
+    with pytest.raises(ValueError, match="mask tensor must have shape \\(B, H, W\\)"):
+        mask_to_image(mask)
 
 
 def test_load_image_applies_exif_orientation(tmp_path: Path) -> None:
