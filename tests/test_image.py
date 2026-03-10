@@ -11,7 +11,13 @@ from PIL import Image, ImageOps, features
 
 import comfy_diffusion
 import comfy_diffusion.image as image_module
-from comfy_diffusion.image import image_pad_for_outpaint, image_upscale_with_model, load_image
+from comfy_diffusion.image import (
+    image_from_batch,
+    image_pad_for_outpaint,
+    image_upscale_with_model,
+    load_image,
+    repeat_image_batch,
+)
 
 
 class _FakeTensor:
@@ -193,6 +199,8 @@ def test_image_module_exports_expected_entrypoints() -> None:
         "load_image",
         "image_pad_for_outpaint",
         "image_upscale_with_model",
+        "image_from_batch",
+        "repeat_image_batch",
     ]
 
 
@@ -212,6 +220,24 @@ def test_image_upscale_with_model_signature_matches_contract() -> None:
 
 def test_image_upscale_with_model_not_re_exported_from_package_root() -> None:
     assert not hasattr(comfy_diffusion, "image_upscale_with_model")
+
+
+def test_image_from_batch_signature_matches_contract() -> None:
+    signature = inspect.signature(image_from_batch)
+    assert str(signature) == "(image: 'Any', batch_index: 'int', length: 'int' = 1) -> 'Any'"
+
+
+def test_image_from_batch_not_re_exported_from_package_root() -> None:
+    assert not hasattr(comfy_diffusion, "image_from_batch")
+
+
+def test_repeat_image_batch_signature_matches_contract() -> None:
+    signature = inspect.signature(repeat_image_batch)
+    assert str(signature) == "(image: 'Any', amount: 'int') -> 'Any'"
+
+
+def test_repeat_image_batch_not_re_exported_from_package_root() -> None:
+    assert not hasattr(comfy_diffusion, "repeat_image_batch")
 
 
 def test_image_upscale_with_model_wraps_comfyui_node_and_returns_bhwc_tensor(
@@ -237,6 +263,79 @@ def test_image_upscale_with_model_wraps_comfyui_node_and_returns_bhwc_tensor(
     upscaled = image_upscale_with_model(upscale_model, image)
 
     assert upscaled is expected_upscaled
+
+
+def test_image_from_batch_extracts_contiguous_slice_and_returns_bhwc_tensor(
+    monkeypatch: Any,
+) -> None:
+    image = _FakeTorch.tensor(
+        [
+            [[[0.1, 0.0, 0.0]]],
+            [[[0.2, 0.0, 0.0]]],
+            [[[0.3, 0.0, 0.0]]],
+            [[[0.4, 0.0, 0.0]]],
+        ],
+        dtype=_FakeTorch.float32,
+    )
+
+    class FakeImageFromBatch:
+        @classmethod
+        def execute(cls, *, image: Any, batch_index: int, length: int) -> tuple[Any]:
+            assert image.shape == (4, 1, 1, 3)
+            assert batch_index == 1
+            assert length == 2
+            sliced_values = image.tolist()[batch_index : batch_index + length]
+            return (_FakeTorch.tensor(sliced_values, dtype=_FakeTorch.float32),)
+
+    monkeypatch.setattr(
+        image_module,
+        "_get_image_from_batch_type",
+        lambda: FakeImageFromBatch,
+    )
+
+    sliced = image_from_batch(image=image, batch_index=1, length=2)
+
+    assert isinstance(sliced, _FakeTensor)
+    assert sliced.shape == (2, 1, 1, 3)
+    assert sliced.tolist() == [
+        [[[0.2, 0.0, 0.0]]],
+        [[[0.3, 0.0, 0.0]]],
+    ]
+
+
+def test_repeat_image_batch_repeats_batch_dimension_and_returns_bhwc_tensor(
+    monkeypatch: Any,
+) -> None:
+    image = _FakeTorch.tensor(
+        [
+            [[[0.1, 0.0, 0.0], [0.2, 0.0, 0.0]]],
+            [[[0.3, 0.0, 0.0], [0.4, 0.0, 0.0]]],
+        ],
+        dtype=_FakeTorch.float32,
+    )
+
+    class FakeRepeatImageBatch:
+        @classmethod
+        def execute(cls, *, image: Any, amount: int) -> tuple[Any]:
+            assert image.shape == (2, 1, 2, 3)
+            assert amount == 3
+            source = image.tolist()
+            repeated: list[Any] = []
+            for _ in range(amount):
+                repeated.extend(source)
+            return (_FakeTorch.tensor(repeated, dtype=_FakeTorch.float32),)
+
+    monkeypatch.setattr(
+        image_module,
+        "_get_repeat_image_batch_type",
+        lambda: FakeRepeatImageBatch,
+    )
+
+    repeated = repeat_image_batch(image=image, amount=3)
+
+    assert isinstance(repeated, _FakeTensor)
+    assert repeated.shape == (6, 1, 2, 3)
+    assert repeated.tolist() == image.tolist() * 3
 
 
 def test_image_upscale_with_model_supports_comfyui_v3_result_output(

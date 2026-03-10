@@ -28,6 +28,24 @@ def _get_image_upscale_with_model_type() -> Any:
     return ImageUpscaleWithModel
 
 
+def _get_repeat_image_batch_type() -> Any:
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    from comfy_extras.nodes_images import RepeatImageBatch
+
+    return RepeatImageBatch
+
+
+def _get_image_from_batch_type() -> Any:
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    from comfy_extras.nodes_images import ImageFromBatch
+
+    return ImageFromBatch
+
+
 def _unwrap_node_output(output: Any) -> Any:
     result = getattr(output, "result", output)
     return result[0]
@@ -143,4 +161,24 @@ def image_upscale_with_model(upscale_model: Any, image: Any) -> Any:
     return _unwrap_node_output(image_upscale_with_model_type.execute(upscale_model, image))
 
 
-__all__ = ["load_image", "image_pad_for_outpaint", "image_upscale_with_model"]
+def image_from_batch(image: Any, batch_index: int, length: int = 1) -> Any:
+    """Extract a contiguous subset from the image batch dimension."""
+    image_from_batch_type = _get_image_from_batch_type()
+    return _unwrap_node_output(
+        image_from_batch_type.execute(image=image, batch_index=batch_index, length=length)
+    )
+
+
+def repeat_image_batch(image: Any, amount: int) -> Any:
+    """Repeat image tensors along the batch dimension."""
+    repeat_image_batch_type = _get_repeat_image_batch_type()
+    return _unwrap_node_output(repeat_image_batch_type.execute(image=image, amount=amount))
+
+
+__all__ = [
+    "load_image",
+    "image_pad_for_outpaint",
+    "image_upscale_with_model",
+    "image_from_batch",
+    "repeat_image_batch",
+]
