@@ -16,6 +16,12 @@ class _VaeEncoder(Protocol):
     def encode(self, pixel_samples: Any) -> Any: ...
 
 
+class _VaeEncoderForInpaint(Protocol):
+    def spacial_compression_encode(self) -> int: ...
+
+    def encode(self, pixel_samples: Any) -> Any: ...
+
+
 class _VaeEncoderTiled(Protocol):
     def encode_tiled(
         self,
@@ -227,8 +233,9 @@ def vae_decode_batch_tiled(
     result: list[Image.Image] = []
     for index in range(samples.shape[0]):
         frame_samples = samples[index : index + 1]
-        # Video VAEs in ComfyUI (e.g. Wan) expect 5D in memory_used_decode; passing 4D causes IndexError.
-        # Pass (1, C, 1, H, W) so decode_tiled receives 5D and can estimate memory and run decode_tiled_3d.
+        # Video VAEs in ComfyUI (e.g. Wan) expect 5D in memory_used_decode;
+        # passing 4D causes IndexError. Pass (1, C, 1, H, W) so decode_tiled
+        # receives 5D and can estimate memory and run decode_tiled_3d.
         if was_5d and hasattr(frame_samples, "unsqueeze"):
             # frame_samples: (1, C, H, W) -> (1, C, 1, H, W)
             frame_samples = frame_samples.unsqueeze(2)
@@ -286,6 +293,29 @@ def _image_to_tensor_like(image: Image.Image) -> Any:
     return torch.tensor(batched_hwc, dtype=torch.float32)
 
 
+def _mask_to_tensor(mask: Any) -> Any:
+    if isinstance(mask, Image.Image):
+        width, height = mask.size
+        grayscale = mask.convert("L")
+        pixels = grayscale.load()
+        if pixels is None:
+            raise ValueError("unable to access mask pixels")
+
+        rows: list[list[float]] = []
+        for y in range(height):
+            row: list[float] = []
+            for x in range(width):
+                value = cast(int, pixels[x, y])
+                row.append(value / 255.0)
+            rows.append(row)
+
+        import torch
+
+        return torch.tensor(rows, dtype=torch.float32)
+
+    return mask
+
+
 def _images_to_tensor_like(images: list[Image.Image]) -> Any:
     stacked_hwc: list[list[list[list[float]]]] = []
     for image in images:
@@ -304,12 +334,14 @@ def _concat_batch_tensors(samples_list: list[Any]) -> Any:
         raise ValueError("samples_list must not be empty")
 
     try:
-        import torch
+        import torch as torch_module
     except ModuleNotFoundError:
-        torch = None  # type: ignore[assignment]
+        torch_module = None
 
-    if torch is not None and all(isinstance(samples, torch.Tensor) for samples in samples_list):
-        return torch.cat(samples_list, dim=0)
+    if torch_module is not None and all(
+        isinstance(samples, torch_module.Tensor) for samples in samples_list
+    ):
+        return torch_module.cat(samples_list, dim=0)
 
     stacked_samples: list[Any] = []
     for samples in samples_list:
@@ -325,6 +357,68 @@ def vae_encode(vae: _VaeEncoder, image: Image.Image) -> dict[str, Any]:
     pixel_samples = _image_to_tensor_like(image)
     samples = vae.encode(pixel_samples)
     return {"samples": samples}
+
+
+def vae_encode_for_inpaint(
+    vae: _VaeEncoderForInpaint,
+    image: Image.Image,
+    mask: Any,
+    grow_mask_by: int = 6,
+) -> dict[str, Any]:
+    """Encode an inpaint latent and attach a noise mask."""
+    import torch
+
+    pixels = _image_to_tensor_like(image)
+    if not isinstance(pixels, torch.Tensor):
+        raise TypeError("vae_encode_for_inpaint requires torch to be installed")
+
+    normalized_mask = _mask_to_tensor(mask)
+    if not isinstance(normalized_mask, torch.Tensor):
+        raise TypeError("mask must be a PIL image or torch.Tensor")
+
+    downscale_ratio = vae.spacial_compression_encode()
+    x = (pixels.shape[1] // downscale_ratio) * downscale_ratio
+    y = (pixels.shape[2] // downscale_ratio) * downscale_ratio
+
+    resized_mask = torch.nn.functional.interpolate(
+        normalized_mask.reshape((-1, 1, normalized_mask.shape[-2], normalized_mask.shape[-1])),
+        size=(pixels.shape[1], pixels.shape[2]),
+        mode="bilinear",
+    )
+
+    masked_pixels = pixels.clone()
+    if masked_pixels.shape[1] != x or masked_pixels.shape[2] != y:
+        x_offset = (masked_pixels.shape[1] % downscale_ratio) // 2
+        y_offset = (masked_pixels.shape[2] % downscale_ratio) // 2
+        masked_pixels = masked_pixels[:, x_offset : x + x_offset, y_offset : y + y_offset, :]
+        resized_mask = resized_mask[:, :, x_offset : x + x_offset, y_offset : y + y_offset]
+
+    if grow_mask_by == 0:
+        mask_erosion = resized_mask
+    else:
+        kernel_tensor = torch.ones(
+            (1, 1, grow_mask_by, grow_mask_by),
+            dtype=resized_mask.dtype,
+            device=resized_mask.device,
+        )
+        mask_erosion = torch.clamp(
+            torch.nn.functional.conv2d(
+                resized_mask.round(),
+                kernel_tensor,
+                padding=grow_mask_by // 2,
+            ),
+            0,
+            1,
+        )
+
+    inverse_mask = (1.0 - resized_mask.round()).squeeze(1)
+    for channel in range(3):
+        masked_pixels[:, :, :, channel] -= 0.5
+        masked_pixels[:, :, :, channel] *= inverse_mask
+        masked_pixels[:, :, :, channel] += 0.5
+
+    samples = vae.encode(masked_pixels)
+    return {"samples": samples, "noise_mask": mask_erosion[:, :, :x, :y].round()}
 
 
 def vae_encode_batch(vae: _VaeEncoder, images: list[Image.Image]) -> dict[str, Any]:
@@ -372,7 +466,12 @@ def vae_encode_batch_tiled(
     samples_list: list[Any] = []
     for image in images:
         pixel_samples = _image_to_tensor_like(image)
-        samples = vae.encode_tiled(pixel_samples, tile_x=tile_size, tile_y=tile_size, overlap=overlap)
+        samples = vae.encode_tiled(
+            pixel_samples,
+            tile_x=tile_size,
+            tile_y=tile_size,
+            overlap=overlap,
+        )
         samples_list.append(samples)
 
     return {"samples": _concat_batch_tensors(samples_list)}
@@ -384,6 +483,7 @@ __all__ = [
     "vae_decode_batch",
     "vae_decode_batch_tiled",
     "vae_encode",
+    "vae_encode_for_inpaint",
     "vae_encode_batch",
     "vae_encode_tiled",
     "vae_encode_batch_tiled",
