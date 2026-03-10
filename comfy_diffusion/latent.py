@@ -67,6 +67,13 @@ def _get_latent_composite_masked_type() -> Any:
     return LatentCompositeMasked
 
 
+def _get_torch_tensor_type() -> Any:
+    """Resolve torch.Tensor at call time."""
+    import torch
+
+    return torch.Tensor
+
+
 def _unwrap_node_output(output: Any) -> Any:
     """Return first output for ComfyUI V3 nodes and tuple-style APIs."""
     if hasattr(output, "result"):
@@ -183,6 +190,17 @@ def latent_composite_masked(
     )
 
 
+def set_latent_noise_mask(latent: dict[str, Any], mask: Any) -> dict[str, Any]:
+    """Return a LATENT dict with noise mask metadata for inpainting sampling."""
+    torch_tensor_type = _get_torch_tensor_type()
+    if not isinstance(mask, torch_tensor_type):
+        raise TypeError("mask must be a torch.Tensor")
+
+    latent_with_noise_mask = dict(latent)
+    latent_with_noise_mask["noise_mask"] = mask
+    return latent_with_noise_mask
+
+
 __all__ = [
     "empty_latent_image",
     "latent_upscale",
@@ -190,4 +208,5 @@ __all__ = [
     "latent_crop",
     "latent_composite",
     "latent_composite_masked",
+    "set_latent_noise_mask",
 ]

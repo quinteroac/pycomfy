@@ -21,6 +21,7 @@ from comfy_diffusion.latent import (
     latent_crop,
     latent_upscale,
     latent_upscale_by,
+    set_latent_noise_mask,
 )
 from comfy_diffusion.sampling import sample
 
@@ -53,6 +54,7 @@ def test_latent_module_exports_empty_latent_image() -> None:
         "latent_crop",
         "latent_composite",
         "latent_composite_masked",
+        "set_latent_noise_mask",
     ]
 
 
@@ -100,6 +102,11 @@ def test_latent_composite_masked_signature_matches_contract() -> None:
         "(destination: 'dict[str, Any]', source: 'dict[str, Any]', mask: 'Any', "
         "x: 'int' = 0, y: 'int' = 0) -> 'dict[str, Any]'"
     )
+
+
+def test_set_latent_noise_mask_signature_matches_contract() -> None:
+    signature = inspect.signature(set_latent_noise_mask)
+    assert str(signature) == "(latent: 'dict[str, Any]', mask: 'Any') -> 'dict[str, Any]'"
 
 
 def test_empty_latent_image_returns_latent_dict_compatible_with_sample(
@@ -453,3 +460,57 @@ def test_latent_composite_masked_uses_default_coordinates(
 
     assert output["samples"] is not None
     assert calls == [(0, 0)]
+
+
+def test_set_latent_noise_mask_returns_sample_compatible_latent_dict(
+    monkeypatch: Any,
+) -> None:
+    class FakeTensor:
+        pass
+
+    latent = {"samples": object(), "batch_index": [0]}
+    mask = FakeTensor()
+
+    def fake_common_ksampler(
+        model: Any,
+        seed: int,
+        steps: Any,
+        cfg: Any,
+        sampler_name: str,
+        scheduler: str,
+        positive: Any,
+        negative: Any,
+        latent: Any,
+        denoise: float = 1.0,
+    ) -> tuple[dict[str, Any]]:
+        return (latent,)
+
+    monkeypatch.setattr(latent_module, "_get_torch_tensor_type", lambda: FakeTensor)
+    monkeypatch.setattr(sampling_module, "_get_common_ksampler", lambda: fake_common_ksampler)
+
+    masked_latent = set_latent_noise_mask(latent=latent, mask=mask)
+    denoised = sample(
+        model=object(),
+        positive=object(),
+        negative=object(),
+        latent=masked_latent,
+        steps=20,
+        cfg=7.0,
+        sampler_name="euler",
+        scheduler="normal",
+        seed=123,
+    )
+
+    assert masked_latent["noise_mask"] is mask
+    assert denoised is masked_latent
+    assert "noise_mask" not in latent
+
+
+def test_set_latent_noise_mask_rejects_non_tensor_mask(monkeypatch: Any) -> None:
+    class FakeTensor:
+        pass
+
+    monkeypatch.setattr(latent_module, "_get_torch_tensor_type", lambda: FakeTensor)
+
+    with pytest.raises(TypeError, match="mask must be a torch.Tensor"):
+        set_latent_noise_mask(latent={"samples": object()}, mask=object())
