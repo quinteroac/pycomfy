@@ -47,6 +47,26 @@ def _get_latent_crop_type() -> Any:
     return nodes.LatentCrop
 
 
+def _get_latent_from_batch_type() -> Any:
+    """Resolve ComfyUI LatentFromBatch node at call time."""
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    import nodes
+
+    return nodes.LatentFromBatch
+
+
+def _get_repeat_latent_batch_type() -> Any:
+    """Resolve ComfyUI RepeatLatentBatch node at call time."""
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    import nodes
+
+    return nodes.RepeatLatentBatch
+
+
 def _get_latent_composite_type() -> Any:
     """Resolve ComfyUI LatentComposite node at call time."""
     from ._runtime import ensure_comfyui_on_path
@@ -151,6 +171,32 @@ def latent_crop(
     )
 
 
+def latent_from_batch(
+    latent: dict[str, Any], batch_index: int, length: int = 1
+) -> dict[str, Any]:
+    """Extract a contiguous subset from the latent batch dimension."""
+    latent_from_batch_type = _get_latent_from_batch_type()
+    return cast(
+        dict[str, Any],
+        _unwrap_node_output(
+            latent_from_batch_type().frombatch(
+                samples=latent,
+                batch_index=batch_index,
+                length=length,
+            )
+        ),
+    )
+
+
+def repeat_latent_batch(latent: dict[str, Any], amount: int) -> dict[str, Any]:
+    """Repeat latent samples along the batch dimension."""
+    repeat_latent_batch_type = _get_repeat_latent_batch_type()
+    return cast(
+        dict[str, Any],
+        _unwrap_node_output(repeat_latent_batch_type().repeat(samples=latent, amount=amount)),
+    )
+
+
 def latent_composite(
     destination: dict[str, Any], source: dict[str, Any], x: int, y: int
 ) -> dict[str, Any]:
@@ -203,6 +249,8 @@ def set_latent_noise_mask(latent: dict[str, Any], mask: Any) -> dict[str, Any]:
 
 __all__ = [
     "empty_latent_image",
+    "latent_from_batch",
+    "repeat_latent_batch",
     "latent_upscale",
     "latent_upscale_by",
     "latent_crop",

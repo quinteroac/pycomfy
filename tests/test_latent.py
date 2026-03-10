@@ -19,8 +19,10 @@ from comfy_diffusion.latent import (
     latent_composite,
     latent_composite_masked,
     latent_crop,
+    latent_from_batch,
     latent_upscale,
     latent_upscale_by,
+    repeat_latent_batch,
     set_latent_noise_mask,
 )
 from comfy_diffusion.sampling import sample
@@ -49,6 +51,8 @@ def _run_python(code: str) -> subprocess.CompletedProcess[str]:
 def test_latent_module_exports_empty_latent_image() -> None:
     assert latent_module.__all__ == [
         "empty_latent_image",
+        "latent_from_batch",
+        "repeat_latent_batch",
         "latent_upscale",
         "latent_upscale_by",
         "latent_crop",
@@ -86,6 +90,19 @@ def test_latent_crop_signature_matches_contract() -> None:
         "(latent: 'dict[str, Any]', x: 'int', y: 'int', width: 'int', "
         "height: 'int') -> 'dict[str, Any]'"
     )
+
+
+def test_latent_from_batch_signature_matches_contract() -> None:
+    signature = inspect.signature(latent_from_batch)
+    assert str(signature) == (
+        "(latent: 'dict[str, Any]', batch_index: 'int', length: 'int' = 1) "
+        "-> 'dict[str, Any]'"
+    )
+
+
+def test_repeat_latent_batch_signature_matches_contract() -> None:
+    signature = inspect.signature(repeat_latent_batch)
+    assert str(signature) == "(latent: 'dict[str, Any]', amount: 'int') -> 'dict[str, Any]'"
 
 
 def test_latent_composite_signature_matches_contract() -> None:
@@ -362,6 +379,119 @@ def test_latent_crop_returns_cropped_latent_dict_and_uses_pixel_space_inputs(
 
     assert output is expected
     assert calls == [(latent, 256, 320, 24, 40)]
+
+
+def test_latent_from_batch_extracts_contiguous_slice_and_is_sample_compatible(
+    monkeypatch: Any,
+) -> None:
+    latent = {"samples": ["f0", "f1", "f2", "f3"], "batch_index": [0, 1, 2, 3]}
+
+    class FakeLatentFromBatch:
+        calls: list[tuple[dict[str, Any], int, int]] = []
+
+        def frombatch(
+            self,
+            samples: dict[str, Any],
+            batch_index: int,
+            length: int,
+        ) -> tuple[dict[str, Any]]:
+            self.calls.append((samples, batch_index, length))
+            return (
+                {
+                    "samples": samples["samples"][batch_index : batch_index + length],
+                    "batch_index": samples["batch_index"][batch_index : batch_index + length],
+                },
+            )
+
+    def fake_common_ksampler(
+        model: Any,
+        seed: int,
+        steps: Any,
+        cfg: Any,
+        sampler_name: str,
+        scheduler: str,
+        positive: Any,
+        negative: Any,
+        latent: Any,
+        denoise: float = 1.0,
+    ) -> tuple[dict[str, Any]]:
+        return (latent,)
+
+    monkeypatch.setattr(latent_module, "_get_latent_from_batch_type", lambda: FakeLatentFromBatch)
+    monkeypatch.setattr(sampling_module, "_get_common_ksampler", lambda: fake_common_ksampler)
+
+    sliced_latent = latent_from_batch(latent=latent, batch_index=1, length=2)
+    denoised = sample(
+        model=object(),
+        positive=object(),
+        negative=object(),
+        latent=sliced_latent,
+        steps=20,
+        cfg=7.0,
+        sampler_name="euler",
+        scheduler="normal",
+        seed=123,
+    )
+
+    assert sliced_latent["samples"] == ["f1", "f2"]
+    assert sliced_latent["batch_index"] == [1, 2]
+    assert denoised is sliced_latent
+    assert FakeLatentFromBatch.calls == [(latent, 1, 2)]
+
+
+def test_repeat_latent_batch_repeats_batch_and_is_sample_compatible(monkeypatch: Any) -> None:
+    latent = {"samples": ["f0", "f1"], "batch_index": [0, 1]}
+
+    class FakeRepeatLatentBatch:
+        calls: list[tuple[dict[str, Any], int]] = []
+
+        def repeat(self, samples: dict[str, Any], amount: int) -> tuple[dict[str, Any]]:
+            self.calls.append((samples, amount))
+            return (
+                {
+                    "samples": samples["samples"] * amount,
+                    "batch_index": [0, 1, 2, 3, 4, 5],
+                },
+            )
+
+    def fake_common_ksampler(
+        model: Any,
+        seed: int,
+        steps: Any,
+        cfg: Any,
+        sampler_name: str,
+        scheduler: str,
+        positive: Any,
+        negative: Any,
+        latent: Any,
+        denoise: float = 1.0,
+    ) -> tuple[dict[str, Any]]:
+        return (latent,)
+
+    monkeypatch.setattr(
+        latent_module,
+        "_get_repeat_latent_batch_type",
+        lambda: FakeRepeatLatentBatch,
+    )
+    monkeypatch.setattr(sampling_module, "_get_common_ksampler", lambda: fake_common_ksampler)
+
+    repeated_latent = repeat_latent_batch(latent=latent, amount=3)
+    denoised = sample(
+        model=object(),
+        positive=object(),
+        negative=object(),
+        latent=repeated_latent,
+        steps=20,
+        cfg=7.0,
+        sampler_name="euler",
+        scheduler="normal",
+        seed=42,
+    )
+
+    assert repeated_latent["samples"] == ["f0", "f1", "f0", "f1", "f0", "f1"]
+    assert repeated_latent["batch_index"] == [0, 1, 2, 3, 4, 5]
+    assert denoised is repeated_latent
+    assert FakeRepeatLatentBatch.calls == [(latent, 3)]
 
 
 def test_latent_composite_returns_new_latent_with_source_positioned_using_pixel_coordinates(
