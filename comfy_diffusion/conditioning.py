@@ -34,6 +34,22 @@ class _VaeEncoder(Protocol):
     def encode(self, image: Any) -> Any: ...
 
 
+class _LtxvVaeEncoder(Protocol):
+    def encode(self, image: Any) -> Any: ...
+
+
+def _get_ltxv_conditioning_dependencies() -> tuple[Any, Any, Any, Any]:
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    import comfy.model_management
+    import comfy.utils
+    import node_helpers
+    import torch
+
+    return torch, comfy.model_management, comfy.utils, node_helpers
+
+
 def _get_wan_conditioning_dependencies() -> tuple[Any, Any, Any, Any]:
     from ._runtime import ensure_comfyui_on_path
 
@@ -221,6 +237,59 @@ def wan_first_last_frame_to_video(
     return positive, negative, {"samples": latent}
 
 
+def ltxv_img_to_video(
+    positive: Any,
+    negative: Any,
+    image: Any,
+    vae: _LtxvVaeEncoder,
+    width: int = 768,
+    height: int = 512,
+    length: int = 97,
+    batch_size: int = 1,
+    strength: float = 1.0,
+) -> tuple[Any, Any, dict[str, Any]]:
+    """Build LTXV image-to-video conditioning and latent with frame noise mask."""
+    torch, model_management, comfy_utils, _ = _get_ltxv_conditioning_dependencies()
+
+    pixels = comfy_utils.common_upscale(
+        image.movedim(-1, 1), width, height, "bilinear", "center"
+    ).movedim(1, -1)
+    latent_conditioning = vae.encode(pixels[:, :, :, :3])
+
+    latent = torch.zeros(
+        [batch_size, 128, ((length - 1) // 8) + 1, height // 32, width // 32],
+        device=model_management.intermediate_device(),
+    )
+    latent[:, :, : latent_conditioning.shape[2]] = latent_conditioning
+
+    conditioning_latent_frames_mask = torch.ones(
+        (batch_size, 1, latent.shape[2], 1, 1),
+        dtype=torch.float32,
+        device=latent.device,
+    )
+    conditioning_latent_frames_mask[:, :, : latent_conditioning.shape[2]] = 1.0 - strength
+
+    latent_with_noise_mask = {
+        "samples": latent,
+        "noise_mask": conditioning_latent_frames_mask,
+    }
+    return positive, negative, latent_with_noise_mask
+
+
+def ltxv_conditioning(
+    positive: Any,
+    negative: Any,
+    frame_rate: float = 25.0,
+) -> tuple[Any, Any]:
+    """Inject frame rate metadata into LTXV positive and negative conditioning."""
+    _, _, _, node_helpers = _get_ltxv_conditioning_dependencies()
+    values = {"frame_rate": frame_rate}
+    return (
+        node_helpers.conditioning_set_values(positive, values),
+        node_helpers.conditioning_set_values(negative, values),
+    )
+
+
 def conditioning_combine(
     cond_a: Any,
     cond_b: Any | None = None,
@@ -325,6 +394,8 @@ __all__ = [
     "encode_clip_vision",
     "wan_image_to_video",
     "wan_first_last_frame_to_video",
+    "ltxv_img_to_video",
+    "ltxv_conditioning",
     "conditioning_combine",
     "conditioning_set_mask",
     "conditioning_set_timestep_range",
