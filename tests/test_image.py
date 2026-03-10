@@ -18,6 +18,7 @@ from comfy_diffusion.image import (
     image_to_tensor,
     image_upscale_with_model,
     load_image,
+    load_image_mask,
     ltxv_preprocess,
     repeat_image_batch,
 )
@@ -200,6 +201,7 @@ def _fake_torch_dependency(monkeypatch: Any) -> None:
 def test_image_module_exports_expected_entrypoints() -> None:
     assert image_module.__all__ == [
         "load_image",
+        "load_image_mask",
         "image_to_tensor",
         "image_pad_for_outpaint",
         "image_upscale_with_model",
@@ -251,8 +253,17 @@ def test_load_image_signature_matches_contract() -> None:
     assert str(signature) == "(path: 'str | Path') -> 'tuple[Any, Any]'"
 
 
+def test_load_image_mask_signature_matches_contract() -> None:
+    signature = inspect.signature(load_image_mask)
+    assert str(signature) == "(path: 'str | Path', channel: 'str') -> 'Any'"
+
+
 def test_load_image_not_re_exported_from_package_root() -> None:
     assert not hasattr(comfy_diffusion, "load_image")
+
+
+def test_load_image_mask_not_re_exported_from_package_root() -> None:
+    assert not hasattr(comfy_diffusion, "load_image_mask")
 
 
 def test_image_upscale_with_model_signature_matches_contract() -> None:
@@ -687,6 +698,90 @@ def test_load_image_without_alpha_returns_fully_opaque_zero_mask(tmp_path: Path)
         [0.0, 0.0],
         [0.0, 0.0],
     ]
+
+
+def test_load_image_mask_alpha_returns_comfyui_mask_convention(tmp_path: Path) -> None:
+    image_path = tmp_path / "alpha_mask.png"
+    source = Image.new("RGBA", (2, 2))
+    source.putdata(
+        [
+            (100, 50, 25, 255),  # opaque -> 0.0
+            (100, 50, 25, 128),  # partial -> (255 - 128) / 255
+            (100, 50, 25, 0),    # transparent -> 1.0
+            (100, 50, 25, 64),   # partial -> (255 - 64) / 255
+        ]
+    )
+    source.save(image_path, format="PNG")
+
+    mask_tensor = load_image_mask(image_path, channel="alpha")
+
+    assert mask_tensor.dtype == _FakeTorch.float32
+    assert mask_tensor.shape == (1, 2, 2)
+    assert mask_tensor.tolist() == [
+        [
+            [0.0, 127 / 255.0],
+            [1.0, 191 / 255.0],
+        ]
+    ]
+    assert all(0.0 <= value <= 1.0 for value in _flatten(mask_tensor.tolist()))
+
+
+@pytest.mark.parametrize(
+    ("channel", "expected"),
+    [
+        ("red", [[[1.0, 0.0], [64 / 255.0, 1.0]]]),
+        ("green", [[[0.0, 1.0], [128 / 255.0, 1.0]]]),
+        ("blue", [[[0.0, 0.0], [1.0, 1.0]]]),
+    ],
+)
+def test_load_image_mask_color_channels_map_0_255_to_0_1(
+    tmp_path: Path,
+    channel: str,
+    expected: list[list[list[float]]],
+) -> None:
+    image_path = tmp_path / "color_mask.png"
+    source = Image.new("RGB", (2, 2))
+    source.putdata(
+        [
+            (255, 0, 0),
+            (0, 255, 0),
+            (64, 128, 255),
+            (255, 255, 255),
+        ]
+    )
+    source.save(image_path, format="PNG")
+
+    mask_tensor = load_image_mask(image_path, channel=channel)
+
+    assert mask_tensor.dtype == _FakeTorch.float32
+    assert mask_tensor.shape == (1, 2, 2)
+    assert mask_tensor.tolist() == expected
+    assert all(0.0 <= value <= 1.0 for value in _flatten(mask_tensor.tolist()))
+
+
+@pytest.mark.parametrize("channel", ["alpha", "red", "green", "blue"])
+def test_load_image_mask_supports_expected_channels(tmp_path: Path, channel: str) -> None:
+    image_path = tmp_path / "channels.png"
+    Image.new("RGBA", (1, 1), color=(16, 32, 64, 128)).save(image_path, format="PNG")
+
+    mask_tensor = load_image_mask(image_path, channel=channel)
+
+    assert mask_tensor.shape == (1, 1, 1)
+
+
+def test_load_image_mask_rejects_unsupported_channel(tmp_path: Path) -> None:
+    image_path = tmp_path / "sample.png"
+    Image.new("RGB", (1, 1), color=(0, 0, 0)).save(image_path, format="PNG")
+
+    with pytest.raises(ValueError, match="channel must be one of: alpha, red, green, blue"):
+        load_image_mask(image_path, channel="luma")
+
+
+def test_load_image_mask_raises_file_not_found_for_missing_path(tmp_path: Path) -> None:
+    missing_path = tmp_path / "missing.png"
+
+    with pytest.raises(FileNotFoundError):
+        load_image_mask(missing_path, channel="alpha")
 
 
 def test_load_image_applies_exif_orientation(tmp_path: Path) -> None:
