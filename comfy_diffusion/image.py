@@ -259,6 +259,36 @@ def image_to_tensor(image: PILImage.Image) -> Any:
     return torch.tensor([rows], dtype=torch.float32)
 
 
+def image_to_mask(image: Any, channel: str) -> Any:
+    """Convert a BHWC image tensor to a BHW float32 mask tensor by channel."""
+    channel_indices = {
+        "red": 0,
+        "green": 1,
+        "blue": 2,
+    }
+    if channel not in channel_indices:
+        raise ValueError("channel must be one of: red, green, blue")
+
+    values = image.tolist()
+    if len(image.shape) != 4:
+        raise ValueError("image tensor must have shape (B, H, W, C)")
+
+    channel_index = channel_indices[channel]
+    if image.shape[3] <= channel_index:
+        raise ValueError("image tensor channel dimension must be at least 3")
+
+    mask_values = [
+        [
+            [float(pixel[channel_index]) for pixel in row]
+            for row in batch
+        ]
+        for batch in values
+    ]
+
+    torch = _get_torch_module()
+    return torch.tensor(mask_values, dtype=torch.float32)
+
+
 def ltxv_preprocess(image: Any, width: int, height: int) -> Any:
     """Preprocess image batch for LTXV img2vid with center resize and node compression."""
     comfy_utils, ltxv_preprocess_type = _get_ltxv_preprocess_dependencies()
@@ -272,6 +302,7 @@ __all__ = [
     "load_image",
     "load_image_mask",
     "image_to_tensor",
+    "image_to_mask",
     "image_pad_for_outpaint",
     "image_upscale_with_model",
     "image_from_batch",

@@ -15,6 +15,7 @@ from comfy_diffusion.image import (
     image_composite_masked,
     image_from_batch,
     image_pad_for_outpaint,
+    image_to_mask,
     image_to_tensor,
     image_upscale_with_model,
     load_image,
@@ -203,6 +204,7 @@ def test_image_module_exports_expected_entrypoints() -> None:
         "load_image",
         "load_image_mask",
         "image_to_tensor",
+        "image_to_mask",
         "image_pad_for_outpaint",
         "image_upscale_with_model",
         "image_from_batch",
@@ -258,12 +260,21 @@ def test_load_image_mask_signature_matches_contract() -> None:
     assert str(signature) == "(path: 'str | Path', channel: 'str') -> 'Any'"
 
 
+def test_image_to_mask_signature_matches_contract() -> None:
+    signature = inspect.signature(image_to_mask)
+    assert str(signature) == "(image: 'Any', channel: 'str') -> 'Any'"
+
+
 def test_load_image_not_re_exported_from_package_root() -> None:
     assert not hasattr(comfy_diffusion, "load_image")
 
 
 def test_load_image_mask_not_re_exported_from_package_root() -> None:
     assert not hasattr(comfy_diffusion, "load_image_mask")
+
+
+def test_image_to_mask_not_re_exported_from_package_root() -> None:
+    assert not hasattr(comfy_diffusion, "image_to_mask")
 
 
 def test_image_upscale_with_model_signature_matches_contract() -> None:
@@ -782,6 +793,40 @@ def test_load_image_mask_raises_file_not_found_for_missing_path(tmp_path: Path) 
 
     with pytest.raises(FileNotFoundError):
         load_image_mask(missing_path, channel="alpha")
+
+
+@pytest.mark.parametrize(
+    ("channel", "expected"),
+    [
+        ("red", [[[1.0, 0.1]], [[0.5, 0.0]]]),
+        ("green", [[[0.0, 0.2]], [[0.6, 0.0]]]),
+        ("blue", [[[0.4, 0.3]], [[0.7, 1.0]]]),
+    ],
+)
+def test_image_to_mask_extracts_supported_channels_to_bhw_float32(
+    channel: str,
+    expected: list[list[list[float]]],
+) -> None:
+    image = _FakeTorch.tensor(
+        [
+            [[[1.0, 0.0, 0.4], [0.1, 0.2, 0.3]]],
+            [[[0.5, 0.6, 0.7], [0.0, 0.0, 1.0]]],
+        ],
+        dtype=_FakeTorch.float32,
+    )
+
+    mask = image_to_mask(image=image, channel=channel)
+
+    assert mask.dtype == _FakeTorch.float32
+    assert mask.shape == (2, 1, 2)
+    assert mask.tolist() == expected
+
+
+def test_image_to_mask_rejects_unsupported_channel() -> None:
+    image = _constant_bhwc_image(batch=1, height=1, width=1, color=(0.1, 0.2, 0.3))
+
+    with pytest.raises(ValueError, match="channel must be one of: red, green, blue"):
+        image_to_mask(image=image, channel="alpha")
 
 
 def test_load_image_applies_exif_orientation(tmp_path: Path) -> None:
