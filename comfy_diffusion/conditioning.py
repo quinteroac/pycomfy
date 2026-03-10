@@ -12,15 +12,41 @@ class _ClipTextEncoder(Protocol):
     def encode_from_tokens_scheduled(self, tokens: Any) -> Any: ...
 
 
+class _FluxClipTextEncoder(Protocol):
+    def tokenize(self, text: str) -> Any: ...
+
+    def encode_from_tokens_scheduled(
+        self,
+        tokens: Any,
+        add_dict: dict[str, Any] | None = None,
+    ) -> Any: ...
+
+
+def _normalize_prompt_text(text: str) -> str:
+    return " " if text == "" else text
+
+
 def encode_prompt(clip: _ClipTextEncoder, text: str) -> Any:
     """Encode prompt text with a ComfyUI-compatible CLIP object.
 
     Positive and negative prompts use the same encoding path; prompt
     semantics are owned by the caller.
     """
-    normalized_text = " " if text == "" else text
+    normalized_text = _normalize_prompt_text(text)
     tokens = clip.tokenize(normalized_text)
     return clip.encode_from_tokens_scheduled(tokens)
+
+
+def encode_prompt_flux(
+    clip: _FluxClipTextEncoder,
+    text: str,
+    clip_l_text: str,
+    guidance: float = 3.5,
+) -> Any:
+    """Encode prompts with Flux dual-encoder token layout."""
+    clip_l_tokens = clip.tokenize(_normalize_prompt_text(clip_l_text))
+    clip_l_tokens["t5xxl"] = clip.tokenize(_normalize_prompt_text(text))["t5xxl"]
+    return clip.encode_from_tokens_scheduled(clip_l_tokens, add_dict={"guidance": guidance})
 
 
 def conditioning_combine(
@@ -110,9 +136,22 @@ def conditioning_set_timestep_range(
     return output
 
 
+def flux_guidance(conditioning: Any, guidance: float = 3.5) -> list[Any]:
+    """Apply Flux guidance value metadata to each conditioning entry."""
+    output: list[Any] = []
+    for item in conditioning:
+        updated = [item[0], item[1].copy()]
+        updated[1]["guidance"] = guidance
+        output.append(updated)
+
+    return output
+
+
 __all__ = [
     "encode_prompt",
+    "encode_prompt_flux",
     "conditioning_combine",
     "conditioning_set_mask",
     "conditioning_set_timestep_range",
+    "flux_guidance",
 ]

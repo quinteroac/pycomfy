@@ -18,6 +18,8 @@ from comfy_diffusion.conditioning import (
     conditioning_set_mask,
     conditioning_set_timestep_range,
     encode_prompt,
+    encode_prompt_flux,
+    flux_guidance,
 )
 
 
@@ -167,19 +169,112 @@ def test_encode_prompt_accepts_empty_string_without_crashing() -> None:
     assert clip.tokenize_calls == [" "]
 
 
+def test_encode_prompt_flux_imports_without_models_on_cpu() -> None:
+    result = _run_python(
+        "from comfy_diffusion.conditioning import encode_prompt_flux; "
+        "assert encode_prompt_flux.__name__ == 'encode_prompt_flux'; "
+        "print('ok')"
+    )
+
+    assert result.returncode == 0
+    assert result.stdout.strip() == "ok"
+
+
+def test_encode_prompt_flux_encodes_clip_l_and_t5xxl_with_guidance() -> None:
+    expected_output = object()
+
+    class FakeClip:
+        def __init__(self) -> None:
+            self.tokenize_calls: list[str] = []
+            self.encode_calls: list[tuple[object, object]] = []
+
+        def tokenize(self, text: str) -> object:
+            self.tokenize_calls.append(text)
+            if text == "clip-l detail":
+                return {"clip_l": "clip-l detail"}
+            if text == "t5 detail":
+                return {"t5xxl": "t5 detail"}
+            raise AssertionError(f"unexpected text: {text!r}")
+
+        def encode_from_tokens_scheduled(
+            self,
+            tokens: object,
+            add_dict: object = None,
+        ) -> object:
+            self.encode_calls.append((tokens, add_dict))
+            return expected_output
+
+    clip = FakeClip()
+
+    result = encode_prompt_flux(
+        clip=clip,
+        text="t5 detail",
+        clip_l_text="clip-l detail",
+        guidance=7.0,
+    )
+
+    assert result is expected_output
+    assert clip.tokenize_calls == ["clip-l detail", "t5 detail"]
+    assert clip.encode_calls == [
+        ({"clip_l": "clip-l detail", "t5xxl": "t5 detail"}, {"guidance": 7.0})
+    ]
+
+
+def test_encode_prompt_flux_uses_default_guidance_and_normalizes_empty_text() -> None:
+    expected_output = object()
+
+    class FakeClip:
+        def __init__(self) -> None:
+            self.tokenize_calls: list[str] = []
+            self.encode_calls: list[tuple[object, object]] = []
+
+        def tokenize(self, text: str) -> object:
+            self.tokenize_calls.append(text)
+            if text == " ":
+                return {"t5xxl": " "}
+            if text == "clip-l":
+                return {"clip_l": "clip-l"}
+            raise AssertionError(f"unexpected text: {text!r}")
+
+        def encode_from_tokens_scheduled(
+            self,
+            tokens: object,
+            add_dict: object = None,
+        ) -> object:
+            self.encode_calls.append((tokens, add_dict))
+            return expected_output
+
+    clip = FakeClip()
+
+    result = encode_prompt_flux(clip=clip, text="", clip_l_text="clip-l")
+
+    assert result is expected_output
+    assert clip.tokenize_calls == ["clip-l", " "]
+    assert clip.encode_calls == [
+        ({"clip_l": "clip-l", "t5xxl": " "}, {"guidance": 3.5})
+    ]
+
+
 def test_conditioning_public_api_exports_expected_entrypoints() -> None:
     signature = inspect.signature(encode_prompt)
+    flux_signature = inspect.signature(encode_prompt_flux)
+    flux_guidance_signature = inspect.signature(flux_guidance)
 
     assert "is_negative" not in signature.parameters
     assert not hasattr(conditioning, "encode_negative_prompt")
+    assert flux_signature.parameters["guidance"].default == 3.5
+    assert flux_guidance_signature.parameters["guidance"].default == 3.5
     assert conditioning_combine.__name__ == "conditioning_combine"
     assert conditioning_set_mask.__name__ == "conditioning_set_mask"
     assert conditioning_set_timestep_range.__name__ == "conditioning_set_timestep_range"
+    assert flux_guidance.__name__ == "flux_guidance"
     assert conditioning.__all__ == [
         "encode_prompt",
+        "encode_prompt_flux",
         "conditioning_combine",
         "conditioning_set_mask",
         "conditioning_set_timestep_range",
+        "flux_guidance",
     ]
 
 
@@ -323,6 +418,33 @@ def test_conditioning_set_timestep_range_rejects_values_outside_percentage_bound
 
     with pytest.raises(ValueError, match="end must be between 0.0 and 1.0"):
         conditioning_set_timestep_range(conditioning_input, start=0.0, end=1.01)
+
+
+def test_flux_guidance_applies_guidance_to_each_conditioning_item() -> None:
+    conditioning_input = [
+        ["a-token", {"source": "base"}],
+        ["b-token", {"source": "style"}],
+    ]
+
+    output = flux_guidance(conditioning_input, guidance=5.25)
+
+    assert output is not conditioning_input
+    assert output == [
+        ["a-token", {"source": "base", "guidance": 5.25}],
+        ["b-token", {"source": "style", "guidance": 5.25}],
+    ]
+    assert output[0][1] is not conditioning_input[0][1]
+    assert output[1][1] is not conditioning_input[1][1]
+    assert "guidance" not in conditioning_input[0][1]
+    assert "guidance" not in conditioning_input[1][1]
+
+
+def test_flux_guidance_uses_default_guidance_value() -> None:
+    conditioning_input = [["a-token", {"source": "base"}]]
+
+    output = flux_guidance(conditioning_input)
+
+    assert output == [["a-token", {"source": "base", "guidance": 3.5}]]
 
 
 def test_import_comfy_diffusion_conditioning_has_no_torch_or_loader_side_effects() -> None:
