@@ -84,4 +84,35 @@ def conditioning_set_mask(
     return output
 
 
-__all__ = ["encode_prompt", "conditioning_combine", "conditioning_set_mask"]
+def _validate_timestep_percent(name: str, value: float) -> None:
+    if not isinstance(value, float):
+        raise TypeError(f"{name} must be a float")
+    if value < 0.0 or value > 1.0:
+        raise ValueError(f"{name} must be between 0.0 and 1.0")
+
+
+def conditioning_set_timestep_range(
+    conditioning: Any,
+    start: float,
+    end: float,
+) -> list[Any]:
+    """Attach timestep bounds metadata to each conditioning entry."""
+    _validate_timestep_percent("start", start)
+    _validate_timestep_percent("end", end)
+
+    output: list[Any] = []
+    for item in conditioning:
+        updated = [item[0], item[1].copy()]
+        updated[1]["start_percent"] = start
+        updated[1]["end_percent"] = end
+        output.append(updated)
+
+    return output
+
+
+__all__ = [
+    "encode_prompt",
+    "conditioning_combine",
+    "conditioning_set_mask",
+    "conditioning_set_timestep_range",
+]

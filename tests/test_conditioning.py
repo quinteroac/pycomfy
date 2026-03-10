@@ -10,10 +10,13 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 import comfy_diffusion.conditioning as conditioning
 from comfy_diffusion.conditioning import (
     conditioning_combine,
     conditioning_set_mask,
+    conditioning_set_timestep_range,
     encode_prompt,
 )
 
@@ -171,10 +174,12 @@ def test_conditioning_public_api_exports_expected_entrypoints() -> None:
     assert not hasattr(conditioning, "encode_negative_prompt")
     assert conditioning_combine.__name__ == "conditioning_combine"
     assert conditioning_set_mask.__name__ == "conditioning_set_mask"
+    assert conditioning_set_timestep_range.__name__ == "conditioning_set_timestep_range"
     assert conditioning.__all__ == [
         "encode_prompt",
         "conditioning_combine",
         "conditioning_set_mask",
+        "conditioning_set_timestep_range",
     ]
 
 
@@ -279,6 +284,45 @@ def test_conditioning_set_mask_supports_mask_bounds_and_custom_strength() -> Non
     assert output[0][1]["mask"] is mask
     assert output[0][1]["mask_strength"] == 0.25
     assert output[0][1]["set_area_to_bounds"] is True
+
+
+def test_conditioning_set_timestep_range_sets_start_and_end_percent_metadata() -> None:
+    conditioning_input = [
+        ["a-token", {"source": "base"}],
+        ["b-token", {"source": "style"}],
+    ]
+
+    output = conditioning_set_timestep_range(conditioning_input, start=0.2, end=0.8)
+
+    assert output is not conditioning_input
+    assert output == [
+        ["a-token", {"source": "base", "start_percent": 0.2, "end_percent": 0.8}],
+        ["b-token", {"source": "style", "start_percent": 0.2, "end_percent": 0.8}],
+    ]
+    assert output[0][1] is not conditioning_input[0][1]
+    assert output[1][1] is not conditioning_input[1][1]
+    assert "start_percent" not in conditioning_input[0][1]
+    assert "end_percent" not in conditioning_input[0][1]
+
+
+def test_conditioning_set_timestep_range_rejects_non_float_values() -> None:
+    conditioning_input = [["a-token", {"source": "base"}]]
+
+    with pytest.raises(TypeError, match="start must be a float"):
+        conditioning_set_timestep_range(conditioning_input, start=0, end=1.0)
+
+    with pytest.raises(TypeError, match="end must be a float"):
+        conditioning_set_timestep_range(conditioning_input, start=0.0, end=1)
+
+
+def test_conditioning_set_timestep_range_rejects_values_outside_percentage_bounds() -> None:
+    conditioning_input = [["a-token", {"source": "base"}]]
+
+    with pytest.raises(ValueError, match="start must be between 0.0 and 1.0"):
+        conditioning_set_timestep_range(conditioning_input, start=-0.01, end=1.0)
+
+    with pytest.raises(ValueError, match="end must be between 0.0 and 1.0"):
+        conditioning_set_timestep_range(conditioning_input, start=0.0, end=1.01)
 
 
 def test_import_comfy_diffusion_conditioning_has_no_torch_or_loader_side_effects() -> None:
