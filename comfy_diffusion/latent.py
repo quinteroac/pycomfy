@@ -47,6 +47,16 @@ def _get_latent_crop_type() -> Any:
     return nodes.LatentCrop
 
 
+def _get_latent_composite_type() -> Any:
+    """Resolve ComfyUI LatentComposite node at call time."""
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    import nodes
+
+    return nodes.LatentComposite
+
+
 def _unwrap_node_output(output: Any) -> Any:
     """Return first output for ComfyUI V3 nodes and tuple-style APIs."""
     if hasattr(output, "result"):
@@ -124,4 +134,29 @@ def latent_crop(
     )
 
 
-__all__ = ["empty_latent_image", "latent_upscale", "latent_upscale_by", "latent_crop"]
+def latent_composite(
+    destination: dict[str, Any], source: dict[str, Any], x: int, y: int
+) -> dict[str, Any]:
+    """Composite source LATENT onto destination LATENT at pixel-space coordinates."""
+    latent_composite_type = _get_latent_composite_type()
+    return cast(
+        dict[str, Any],
+        _unwrap_node_output(
+            latent_composite_type().composite(
+                samples_to=destination,
+                samples_from=source,
+                x=x,
+                y=y,
+                feather=0,
+            )
+        ),
+    )
+
+
+__all__ = [
+    "empty_latent_image",
+    "latent_upscale",
+    "latent_upscale_by",
+    "latent_crop",
+    "latent_composite",
+]

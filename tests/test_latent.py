@@ -16,6 +16,7 @@ import comfy_diffusion.latent as latent_module
 import comfy_diffusion.sampling as sampling_module
 from comfy_diffusion.latent import (
     empty_latent_image,
+    latent_composite,
     latent_crop,
     latent_upscale,
     latent_upscale_by,
@@ -49,6 +50,7 @@ def test_latent_module_exports_empty_latent_image() -> None:
         "latent_upscale",
         "latent_upscale_by",
         "latent_crop",
+        "latent_composite",
     ]
 
 
@@ -79,6 +81,14 @@ def test_latent_crop_signature_matches_contract() -> None:
     assert str(signature) == (
         "(latent: 'dict[str, Any]', x: 'int', y: 'int', width: 'int', "
         "height: 'int') -> 'dict[str, Any]'"
+    )
+
+
+def test_latent_composite_signature_matches_contract() -> None:
+    signature = inspect.signature(latent_composite)
+    assert str(signature) == (
+        "(destination: 'dict[str, Any]', source: 'dict[str, Any]', x: 'int', "
+        "y: 'int') -> 'dict[str, Any]'"
     )
 
 
@@ -335,3 +345,33 @@ def test_latent_crop_returns_cropped_latent_dict_and_uses_pixel_space_inputs(
 
     assert output is expected
     assert calls == [(latent, 256, 320, 24, 40)]
+
+
+def test_latent_composite_returns_new_latent_with_source_positioned_using_pixel_coordinates(
+    monkeypatch: Any,
+) -> None:
+    destination = {"samples": object()}
+    source = {"samples": object()}
+    expected = {"samples": object()}
+    calls: list[tuple[dict[str, Any], dict[str, Any], int, int, int]] = []
+
+    class FakeLatentComposite:
+        def composite(
+            self,
+            samples_to: dict[str, Any],
+            samples_from: dict[str, Any],
+            x: int,
+            y: int,
+            feather: int,
+        ) -> tuple[dict[str, Any]]:
+            calls.append((samples_to, samples_from, x, y, feather))
+            assert x // 8 == 3
+            assert y // 8 == 5
+            return (expected,)
+
+    monkeypatch.setattr(latent_module, "_get_latent_composite_type", lambda: FakeLatentComposite)
+
+    output = latent_composite(destination=destination, source=source, x=24, y=40)
+
+    assert output is expected
+    assert calls == [(destination, source, 24, 40, 0)]
