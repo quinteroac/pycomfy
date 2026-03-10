@@ -209,6 +209,14 @@ def image_composite_masked(destination: Any, source: Any, mask: Any, x: int, y: 
     )
 
 
+def image_to_tensor(image: PIL.Image.Image) -> Any:
+    """Convert a PIL Image to a BHWC float32 tensor with shape (1, H, W, 3)."""
+    torch = _get_torch_module()
+    rgb = image.convert("RGB")
+    rows = _pixels_to_float_rows(rgb, channels=3)
+    return torch.tensor([rows], dtype=torch.float32)
+
+
 def ltxv_preprocess(image: Any, width: int, height: int) -> Any:
     """Preprocess image batch for LTXV img2vid with center resize and node compression."""
     comfy_utils, ltxv_preprocess_type = _get_ltxv_preprocess_dependencies()
@@ -220,6 +228,7 @@ def ltxv_preprocess(image: Any, width: int, height: int) -> Any:
 
 __all__ = [
     "load_image",
+    "image_to_tensor",
     "image_pad_for_outpaint",
     "image_upscale_with_model",
     "image_from_batch",
