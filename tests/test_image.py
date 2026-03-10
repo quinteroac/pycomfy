@@ -11,7 +11,7 @@ from PIL import Image, ImageOps, features
 
 import comfy_diffusion
 import comfy_diffusion.image as image_module
-from comfy_diffusion.image import image_pad_for_outpaint, load_image
+from comfy_diffusion.image import image_pad_for_outpaint, image_upscale_with_model, load_image
 
 
 class _FakeTensor:
@@ -188,8 +188,12 @@ def _fake_torch_dependency(monkeypatch: Any) -> None:
     monkeypatch.setattr(image_module, "_get_torch_module", lambda: _FakeTorch)
 
 
-def test_image_module_exports_load_image_only() -> None:
-    assert image_module.__all__ == ["load_image", "image_pad_for_outpaint"]
+def test_image_module_exports_expected_entrypoints() -> None:
+    assert image_module.__all__ == [
+        "load_image",
+        "image_pad_for_outpaint",
+        "image_upscale_with_model",
+    ]
 
 
 def test_load_image_signature_matches_contract() -> None:
@@ -199,6 +203,69 @@ def test_load_image_signature_matches_contract() -> None:
 
 def test_load_image_not_re_exported_from_package_root() -> None:
     assert not hasattr(comfy_diffusion, "load_image")
+
+
+def test_image_upscale_with_model_signature_matches_contract() -> None:
+    signature = inspect.signature(image_upscale_with_model)
+    assert str(signature) == "(upscale_model: 'Any', image: 'Any') -> 'Any'"
+
+
+def test_image_upscale_with_model_not_re_exported_from_package_root() -> None:
+    assert not hasattr(comfy_diffusion, "image_upscale_with_model")
+
+
+def test_image_upscale_with_model_wraps_comfyui_node_and_returns_bhwc_tensor(
+    monkeypatch: Any,
+) -> None:
+    upscale_model = object()
+    image = object()
+    expected_upscaled = object()
+
+    class FakeImageUpscaleWithModel:
+        @classmethod
+        def execute(cls, received_upscale_model: Any, received_image: Any) -> tuple[Any]:
+            assert received_upscale_model is upscale_model
+            assert received_image is image
+            return (expected_upscaled,)
+
+    monkeypatch.setattr(
+        image_module,
+        "_get_image_upscale_with_model_type",
+        lambda: FakeImageUpscaleWithModel,
+    )
+
+    upscaled = image_upscale_with_model(upscale_model, image)
+
+    assert upscaled is expected_upscaled
+
+
+def test_image_upscale_with_model_supports_comfyui_v3_result_output(
+    monkeypatch: Any,
+) -> None:
+    upscale_model = object()
+    image = object()
+    expected_upscaled = object()
+
+    class FakeNodeOutput:
+        def __init__(self, result: tuple[Any, ...]) -> None:
+            self.result = result
+
+    class FakeImageUpscaleWithModel:
+        @classmethod
+        def execute(cls, received_upscale_model: Any, received_image: Any) -> Any:
+            assert received_upscale_model is upscale_model
+            assert received_image is image
+            return FakeNodeOutput((expected_upscaled,))
+
+    monkeypatch.setattr(
+        image_module,
+        "_get_image_upscale_with_model_type",
+        lambda: FakeImageUpscaleWithModel,
+    )
+
+    upscaled = image_upscale_with_model(upscale_model, image)
+
+    assert upscaled is expected_upscaled
 
 
 def test_load_image_returns_bhwc_float32_image_and_hw_mask_from_alpha(tmp_path: Path) -> None:

@@ -19,6 +19,20 @@ def _get_torch_module() -> Any:
     return torch
 
 
+def _get_image_upscale_with_model_type() -> Any:
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    from comfy_extras.nodes_upscale_model import ImageUpscaleWithModel
+
+    return ImageUpscaleWithModel
+
+
+def _unwrap_node_output(output: Any) -> Any:
+    result = getattr(output, "result", output)
+    return result[0]
+
+
 def _pixels_to_float_rows(image: Any, *, channels: int) -> list[list[list[float]]]:
     width, height = image.size
     pixels = image.load()
@@ -123,4 +137,10 @@ def image_pad_for_outpaint(
     return padded_image, padded_mask.unsqueeze(0)
 
 
-__all__ = ["load_image", "image_pad_for_outpaint"]
+def image_upscale_with_model(upscale_model: Any, image: Any) -> Any:
+    """Upscale a BHWC image tensor using a ComfyUI-compatible upscale model."""
+    image_upscale_with_model_type = _get_image_upscale_with_model_type()
+    return _unwrap_node_output(image_upscale_with_model_type.execute(upscale_model, image))
+
+
+__all__ = ["load_image", "image_pad_for_outpaint", "image_upscale_with_model"]
