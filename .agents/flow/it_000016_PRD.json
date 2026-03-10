@@ -1,0 +1,180 @@
+{
+  "goals": [
+    "Provide a standalone `comfy_diffusion/mask.py` module with mask creation and manipulation functions",
+    "Support loading masks from image files with explicit channel selection (alpha, red, green, blue)",
+    "Enable conversion between image tensors and mask tensors",
+    "Provide mask geometry operations (grow, feather) needed for inpainting workflows",
+    "Follow existing project patterns: lazy imports, external libraries (PIL, torch) over ComfyUI node wrappers where possible"
+  ],
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Load mask from image file",
+      "description": "As a Python developer using comfy-diffusion, I want to load a mask from an image file choosing which channel to use (alpha, red, green, blue) so that I can obtain mask tensors from standard image files for inpainting or compositing.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-001-AC01",
+          "text": "`load_image_mask(path, channel)` accepts `str | Path` and a channel parameter"
+        },
+        {
+          "id": "US-001-AC02",
+          "text": "Supported channels: `\"alpha\"`, `\"red\"`, `\"green\"`, `\"blue\"`"
+        },
+        {
+          "id": "US-001-AC03",
+          "text": "Returns a float32 mask tensor with shape `(1, H, W)` and values in `[0.0, 1.0]`"
+        },
+        {
+          "id": "US-001-AC04",
+          "text": "For alpha channel: transparent = 1.0 (masked), opaque = 0.0 (unmasked), matching ComfyUI convention"
+        },
+        {
+          "id": "US-001-AC05",
+          "text": "For color channels: pixel value 255 → 1.0, pixel value 0 → 0.0"
+        },
+        {
+          "id": "US-001-AC06",
+          "text": "Raises `FileNotFoundError` if the image path does not exist"
+        },
+        {
+          "id": "US-001-AC07",
+          "text": "Typecheck / lint passes"
+        }
+      ]
+    },
+    {
+      "id": "US-002",
+      "title": "Convert image tensor to mask tensor",
+      "description": "As a Python developer using comfy-diffusion, I want to convert a BHWC image tensor to a mask tensor by selecting a channel so that I can derive masks from existing image data without saving/loading files.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-002-AC01",
+          "text": "`image_to_mask(image, channel)` accepts a BHWC float32 image tensor and channel name"
+        },
+        {
+          "id": "US-002-AC02",
+          "text": "Supported channels: `\"red\"`, `\"green\"`, `\"blue\"`"
+        },
+        {
+          "id": "US-002-AC03",
+          "text": "Returns a float32 mask tensor with shape matching the batch and spatial dims"
+        },
+        {
+          "id": "US-002-AC04",
+          "text": "Typecheck / lint passes"
+        }
+      ]
+    },
+    {
+      "id": "US-003",
+      "title": "Convert mask tensor to image tensor",
+      "description": "As a Python developer using comfy-diffusion, I want to convert a mask tensor back to a PIL Image so that I can visualize or save masks for debugging and inspection.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-003-AC01",
+          "text": "`mask_to_image(mask)` accepts a float32 mask tensor"
+        },
+        {
+          "id": "US-003-AC02",
+          "text": "Returns a BHWC float32 image tensor with the mask value replicated across RGB channels"
+        },
+        {
+          "id": "US-003-AC03",
+          "text": "Typecheck / lint passes"
+        }
+      ]
+    },
+    {
+      "id": "US-004",
+      "title": "Grow mask",
+      "description": "As a Python developer using comfy-diffusion, I want to expand or contract a mask by N pixels so that I can adjust mask boundaries for inpainting overlap or tighter crops.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-004-AC01",
+          "text": "`grow_mask(mask, expand, tapered_corners)` grows the mask by `expand` pixels"
+        },
+        {
+          "id": "US-004-AC02",
+          "text": "Positive `expand` grows (dilates) the mask; negative `expand` shrinks (erodes) it"
+        },
+        {
+          "id": "US-004-AC03",
+          "text": "`tapered_corners` parameter controls whether corners are rounded (True) or square (False)"
+        },
+        {
+          "id": "US-004-AC04",
+          "text": "Works on CPU without GPU"
+        },
+        {
+          "id": "US-004-AC05",
+          "text": "Typecheck / lint passes"
+        }
+      ]
+    },
+    {
+      "id": "US-005",
+      "title": "Feather mask",
+      "description": "As a Python developer using comfy-diffusion, I want to blur the edges of a mask so that I get smooth transitions for compositing and inpainting.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-005-AC01",
+          "text": "`feather_mask(mask, left, top, right, bottom)` feathers mask edges by the specified pixel amounts per side"
+        },
+        {
+          "id": "US-005-AC02",
+          "text": "Supports independent feathering amounts for each edge"
+        },
+        {
+          "id": "US-005-AC03",
+          "text": "Output values remain in `[0.0, 1.0]`"
+        },
+        {
+          "id": "US-005-AC04",
+          "text": "Works on CPU without GPU"
+        },
+        {
+          "id": "US-005-AC05",
+          "text": "Typecheck / lint passes"
+        }
+      ]
+    }
+  ],
+  "functionalRequirements": [
+    {
+      "id": "FR-1",
+      "description": "Create `comfy_diffusion/mask.py` module with all five public functions"
+    },
+    {
+      "id": "FR-2",
+      "description": "Use lazy imports for `torch` and `PIL` (no top-level imports of heavy dependencies)"
+    },
+    {
+      "id": "FR-3",
+      "description": "Use external libraries (PIL, torch) for image I/O and tensor ops; only wrap ComfyUI nodes when they provide non-trivial logic not easily replicated"
+    },
+    {
+      "id": "FR-4",
+      "description": "Path parameters use `str | Path` type annotation, consistent with the rest of the codebase"
+    },
+    {
+      "id": "FR-5",
+      "description": "Export all public functions in `__all__`"
+    },
+    {
+      "id": "FR-6",
+      "description": "All functions must work on CPU-only environments"
+    },
+    {
+      "id": "FR-7",
+      "description": "Follow the alpha convention from ComfyUI: for alpha masks, transparent = 1.0 (masked), opaque = 0.0"
+    },
+    {
+      "id": "FR-8",
+      "description": "`grow_mask` wraps ComfyUI's `GrowMask` node (non-trivial scipy morphological ops with custom kernels)"
+    },
+    {
+      "id": "FR-9",
+      "description": "`feather_mask` is implemented directly with torch ops (simple per-side linear gradient multiplication)"
+    }
+  ]
+}
