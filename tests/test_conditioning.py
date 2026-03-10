@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 import comfy_diffusion.conditioning as conditioning
-from comfy_diffusion.conditioning import encode_prompt
+from comfy_diffusion.conditioning import conditioning_combine, encode_prompt
 
 
 def _repo_root() -> Path:
@@ -159,12 +159,54 @@ def test_encode_prompt_accepts_empty_string_without_crashing() -> None:
     assert clip.tokenize_calls == [" "]
 
 
-def test_conditioning_public_api_has_single_encode_prompt_entrypoint() -> None:
+def test_conditioning_public_api_exports_expected_entrypoints() -> None:
     signature = inspect.signature(encode_prompt)
 
     assert "is_negative" not in signature.parameters
     assert not hasattr(conditioning, "encode_negative_prompt")
-    assert conditioning.__all__ == ["encode_prompt"]
+    assert conditioning_combine.__name__ == "conditioning_combine"
+    assert conditioning.__all__ == ["encode_prompt", "conditioning_combine"]
+
+
+def test_conditioning_combine_merges_two_conditioning_lists() -> None:
+    cond_a = [["a-token-1", {"meta": "a1"}], ["a-token-2", {"meta": "a2"}]]
+    cond_b = [["b-token-1", {"meta": "b1"}]]
+
+    merged = conditioning_combine(cond_a, cond_b)
+
+    assert merged == [
+        ["a-token-1", {"meta": "a1"}],
+        ["a-token-2", {"meta": "a2"}],
+        ["b-token-1", {"meta": "b1"}],
+    ]
+
+
+def test_conditioning_combine_supports_more_than_two_by_chaining() -> None:
+    cond_a = [["a-token", {"w": 1.0}]]
+    cond_b = [["b-token", {"w": 1.0}]]
+    cond_c = [["c-token", {"w": 1.0}]]
+
+    merged = conditioning_combine(conditioning_combine(cond_a, cond_b), cond_c)
+
+    assert merged == [
+        ["a-token", {"w": 1.0}],
+        ["b-token", {"w": 1.0}],
+        ["c-token", {"w": 1.0}],
+    ]
+
+
+def test_conditioning_combine_supports_list_input() -> None:
+    cond_a = [["a-token", {"source": "base"}]]
+    cond_b = [["b-token", {"source": "style"}]]
+    cond_c = [["c-token", {"source": "detail"}]]
+
+    merged = conditioning_combine([cond_a, cond_b, cond_c])
+
+    assert merged == [
+        ["a-token", {"source": "base"}],
+        ["b-token", {"source": "style"}],
+        ["c-token", {"source": "detail"}],
+    ]
 
 
 def test_import_comfy_diffusion_conditioning_has_no_torch_or_loader_side_effects() -> None:
