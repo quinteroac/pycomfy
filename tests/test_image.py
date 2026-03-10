@@ -17,6 +17,7 @@ from comfy_diffusion.image import (
     image_pad_for_outpaint,
     image_upscale_with_model,
     load_image,
+    ltxv_preprocess,
     repeat_image_batch,
 )
 
@@ -203,6 +204,7 @@ def test_image_module_exports_expected_entrypoints() -> None:
         "image_from_batch",
         "repeat_image_batch",
         "image_composite_masked",
+        "ltxv_preprocess",
     ]
 
 
@@ -252,6 +254,87 @@ def test_image_composite_masked_signature_matches_contract() -> None:
 
 def test_image_composite_masked_not_re_exported_from_package_root() -> None:
     assert not hasattr(comfy_diffusion, "image_composite_masked")
+
+
+def test_ltxv_preprocess_signature_matches_contract() -> None:
+    signature = inspect.signature(ltxv_preprocess)
+    assert str(signature) == "(image: 'Any', width: 'int', height: 'int') -> 'Any'"
+
+
+def test_ltxv_preprocess_not_re_exported_from_package_root() -> None:
+    assert not hasattr(comfy_diffusion, "ltxv_preprocess")
+
+
+def test_ltxv_preprocess_resizes_and_runs_comfy_ltxv_preprocess(monkeypatch: Any) -> None:
+    class FakeMovedimTensor:
+        def __init__(self, transitions: dict[tuple[int, int], Any]) -> None:
+            self.transitions = transitions
+            self.calls: list[tuple[int, int]] = []
+
+        def movedim(self, source: int, destination: int) -> Any:
+            self.calls.append((source, destination))
+            return self.transitions[(source, destination)]
+
+    output_tensor = _FakeTorch.tensor(
+        [[[[0.25, 0.5, 0.75], [0.1, 0.2, 0.3]]]],
+        dtype=_FakeTorch.float32,
+    )
+    resized_bchw = FakeMovedimTensor({(1, -1): output_tensor})
+    chw_input = object()
+    bhwc_input = FakeMovedimTensor({(-1, 1): chw_input})
+
+    calls: dict[str, Any] = {}
+
+    class FakeComfyUtils:
+        @staticmethod
+        def common_upscale(
+            image: Any,
+            width: int,
+            height: int,
+            upscale_method: str,
+            crop: str,
+        ) -> Any:
+            calls["common_upscale"] = {
+                "image": image,
+                "width": width,
+                "height": height,
+                "upscale_method": upscale_method,
+                "crop": crop,
+            }
+            return resized_bchw
+
+    class FakeLTXVPreprocess:
+        @classmethod
+        def execute(cls, image: Any, img_compression: int) -> tuple[Any]:
+            calls["ltxv_preprocess"] = {
+                "image": image,
+                "img_compression": img_compression,
+            }
+            return (image,)
+
+    monkeypatch.setattr(
+        image_module,
+        "_get_ltxv_preprocess_dependencies",
+        lambda: (FakeComfyUtils, FakeLTXVPreprocess),
+    )
+
+    result = ltxv_preprocess(bhwc_input, width=768, height=512)
+
+    assert bhwc_input.calls == [(-1, 1)]
+    assert resized_bchw.calls == [(1, -1)]
+    assert calls["common_upscale"] == {
+        "image": chw_input,
+        "width": 768,
+        "height": 512,
+        "upscale_method": "bilinear",
+        "crop": "center",
+    }
+    assert calls["ltxv_preprocess"] == {
+        "image": output_tensor,
+        "img_compression": 35,
+    }
+    assert result is output_tensor
+    assert result.shape == (1, 1, 2, 3)
 
 
 def test_image_upscale_with_model_wraps_comfyui_node_and_returns_bhwc_tensor(

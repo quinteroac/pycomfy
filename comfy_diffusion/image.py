@@ -55,6 +55,16 @@ def _get_image_composite_masked_type() -> Any:
     return ImageCompositeMasked
 
 
+def _get_ltxv_preprocess_dependencies() -> tuple[Any, Any]:
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    import comfy.utils
+    from comfy_extras.nodes_lt import LTXVPreprocess
+
+    return comfy.utils, LTXVPreprocess
+
+
 def _unwrap_node_output(output: Any) -> Any:
     result = getattr(output, "result", output)
     return result[0]
@@ -199,6 +209,15 @@ def image_composite_masked(destination: Any, source: Any, mask: Any, x: int, y: 
     )
 
 
+def ltxv_preprocess(image: Any, width: int, height: int) -> Any:
+    """Preprocess image batch for LTXV img2vid with center resize and node compression."""
+    comfy_utils, ltxv_preprocess_type = _get_ltxv_preprocess_dependencies()
+    resized = comfy_utils.common_upscale(
+        image.movedim(-1, 1), width, height, "bilinear", "center"
+    ).movedim(1, -1)
+    return _unwrap_node_output(ltxv_preprocess_type.execute(resized, img_compression=35))
+
+
 __all__ = [
     "load_image",
     "image_pad_for_outpaint",
@@ -206,4 +225,5 @@ __all__ = [
     "image_from_batch",
     "repeat_image_batch",
     "image_composite_masked",
+    "ltxv_preprocess",
 ]
