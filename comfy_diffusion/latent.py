@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any, cast
 
+_SUPPORTED_UPSCALE_METHODS = ("nearest-exact", "bilinear", "area", "bicubic", "bislerp")
+
 
 def _get_empty_latent_image_type() -> Any:
     """Resolve ComfyUI EmptyLatentImage node at call time."""
@@ -15,6 +17,26 @@ def _get_empty_latent_image_type() -> Any:
     return nodes.EmptyLatentImage
 
 
+def _get_latent_upscale_type() -> Any:
+    """Resolve ComfyUI LatentUpscale node at call time."""
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    import nodes
+
+    return nodes.LatentUpscale
+
+
+def _get_latent_upscale_by_type() -> Any:
+    """Resolve ComfyUI LatentUpscaleBy node at call time."""
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    import nodes
+
+    return nodes.LatentUpscaleBy
+
+
 def _unwrap_node_output(output: Any) -> Any:
     """Return first output for ComfyUI V3 nodes and tuple-style APIs."""
     if hasattr(output, "result"):
@@ -22,6 +44,14 @@ def _unwrap_node_output(output: Any) -> Any:
     if isinstance(output, tuple):
         return output[0]
     return output
+
+
+def _validate_upscale_method(method: str) -> None:
+    """Validate latent upscale methods against the ComfyUI set."""
+    if method not in _SUPPORTED_UPSCALE_METHODS:
+        raise ValueError(
+            f"method must be one of {list(_SUPPORTED_UPSCALE_METHODS)!r}; got {method!r}"
+        )
 
 
 def empty_latent_image(width: int, height: int, batch_size: int = 1) -> dict[str, Any]:
@@ -35,4 +65,40 @@ def empty_latent_image(width: int, height: int, batch_size: int = 1) -> dict[str
     )
 
 
-__all__ = ["empty_latent_image"]
+def latent_upscale(
+    latent: dict[str, Any], method: str, width: int, height: int
+) -> dict[str, Any]:
+    """Upscale a LATENT dict to target pixel dimensions."""
+    _validate_upscale_method(method)
+    latent_upscale_type = _get_latent_upscale_type()
+    return cast(
+        dict[str, Any],
+        _unwrap_node_output(
+            latent_upscale_type().upscale(
+                samples=latent,
+                upscale_method=method,
+                width=width,
+                height=height,
+                crop="disabled",
+            )
+        ),
+    )
+
+
+def latent_upscale_by(latent: dict[str, Any], method: str, scale_by: float) -> dict[str, Any]:
+    """Upscale a LATENT dict by floating-point factor."""
+    _validate_upscale_method(method)
+    latent_upscale_by_type = _get_latent_upscale_by_type()
+    return cast(
+        dict[str, Any],
+        _unwrap_node_output(
+            latent_upscale_by_type().upscale(
+                samples=latent,
+                upscale_method=method,
+                scale_by=scale_by,
+            )
+        ),
+    )
+
+
+__all__ = ["empty_latent_image", "latent_upscale", "latent_upscale_by"]
