@@ -169,10 +169,12 @@ def save_video(frames: Any, path: str | Path, fps: float) -> None:
     normalized_frames = _coerce_frames_to_rgb_uint8(frames)
 
     if backend_name == "cv2":
+        _EXTENSION_TO_FOURCC = {".webm": "VP80", ".mp4": "mp4v"}
+        fourcc_str = _EXTENSION_TO_FOURCC.get(output_path.suffix.lower(), "mp4v")
         height, width = normalized_frames[0].shape[:2]
         writer = backend.VideoWriter(
             str(output_path),
-            backend.VideoWriter_fourcc(*"mp4v"),
+            backend.VideoWriter_fourcc(*fourcc_str),
             float(fps),
             (width, height),
         )

@@ -147,6 +147,57 @@ def test_save_video_writes_frames_with_cv2_backend(monkeypatch: Any, tmp_path: P
     ]
 
 
+@pytest.mark.parametrize(
+    ("filename", "expected_fourcc"),
+    [
+        ("output.mp4", "mp4v"),
+        ("output.webm", "VP80"),
+        ("output.MP4", "mp4v"),
+        ("output.WEBM", "VP80"),
+        ("output.avi", "mp4v"),
+    ],
+)
+def test_save_video_selects_fourcc_based_on_extension(
+    monkeypatch: Any, tmp_path: Path, filename: str, expected_fourcc: str
+) -> None:
+    output_path = tmp_path / filename
+    fourcc_args: list[tuple[str, ...]] = []
+
+    class FakeWriter:
+        def isOpened(self) -> bool:
+            return True
+
+        def write(self, frame: Any) -> None:
+            pass
+
+        def release(self) -> None:
+            pass
+
+    class FakeCv2:
+        COLOR_RGB2BGR = "COLOR_RGB2BGR"
+
+        def VideoWriter_fourcc(self, *args: str) -> str:
+            fourcc_args.append(args)
+            return "".join(args)
+
+        def VideoWriter(
+            self, path: str, fourcc: Any, fps: float, size: tuple[int, int]
+        ) -> FakeWriter:
+            return FakeWriter()
+
+        def cvtColor(self, frame: Any, conversion: Any) -> Any:
+            return frame
+
+    frame = SimpleNamespace(shape=(4, 4, 3))
+    monkeypatch.setattr(video_module, "_get_video_backend", lambda: ("cv2", FakeCv2()))
+    monkeypatch.setattr(video_module, "_coerce_frames_to_rgb_uint8", lambda _: [frame])
+
+    save_video(frames=object(), path=output_path, fps=30.0)
+
+    assert len(fourcc_args) == 1
+    assert "".join(fourcc_args[0]) == expected_fourcc
+
+
 def test_get_video_components_returns_frame_count_fps_width_height(
     monkeypatch: Any,
     tmp_path: Path,
