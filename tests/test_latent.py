@@ -17,6 +17,7 @@ import comfy_diffusion.sampling as sampling_module
 from comfy_diffusion.latent import (
     empty_latent_image,
     latent_composite,
+    latent_composite_masked,
     latent_crop,
     latent_upscale,
     latent_upscale_by,
@@ -51,6 +52,7 @@ def test_latent_module_exports_empty_latent_image() -> None:
         "latent_upscale_by",
         "latent_crop",
         "latent_composite",
+        "latent_composite_masked",
     ]
 
 
@@ -89,6 +91,14 @@ def test_latent_composite_signature_matches_contract() -> None:
     assert str(signature) == (
         "(destination: 'dict[str, Any]', source: 'dict[str, Any]', x: 'int', "
         "y: 'int') -> 'dict[str, Any]'"
+    )
+
+
+def test_latent_composite_masked_signature_matches_contract() -> None:
+    signature = inspect.signature(latent_composite_masked)
+    assert str(signature) == (
+        "(destination: 'dict[str, Any]', source: 'dict[str, Any]', mask: 'Any', "
+        "x: 'int' = 0, y: 'int' = 0) -> 'dict[str, Any]'"
     )
 
 
@@ -375,3 +385,71 @@ def test_latent_composite_returns_new_latent_with_source_positioned_using_pixel_
 
     assert output is expected
     assert calls == [(destination, source, 24, 40, 0)]
+
+
+def test_latent_composite_masked_returns_blended_latent_and_forwards_mask(
+    monkeypatch: Any,
+) -> None:
+    destination = {"samples": object()}
+    source = {"samples": object()}
+    mask = object()
+    expected = {"samples": object()}
+    calls: list[tuple[dict[str, Any], dict[str, Any], int, int, bool, Any]] = []
+
+    class FakeLatentCompositeMasked:
+        def composite(
+            self,
+            destination: dict[str, Any],
+            source: dict[str, Any],
+            x: int,
+            y: int,
+            resize_source: bool,
+            mask: Any = None,
+        ) -> tuple[dict[str, Any]]:
+            calls.append((destination, source, x, y, resize_source, mask))
+            return (expected,)
+
+    monkeypatch.setattr(
+        latent_module,
+        "_get_latent_composite_masked_type",
+        lambda: FakeLatentCompositeMasked,
+    )
+
+    output = latent_composite_masked(destination=destination, source=source, mask=mask, x=24, y=40)
+
+    assert output is expected
+    assert calls == [(destination, source, 24, 40, False, mask)]
+
+
+def test_latent_composite_masked_uses_default_coordinates(
+    monkeypatch: Any,
+) -> None:
+    calls: list[tuple[int, int]] = []
+
+    class FakeLatentCompositeMasked:
+        def composite(
+            self,
+            destination: dict[str, Any],
+            source: dict[str, Any],
+            x: int,
+            y: int,
+            resize_source: bool,
+            mask: Any = None,
+        ) -> tuple[dict[str, Any]]:
+            calls.append((x, y))
+            return (destination,)
+
+    monkeypatch.setattr(
+        latent_module,
+        "_get_latent_composite_masked_type",
+        lambda: FakeLatentCompositeMasked,
+    )
+
+    output = latent_composite_masked(
+        destination={"samples": object()},
+        source={"samples": object()},
+        mask=object(),
+    )
+
+    assert output["samples"] is not None
+    assert calls == [(0, 0)]
