@@ -64,6 +64,22 @@ def test_torch_optional_dependencies_are_not_version_pinned() -> None:
             assert "<=" not in dependency
 
 
+def test_video_optional_dependencies_are_declared_in_video_extra() -> None:
+    pyproject = _read_pyproject()
+    optional = pyproject["project"]["optional-dependencies"]
+
+    assert "video" in optional
+    assert optional["video"] == ["opencv-python>=4.13.0.92", "imageio>=2.37.2"]
+
+
+def test_video_dependencies_are_not_in_core_dependencies() -> None:
+    pyproject = _read_pyproject()
+    dependencies = pyproject["project"]["dependencies"]
+
+    assert all(not dependency.startswith("opencv-python") for dependency in dependencies)
+    assert all(not dependency.startswith("imageio") for dependency in dependencies)
+
+
 def test_uv_editable_install_succeeds_and_allows_importing_comfy_diffusion(tmp_path: Path) -> None:
     submodule_path = _repo_root() / "comfy_diffusion" / "vendor" / "ComfyUI"
     assert submodule_path.is_dir()
