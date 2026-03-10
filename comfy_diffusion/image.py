@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, cast
 
+from PIL import Image as PILImage
+
 
 def _get_load_image_dependencies() -> tuple[Any, Any, Any]:
     import torch
@@ -209,7 +211,7 @@ def image_composite_masked(destination: Any, source: Any, mask: Any, x: int, y: 
     )
 
 
-def image_to_tensor(image: PIL.Image.Image) -> Any:
+def image_to_tensor(image: PILImage.Image) -> Any:
     """Convert a PIL Image to a BHWC float32 tensor with shape (1, H, W, 3)."""
     torch = _get_torch_module()
     rgb = image.convert("RGB")

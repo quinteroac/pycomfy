@@ -17,10 +17,10 @@
 | 11 | `audio` | Stable Audio, WAN sound-to-video, LTXV audio, ACE Step text-to-audio | ✅ Done |
 | — | **`v0.1.1-preview`** | **Preview release — ACE Step Studio minimum viable stack. Publish after it_11.** | ✅ Done |
 | 12 | `conditioning` — advanced | `ConditioningCombine`, `ConditioningSetMask`, `ConditioningSetTimestepRange`, Flux, WAN, LTXV | ✅ Done |
-| 13 | `controlnet` | `ControlNetLoader`, `ControlNetApplyAdvanced`, `SetUnionControlNetType` | ⬜ |
-| 14 | `latent` — utilities | `EmptyLatentImage`, `LatentUpscale`, `LatentCrop`, `LatentComposite`, batch ops, video ops | ⬜ |
-| 15 | `image` — utilities | `LoadImage`, `ImagePadForOutpaint`, `ImageUpscaleWithModel`, video I/O, WAN/LTXV img2vid | ⬜ |
-| 16 | `mask` | `LoadImageMask`, `ImageToMask`, `MaskToImage`, `GrowMask`, `FeatherMask`, inpaint masks | ⬜ |
+| 13 | `controlnet` | `ControlNetLoader`, `ControlNetApplyAdvanced`, `SetUnionControlNetType` | ✅ Done |
+| 14 | `latent` — utilities | `EmptyLatentImage`, `LatentUpscale`, `LatentCrop`, `LatentComposite`, batch ops, video ops | ✅ Done |
+| 15 | `image` — utilities | `LoadImage`, `ImagePadForOutpaint`, `ImageUpscaleWithModel`, video I/O, WAN/LTXV img2vid | ✅ Done |
+| 16 | `mask` | `LoadImageMask`, `ImageToMask`, `MaskToImage`, `GrowMask`, `FeatherMask`, inpaint masks | ✅ Done |
 | 17 | `model` — patches | `ModelSamplingFlux`, `ModelSamplingSD3`, `ModelSamplingAuraFlow`, video CFG guidance | ⬜ |
 | 18 | packaging | pip-installable, type stubs, DX polish, extras (`[video]`, `[audio]`, `[all]`) | ⬜ |
 | 19 | `custom-node-importer` skill | Agent skill for automated custom node onboarding: discovery → classification → PRD → implementation | ⬜ |
