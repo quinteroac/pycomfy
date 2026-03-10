@@ -8,9 +8,14 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 import comfy_diffusion.conditioning as conditioning
-from comfy_diffusion.conditioning import conditioning_combine, encode_prompt
+from comfy_diffusion.conditioning import (
+    conditioning_combine,
+    conditioning_set_mask,
+    encode_prompt,
+)
 
 
 def _repo_root() -> Path:
@@ -165,7 +170,12 @@ def test_conditioning_public_api_exports_expected_entrypoints() -> None:
     assert "is_negative" not in signature.parameters
     assert not hasattr(conditioning, "encode_negative_prompt")
     assert conditioning_combine.__name__ == "conditioning_combine"
-    assert conditioning.__all__ == ["encode_prompt", "conditioning_combine"]
+    assert conditioning_set_mask.__name__ == "conditioning_set_mask"
+    assert conditioning.__all__ == [
+        "encode_prompt",
+        "conditioning_combine",
+        "conditioning_set_mask",
+    ]
 
 
 def test_conditioning_combine_merges_two_conditioning_lists() -> None:
@@ -207,6 +217,68 @@ def test_conditioning_combine_supports_list_input() -> None:
         ["b-token", {"source": "style"}],
         ["c-token", {"source": "detail"}],
     ]
+
+
+def test_conditioning_set_mask_applies_default_strength_and_default_cond_area() -> None:
+    conditioning_input = [
+        ["a-token", {"source": "base"}],
+        ["b-token", {"source": "style"}],
+    ]
+
+    class FakeMask:
+        def __init__(self) -> None:
+            self.shape = (64, 64)
+            self.unsqueeze_calls: list[int] = []
+            self.batch_mask = object()
+
+        def unsqueeze(self, dim: int) -> object:
+            self.unsqueeze_calls.append(dim)
+            assert dim == 0
+            return self.batch_mask
+
+    mask = FakeMask()
+
+    output = conditioning_set_mask(conditioning_input, mask)
+
+    assert output is not conditioning_input
+    assert mask.unsqueeze_calls == [0]
+    assert output[0][1]["source"] == "base"
+    assert output[1][1]["source"] == "style"
+    assert output[0][1]["mask"] is mask.batch_mask
+    assert output[1][1]["mask"] is mask.batch_mask
+    assert output[0][1]["mask_strength"] == 1.0
+    assert output[1][1]["mask_strength"] == 1.0
+    assert output[0][1]["set_area_to_bounds"] is False
+    assert output[1][1]["set_area_to_bounds"] is False
+    assert "mask" not in conditioning_input[0][1]
+    assert "mask_strength" not in conditioning_input[0][1]
+
+
+def test_conditioning_set_mask_supports_mask_bounds_and_custom_strength() -> None:
+    conditioning_input = [["a-token", {"source": "base"}]]
+
+    class FakeMask:
+        def __init__(self) -> None:
+            self.shape = (1, 64, 64)
+            self.unsqueeze_calls: list[int] = []
+
+        def unsqueeze(self, dim: int) -> Any:
+            self.unsqueeze_calls.append(dim)
+            raise AssertionError("mask already has batch dimension")
+
+    mask = FakeMask()
+
+    output = conditioning_set_mask(
+        conditioning_input,
+        mask=mask,
+        strength=0.25,
+        set_cond_area="mask bounds",
+    )
+
+    assert mask.unsqueeze_calls == []
+    assert output[0][1]["mask"] is mask
+    assert output[0][1]["mask_strength"] == 0.25
+    assert output[0][1]["set_area_to_bounds"] is True
 
 
 def test_import_comfy_diffusion_conditioning_has_no_torch_or_loader_side_effects() -> None:

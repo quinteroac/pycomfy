@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 
 class _ClipTextEncoder(Protocol):
@@ -60,4 +60,28 @@ def conditioning_combine(
     return merged
 
 
-__all__ = ["encode_prompt", "conditioning_combine"]
+def conditioning_set_mask(
+    conditioning: Any,
+    mask: Any,
+    strength: float = 1.0,
+    set_cond_area: Literal["default", "mask bounds"] = "default",
+) -> list[Any]:
+    """Attach mask metadata to each conditioning entry.
+
+    Mirrors ComfyUI's ``ConditioningSetMask`` node behavior.
+    """
+    set_area_to_bounds = set_cond_area != "default"
+    normalized_mask = mask if len(mask.shape) >= 3 else mask.unsqueeze(0)
+
+    output: list[Any] = []
+    for item in conditioning:
+        updated = [item[0], item[1].copy()]
+        updated[1]["mask"] = normalized_mask
+        updated[1]["set_area_to_bounds"] = set_area_to_bounds
+        updated[1]["mask_strength"] = strength
+        output.append(updated)
+
+    return output
+
+
+__all__ = ["encode_prompt", "conditioning_combine", "conditioning_set_mask"]
