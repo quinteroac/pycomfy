@@ -12,6 +12,11 @@ authors = [
     { name = "Alejandro Quintero" },
 ]
 requires-python = ">=3.12"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+]
 urls = { Homepage = "https://github.com/quinteroac/comfy-diffusion", Repository = "https://github.com/quinteroac/comfy-diffusion", Issues = "https://github.com/quinteroac/comfy-diffusion/issues" }
 dependencies = [
     "pillow>=12.1.1",

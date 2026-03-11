@@ -140,13 +140,31 @@ Early development. Built iteratively, one capability block at a time. The full n
 | 10 | `sampling` — advanced | `SamplerCustomAdvanced`, schedulers, sigma manipulation | ✅ Done |
 | 11 | `audio` | Stable Audio, WAN sound-to-video, LTXV audio, ACE Step | ✅ Done |
 | — | **`v0.1.1-preview`** | **Preview release milestone** | ✅ Done |
-| 12–18 | conditioning, controlnet, latent, image, mask, model patches, packaging | Post-preview | ⬜ |
+| 12–19 | conditioning, controlnet, latent, image, mask, model patches, packaging, skills | ✅ Done | ✅ Done |
 
 ---
 
 ## Installation
 
 Requires Python 3.12+. ComfyUI is vendored inside the package — no separate ComfyUI installation needed.
+
+### Extras (what to install)
+
+`comfy-diffusion` keeps heavy deps optional via extras:
+
+| Extra | Includes | When to use |
+|------:|----------|-------------|
+| `[cpu]` | `torch` (CPU build when installed via `uv`) | CPU-only inference and CI |
+| `[cuda]` | `torch` (CUDA build when installed via `uv`) | NVIDIA GPU inference |
+| `[comfyui]` | ComfyUI runtime deps (from ComfyUI `requirements.txt`) | Required for importing `comfy.*` internals |
+| `[video]` | `opencv-python`, `imageio` | Video I/O helpers |
+| `[audio]` | `torchaudio` | Audio pipelines |
+| `[all]` | union of `[cuda]`, `[video]`, `[audio]` | Convenience bundle |
+
+In most cases you want **one of**:
+
+- CPU: `comfy-diffusion[cpu,comfyui]`
+- CUDA: `comfy-diffusion[cuda,comfyui]`
 
 ### From PyPI
 
@@ -229,6 +247,92 @@ uv pip install torch torchvision torchaudio --index-url https://download.pytorch
 ```
 
 > **Note:** `uv.lock` pins the CPU variant of torch so that CI (no GPU) can run `uv sync` reproducibly. GPU users replace torch after syncing with the command above.
+
+---
+
+## Type checking (stubs)
+
+`comfy-diffusion` is a typed package (PEP 561) and ships `py.typed`, so editors and type checkers
+will automatically pick up inline type annotations after installation.
+
+### Mypy
+
+If your project type-checks strictly, you will typically want one (or both) of:
+
+- Install `comfy-diffusion[comfyui]` so ComfyUI runtime imports resolve.
+- Keep `ignore_missing_imports = true` for ComfyUI internals and GPU-only packages.
+
+Example `pyproject.toml`:
+
+```toml
+[tool.mypy]
+python_version = "3.12"
+strict = true
+ignore_missing_imports = true
+```
+
+### Pyright / Pylance
+
+No special config is required. If you see missing-import diagnostics for `comfy.*`, install
+`comfy-diffusion[comfyui]` (or relax missing-import reporting in your editor).
+
+---
+
+## Developer experience (DX)
+
+This repo is optimized for `uv`:
+
+```bash
+# Install dev deps + selected extras (example: CPU + comfyui)
+uv sync --extra cpu --extra comfyui
+
+# Run tests
+uv run python -m pytest
+
+# Lint and format checks
+uv run ruff check .
+
+# Type check
+uv run mypy comfy_diffusion
+```
+
+---
+
+## Bundled skills
+
+The package includes distributable agent skill documents under `comfy_diffusion/skills/` and
+ships them as package data (so they are available after `pip` / `uv` install).
+
+Discover them at runtime:
+
+```python
+from comfy_diffusion.skills import get_skills_path
+
+skills_root = get_skills_path()
+print([p.name for p in skills_root.iterdir()])  # e.g. ["README.md", "SKILL.md", "base-runtime-check.md", ...]
+```
+
+These are intentionally separate from any repo-local agent workflow assets under `.agents/`.
+
+### Agent discovery (copy into AGENTS.md)
+
+If you are running an AI agent workflow that uses `AGENTS.md` as an entry point, add a note like
+this so the agent knows how to discover the bundled, install-time skills:
+
+```md
+## Bundled skills (discoverable at runtime)
+
+`comfy_diffusion` ships distributable skill documents inside the installed package under
+`comfy_diffusion/skills/` (this is separate from repo-local `.agents/skills/`).
+
+To discover them at runtime:
+
+```python
+from comfy_diffusion.skills import get_skills_path
+
+skills_root = get_skills_path()
+```
+```
 
 ---
 

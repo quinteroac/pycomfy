@@ -22,8 +22,8 @@
 | 15 | `image` — utilities | `LoadImage`, `ImagePadForOutpaint`, `ImageUpscaleWithModel`, video I/O, WAN/LTXV img2vid | ✅ Done |
 | 16 | `mask` | `LoadImageMask`, `ImageToMask`, `MaskToImage`, `GrowMask`, `FeatherMask`, inpaint masks | ✅ Done |
 | 17 | `model` — patches | `ModelSamplingFlux`, `ModelSamplingSD3`, `ModelSamplingAuraFlow`, video CFG guidance | ✅ Done |
-| 18 | packaging | pip-installable, type stubs, DX polish, extras (`[video]`, `[audio]`, `[all]`) | ⬜ |
-| 19 | `custom-node-importer` skill | Agent skill for automated custom node onboarding: discovery → classification → PRD → implementation | ⬜ |
+| 18 | packaging | pip-installable, type stubs, DX polish, extras (`[video]`, `[audio]`, `[all]`) | ✅ Done |
+| 19 | `custom-node-importer` skill | Agent skill for automated custom node onboarding: discovery → classification → PRD → implementation | ✅ Done |
 
 ---
 
