@@ -7,7 +7,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-SUBMODULE_NAME = "comfy_diffusion/vendor/ComfyUI"
+SUBMODULE_NAME = "vendor/ComfyUI"
 SUBMODULE_URL = "https://github.com/comfyanonymous/ComfyUI.git"
 PINNED_TAG = "v0.16.3"
 

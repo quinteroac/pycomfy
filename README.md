@@ -81,12 +81,12 @@ The modularity is the point. Every building block is explicit — you see exactl
 
 ## How ComfyUI is embedded
 
-`comfy-diffusion` ships ComfyUI's source as a **git submodule** vendored inside the package at
-`comfy_diffusion/vendor/ComfyUI`. This means the full ComfyUI source tree is included in every
+`comfy-diffusion` ships ComfyUI's source as a **git submodule** vendored at
+`vendor/ComfyUI`. This means the full ComfyUI source tree is included in every
 PyPI wheel — no separate ComfyUI installation, no running server, no `git clone`.
 
 When you `import comfy_diffusion` the package calls `ensure_comfyui_on_path()`, which inserts
-`comfy_diffusion/vendor/ComfyUI` into `sys.path`. After that single call the entire `comfy.*`
+the vendored ComfyUI directory into `sys.path`. After that single call the entire `comfy.*`
 namespace is importable directly from your code:
 
 ```python
@@ -106,7 +106,7 @@ to import.
 
 | Part | What it does |
 |------|-------------|
-| `comfy_diffusion/vendor/ComfyUI` | ComfyUI source, vendored as a git submodule and shipped in the wheel |
+| `vendor/ComfyUI` | ComfyUI source, vendored as a git submodule and shipped in the wheel |
 | `comfy_diffusion/_runtime.py` | Inserts the vendor path into `sys.path` on first import |
 | `[comfyui]` extra | Installs ComfyUI's Python runtime dependencies from PyPI |
 

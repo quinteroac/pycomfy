@@ -1,2 +1,2 @@
-recursive-include comfy_diffusion/vendor/ComfyUI *
+recursive-include vendor/ComfyUI *
 global-exclude *.pyc __pycache__ .git
