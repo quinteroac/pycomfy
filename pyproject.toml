@@ -7,19 +7,36 @@ name = "comfy-diffusion"
 version = "0.1.1"
 description = "ComfyUI inference engine as a standalone Python library (no server, no UI)."
 readme = "README.md"
+license = { text = "GPL-3.0-only" }
+authors = [
+    { name = "Alejandro Quintero" },
+]
 requires-python = ">=3.12"
+urls = { Homepage = "https://github.com/quinteroac/comfy-diffusion", Repository = "https://github.com/quinteroac/comfy-diffusion", Issues = "https://github.com/quinteroac/comfy-diffusion/issues" }
 dependencies = [
     "pillow>=12.1.1",
     "psutil",
 ]
 
 [project.optional-dependencies]
-# torch from pytorch-cpu / pytorch-cuda index (see [tool.uv.sources])
+# NOTE: [cpu] and [cuda] select PyTorch build variant via [tool.uv.sources] index
+# markers. This distinction is only honoured by uv; plain pip will resolve the
+# default PyPI torch for both extras. Always use: uv pip install ".[cpu]" or
+# uv pip install ".[cuda]"
 cpu = ["torch"]
 cuda = ["torch"]
 video = [
     "opencv-python>=4.13.0.92",
     "imageio>=2.37.2",
+]
+audio = ["torchaudio"]
+# NOTE: [all] mirrors the union of [cuda], [video], and [audio]. If a dep changes
+# in one of those extras, update it here too to keep [all] in sync.
+all = [
+    "torch",
+    "opencv-python>=4.13.0.92",
+    "imageio>=2.37.2",
+    "torchaudio",
 ]
 # ComfyUI runtime deps (from vendor/ComfyUI/requirements.txt via: uv add -r vendor/ComfyUI/requirements.txt --optional comfyui)
 comfyui = [
@@ -64,7 +81,10 @@ dev = ["pytest>=8.0", "ruff>=0.4", "mypy>=1.10"]
 include = ["comfy_diffusion*"]
 
 [tool.setuptools.package-data]
-comfy_diffusion = ["vendor/ComfyUI/**/*", "vendor/ComfyUI/**/.*"]
+comfy_diffusion = [
+    "py.typed",
+    "skills/**/*.md",
+]
 
 [tool.uv]
 # This project uses uv for install, lock, and run. See README and AGENTS.md.
