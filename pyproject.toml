@@ -26,6 +26,13 @@ video = [
     "opencv-python>=4.13.0.92",
     "imageio>=2.37.2",
 ]
+audio = ["torchaudio"]
+all = [
+    "torch",
+    "opencv-python>=4.13.0.92",
+    "imageio>=2.37.2",
+    "torchaudio",
+]
 # ComfyUI runtime deps (from vendor/ComfyUI/requirements.txt via: uv add -r vendor/ComfyUI/requirements.txt --optional comfyui)
 comfyui = [
     "aiohttp>=3.11.8",
