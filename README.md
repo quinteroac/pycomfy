@@ -1,7 +1,7 @@
 # comfy-diffusion
 
-[![PyPI version](https://img.shields.io/pypi/v/comfy-diffusion.svg)](https://pypi.org/project/comfy-diffusion/)
-[![Python](https://img.shields.io/pypi/pyversions/comfy-diffusion.svg)](https://pypi.org/project/comfy-diffusion/)
+[![PyPI version](https://badge.fury.io/py/comfy-diffusion.svg)](https://pypi.org/project/comfy-diffusion/)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)](https://pypi.org/project/comfy-diffusion/)
 [![CI](https://github.com/quinteroac/comfy-diffusion/actions/workflows/publish.yml/badge.svg)](https://github.com/quinteroac/comfy-diffusion/actions/workflows/publish.yml)
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
 
