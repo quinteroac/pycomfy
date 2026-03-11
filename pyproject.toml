@@ -19,7 +19,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# torch from pytorch-cpu / pytorch-cuda index (see [tool.uv.sources])
+# NOTE: [cpu] and [cuda] select PyTorch build variant via [tool.uv.sources] index
+# markers. This distinction is only honoured by uv; plain pip will resolve the
+# default PyPI torch for both extras. Always use: uv pip install ".[cpu]" or
+# uv pip install ".[cuda]"
 cpu = ["torch"]
 cuda = ["torch"]
 video = [
@@ -27,6 +30,8 @@ video = [
     "imageio>=2.37.2",
 ]
 audio = ["torchaudio"]
+# NOTE: [all] mirrors the union of [cuda], [video], and [audio]. If a dep changes
+# in one of those extras, update it here too to keep [all] in sync.
 all = [
     "torch",
     "opencv-python>=4.13.0.92",
@@ -78,8 +83,6 @@ include = ["comfy_diffusion*"]
 [tool.setuptools.package-data]
 comfy_diffusion = [
     "py.typed",
-    "vendor/ComfyUI/**/*",
-    "vendor/ComfyUI/**/.*",
     "skills/**/*.md",
 ]
 
