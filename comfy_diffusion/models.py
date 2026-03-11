@@ -261,5 +261,81 @@ class ModelManager:
             clip_type=comfy_sd.CLIPType.LTXV,
         )
 
+def model_sampling_flux(
+    model: Any,
+    max_shift: float,
+    min_shift: float,
+    width: int,
+    height: int,
+) -> Any:
+    """Patch a model clone with Flux sampling shift settings.
 
-__all__ = ["CheckpointResult", "ModelManager"]
+    The shift value is interpolated from ``min_shift`` and ``max_shift`` based on
+    latent token count derived from ``width`` and ``height``.
+    """
+    ensure_comfyui_on_path()
+    import comfy.model_sampling
+
+    patched_model = model.clone()
+
+    x1 = 256
+    x2 = 4096
+    slope = (max_shift - min_shift) / (x2 - x1)
+    intercept = min_shift - slope * x1
+    latent_tokens = (width * height) / (8 * 8 * 2 * 2)
+    shift = latent_tokens * slope + intercept
+
+    model_sampling_type = type(
+        "ModelSamplingAdvanced",
+        (comfy.model_sampling.ModelSamplingFlux, comfy.model_sampling.CONST),
+        {},
+    )
+    model_sampling = model_sampling_type(model.model.model_config)
+    model_sampling.set_parameters(shift=shift)
+    patched_model.add_object_patch("model_sampling", model_sampling)
+    return patched_model
+
+
+def model_sampling_sd3(model: Any, shift: float) -> Any:
+    """Patch a model clone with SD3 sampling shift settings."""
+    ensure_comfyui_on_path()
+    import comfy.model_sampling
+
+    patched_model = model.clone()
+
+    model_sampling_type = type(
+        "ModelSamplingAdvanced",
+        (comfy.model_sampling.ModelSamplingDiscreteFlow, comfy.model_sampling.CONST),
+        {},
+    )
+    model_sampling = model_sampling_type(model.model.model_config)
+    model_sampling.set_parameters(shift=shift, multiplier=1000)
+    patched_model.add_object_patch("model_sampling", model_sampling)
+    return patched_model
+
+
+def model_sampling_aura_flow(model: Any, shift: float) -> Any:
+    """Patch a model clone with AuraFlow continuous V-prediction shift settings."""
+    ensure_comfyui_on_path()
+    import comfy.model_sampling
+
+    patched_model = model.clone()
+
+    model_sampling_type = type(
+        "ModelSamplingAdvanced",
+        (comfy.model_sampling.ModelSamplingDiscreteFlow, comfy.model_sampling.CONST),
+        {},
+    )
+    model_sampling = model_sampling_type(model.model.model_config)
+    model_sampling.set_parameters(shift=shift, multiplier=1.0)
+    patched_model.add_object_patch("model_sampling", model_sampling)
+    return patched_model
+
+
+__all__ = [
+    "CheckpointResult",
+    "ModelManager",
+    "model_sampling_aura_flow",
+    "model_sampling_flux",
+    "model_sampling_sd3",
+]

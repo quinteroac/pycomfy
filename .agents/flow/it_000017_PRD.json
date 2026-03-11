@@ -1,0 +1,194 @@
+{
+  "goals": [
+    "Provide `model_sampling_flux`, `model_sampling_sd3`, and `model_sampling_aura_flow` functions in `comfy_diffusion/models.py` that apply model-specific sampling patches and return the patched model.",
+    "Provide `video_linear_cfg_guidance` and `video_triangle_cfg_guidance` functions in `comfy_diffusion/sampling.py` that apply per-frame CFG ramps to a model and return the patched model.",
+    "All functions follow existing conventions: lazy imports, duck-typed where possible, CPU-testable."
+  ],
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "ModelSamplingFlux",
+      "description": "Target file: `comfy_diffusion/models.py` (add to existing module — do NOT create a new file) As a Python developer using comfy-diffusion, I want to apply Flux shift parameters (max_shift, min_shift) to a loaded model so that I can configure the Flux continuous noise schedule without accessing ComfyUI internals.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-001-AC01",
+          "text": "`model_sampling_flux(model, max_shift, min_shift, width, height)` is callable from `comfy_diffusion.models`"
+        },
+        {
+          "id": "US-001-AC02",
+          "text": "Returns a patched model clone with the Flux sampling configuration applied"
+        },
+        {
+          "id": "US-001-AC03",
+          "text": "Parameters `max_shift` and `min_shift` control the shift schedule; `width` and `height` determine the latent resolution for shift interpolation"
+        },
+        {
+          "id": "US-001-AC04",
+          "text": "Lazy imports: no `comfy.*` or `torch` at module top level"
+        },
+        {
+          "id": "US-001-AC05",
+          "text": "Typecheck / lint passes"
+        },
+        {
+          "id": "US-001-AC06",
+          "text": "Passing pytest test (CPU-only, mocking ComfyUI internals)"
+        }
+      ]
+    },
+    {
+      "id": "US-002",
+      "title": "ModelSamplingSD3",
+      "description": "Target file: `comfy_diffusion/models.py` (add to existing module — do NOT create a new file) As a Python developer using comfy-diffusion, I want to apply SD3 continuous noise scheduling to a loaded model so that I can set the shift parameter for SD3-family models.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-002-AC01",
+          "text": "`model_sampling_sd3(model, shift)` is callable from `comfy_diffusion.models`"
+        },
+        {
+          "id": "US-002-AC02",
+          "text": "Returns a patched model clone with the SD3 sampling configuration applied"
+        },
+        {
+          "id": "US-002-AC03",
+          "text": "The `shift` parameter controls the continuous EDM noise schedule shift"
+        },
+        {
+          "id": "US-002-AC04",
+          "text": "Lazy imports: no `comfy.*` or `torch` at module top level"
+        },
+        {
+          "id": "US-002-AC05",
+          "text": "Typecheck / lint passes"
+        },
+        {
+          "id": "US-002-AC06",
+          "text": "Passing pytest test (CPU-only, mocking ComfyUI internals)"
+        }
+      ]
+    },
+    {
+      "id": "US-003",
+      "title": "ModelSamplingAuraFlow",
+      "description": "Target file: `comfy_diffusion/models.py` (add to existing module — do NOT create a new file) As a Python developer using comfy-diffusion, I want to apply AuraFlow continuous noise scheduling to a loaded model so that I can set the shift parameter for AuraFlow models.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-003-AC01",
+          "text": "`model_sampling_aura_flow(model, shift)` is callable from `comfy_diffusion.models`"
+        },
+        {
+          "id": "US-003-AC02",
+          "text": "Returns a patched model clone with the AuraFlow sampling configuration applied"
+        },
+        {
+          "id": "US-003-AC03",
+          "text": "The `shift` parameter controls the continuous V-prediction noise schedule shift"
+        },
+        {
+          "id": "US-003-AC04",
+          "text": "Lazy imports: no `comfy.*` or `torch` at module top level"
+        },
+        {
+          "id": "US-003-AC05",
+          "text": "Typecheck / lint passes"
+        },
+        {
+          "id": "US-003-AC06",
+          "text": "Passing pytest test (CPU-only, mocking ComfyUI internals)"
+        }
+      ]
+    },
+    {
+      "id": "US-004",
+      "title": "VideoLinearCFGGuidance",
+      "description": "Target file: `comfy_diffusion/sampling.py` (add to existing module — do NOT create a new file) As a Python developer using comfy-diffusion, I want to apply a linear CFG scaling ramp across video frames so that earlier frames get full CFG and later frames are scaled down linearly, improving temporal coherence.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-004-AC01",
+          "text": "`video_linear_cfg_guidance(model, min_cfg)` is callable from `comfy_diffusion.sampling`"
+        },
+        {
+          "id": "US-004-AC02",
+          "text": "Returns a patched model clone with the linear CFG guidance callback applied"
+        },
+        {
+          "id": "US-004-AC03",
+          "text": "The `min_cfg` parameter sets the minimum CFG value at the last frame; CFG interpolates linearly from full strength to `min_cfg`"
+        },
+        {
+          "id": "US-004-AC04",
+          "text": "Lazy imports: no `comfy.*` or `torch` at module top level"
+        },
+        {
+          "id": "US-004-AC05",
+          "text": "Typecheck / lint passes"
+        },
+        {
+          "id": "US-004-AC06",
+          "text": "Passing pytest test (CPU-only, mocking ComfyUI internals)"
+        }
+      ]
+    },
+    {
+      "id": "US-005",
+      "title": "VideoTriangleCFGGuidance",
+      "description": "Target file: `comfy_diffusion/sampling.py` (add to existing module — do NOT create a new file) As a Python developer using comfy-diffusion, I want to apply a triangle-shaped CFG scaling ramp across video frames so that the middle frames get full CFG and the first/last frames are scaled down, improving temporal coherence for looping or bidirectional video.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-005-AC01",
+          "text": "`video_triangle_cfg_guidance(model, min_cfg)` is callable from `comfy_diffusion.sampling`"
+        },
+        {
+          "id": "US-005-AC02",
+          "text": "Returns a patched model clone with the triangle CFG guidance callback applied"
+        },
+        {
+          "id": "US-005-AC03",
+          "text": "The `min_cfg` parameter sets the minimum CFG value at the endpoints; CFG peaks at the middle frame"
+        },
+        {
+          "id": "US-005-AC04",
+          "text": "Lazy imports: no `comfy.*` or `torch` at module top level"
+        },
+        {
+          "id": "US-005-AC05",
+          "text": "Typecheck / lint passes"
+        },
+        {
+          "id": "US-005-AC06",
+          "text": "Passing pytest test (CPU-only, mocking ComfyUI internals)"
+        }
+      ]
+    }
+  ],
+  "functionalRequirements": [
+    {
+      "id": "FR-1",
+      "description": "`model_sampling_flux(model, max_shift, min_shift, width, height)` patches the model's sampling object with Flux-specific shift logic and returns the patched model clone."
+    },
+    {
+      "id": "FR-2",
+      "description": "`model_sampling_sd3(model, shift)` patches the model's sampling object with SD3 continuous EDM noise scheduling and returns the patched model clone."
+    },
+    {
+      "id": "FR-3",
+      "description": "`model_sampling_aura_flow(model, shift)` patches the model's sampling object with AuraFlow continuous V-prediction noise scheduling and returns the patched model clone."
+    },
+    {
+      "id": "FR-4",
+      "description": "`video_linear_cfg_guidance(model, min_cfg)` lives in `sampling.py` and patches the model with a `sampler_cfg_function` callback that linearly interpolates CFG from full to `min_cfg` across the batch/frame dimension."
+    },
+    {
+      "id": "FR-5",
+      "description": "`video_triangle_cfg_guidance(model, min_cfg)` lives in `sampling.py` and patches the model with a `sampler_cfg_function` callback that applies a triangle-shaped CFG ramp peaking at the middle frame."
+    },
+    {
+      "id": "FR-6",
+      "description": "All functions use lazy imports (no `comfy.*` or `torch` at module top level)."
+    },
+    {
+      "id": "FR-7",
+      "description": "All functions are testable on CPU-only environments with mocked ComfyUI internals."
+    }
+  ]
+}
