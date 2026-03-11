@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 
@@ -166,6 +167,58 @@ def cfg_guider(model: Any, positive: Any, negative: Any, cfg: Any) -> Any:
     guider.set_conds(positive, negative)
     guider.set_cfg(cfg)
     return guider
+
+
+def video_linear_cfg_guidance(model: Any, min_cfg: float) -> Any:
+    """Patch a model clone with a frame-wise linear CFG guidance ramp."""
+
+    def linear_cfg(args: dict[str, Any]) -> Any:
+        cond = args["cond"]
+        uncond = args["uncond"]
+        cond_scale = args["cond_scale"]
+
+        frame_count = cond.shape[0]
+        if frame_count <= 1:
+            scale_values = [cond_scale]
+        else:
+            step = (cond_scale - min_cfg) / (frame_count - 1)
+            scale_values = [cond_scale - (index * step) for index in range(frame_count)]
+
+        scale = cond.new_tensor(scale_values).reshape((frame_count, 1, 1, 1))
+        return uncond + scale * (cond - uncond)
+
+    patched_model = model.clone()
+    patched_model.set_model_sampler_cfg_function(linear_cfg)
+    return patched_model
+
+
+def video_triangle_cfg_guidance(model: Any, min_cfg: float) -> Any:
+    """Patch a model clone with a frame-wise triangle CFG guidance ramp."""
+
+    def triangle_cfg(args: dict[str, Any]) -> Any:
+        cond = args["cond"]
+        uncond = args["uncond"]
+        cond_scale = args["cond_scale"]
+
+        frame_count = cond.shape[0]
+        if frame_count <= 1:
+            scale_values = [cond_scale]
+        else:
+            positions = [index / (frame_count - 1) for index in range(frame_count)]
+            triangle_values = [
+                2.0 * abs(position - math.floor(position + 0.5))
+                for position in positions
+            ]
+            scale_values = [
+                (value * (cond_scale - min_cfg)) + min_cfg for value in triangle_values
+            ]
+
+        scale = cond.new_tensor(scale_values).reshape((frame_count, 1, 1, 1))
+        return uncond + scale * (cond - uncond)
+
+    patched_model = model.clone()
+    patched_model.set_model_sampler_cfg_function(triangle_cfg)
+    return patched_model
 
 
 def random_noise(noise_seed: int) -> Any:
@@ -370,6 +423,8 @@ __all__ = [
     "sample_custom",
     "basic_guider",
     "cfg_guider",
+    "video_linear_cfg_guidance",
+    "video_triangle_cfg_guidance",
     "random_noise",
     "disable_noise",
     "basic_scheduler",
