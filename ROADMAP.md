@@ -21,7 +21,7 @@
 | 14 | `latent` — utilities | `EmptyLatentImage`, `LatentUpscale`, `LatentCrop`, `LatentComposite`, batch ops, video ops | ✅ Done |
 | 15 | `image` — utilities | `LoadImage`, `ImagePadForOutpaint`, `ImageUpscaleWithModel`, video I/O, WAN/LTXV img2vid | ✅ Done |
 | 16 | `mask` | `LoadImageMask`, `ImageToMask`, `MaskToImage`, `GrowMask`, `FeatherMask`, inpaint masks | ✅ Done |
-| 17 | `model` — patches | `ModelSamplingFlux`, `ModelSamplingSD3`, `ModelSamplingAuraFlow`, video CFG guidance | ⬜ |
+| 17 | `model` — patches | `ModelSamplingFlux`, `ModelSamplingSD3`, `ModelSamplingAuraFlow`, video CFG guidance | ✅ Done |
 | 18 | packaging | pip-installable, type stubs, DX polish, extras (`[video]`, `[audio]`, `[all]`) | ⬜ |
 | 19 | `custom-node-importer` skill | Agent skill for automated custom node onboarding: discovery → classification → PRD → implementation | ⬜ |
 
