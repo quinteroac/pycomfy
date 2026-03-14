@@ -1,4 +1,11 @@
 {
+  "version": "1.1.0",
+  "scripts": {
+    "bump:version": "bun run scripts/bump-version.ts",
+    "bump:patch": "BUMP_KIND=patch bun run scripts/bump-version.ts",
+    "bump:minor": "BUMP_KIND=minor bun run scripts/bump-version.ts",
+    "bump:major": "BUMP_KIND=major bun run scripts/bump-version.ts"
+  },
   "dependencies": {
     "@quinteroac/agents-coding-toolkit": "^0.4.0"
   }
