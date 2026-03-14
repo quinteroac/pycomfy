@@ -64,6 +64,9 @@ class ModelManager:
         folder_paths.add_model_folder_path(
             "vae", str(self.models_dir / "vae"), is_default=True
         )
+        folder_paths.add_model_folder_path(
+            "llm", str(self.models_dir / "llm"), is_default=True
+        )
 
     def load_checkpoint(self, filename: str) -> CheckpointResult:
         """Load a checkpoint by filename from the configured checkpoints directory."""
@@ -277,6 +280,34 @@ class ModelManager:
             ckpt_paths=[resolved_te, resolved_ckpt],
             embedding_directory=folder_paths.get_folder_paths("embeddings"),
             clip_type=comfy_sd.CLIPType.LTXV,
+        )
+
+    def load_llm(self, path: str | Path) -> Any:
+        """Load a standalone LLM/VLM text model from a path or filename.
+
+        If ``path`` is an absolute path to an existing file, that file is loaded.
+        Otherwise ``path`` is treated as a filename under ``models_dir/llm``.
+        """
+        ensure_comfyui_on_path()
+
+        import folder_paths
+        from comfy import sd as comfy_sd
+
+        p = Path(path)
+        if p.is_absolute() and p.is_file():
+            llm_path = str(p.resolve())
+        elif p.is_absolute():
+            raise FileNotFoundError(f"llm file not found: {p}")
+        else:
+            name = path if isinstance(path, str) else p.name
+            candidate = self.models_dir / "llm" / name
+            if not candidate.is_file():
+                raise FileNotFoundError(f"llm file not found: {candidate.resolve()}")
+            llm_path = str(candidate.resolve())
+
+        return comfy_sd.load_clip(
+            ckpt_paths=[llm_path],
+            embedding_directory=folder_paths.get_folder_paths("embeddings"),
         )
 
 def model_sampling_flux(

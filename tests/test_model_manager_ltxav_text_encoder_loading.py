@@ -128,6 +128,7 @@ def test_load_ltxav_text_encoder_calls_loader_and_returns_raw_object(
         ("text_encoders", str(models_dir / "text_encoders"), True),
         ("text_encoders", str(models_dir / "clip"), False),
         ("vae", str(models_dir / "vae"), True),
+        ("llm", str(models_dir / "llm"), True),
     ]
 
 
