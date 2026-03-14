@@ -44,7 +44,13 @@ def check_runtime() -> dict[str, Any]:
     """Return structured runtime diagnostics for the current Python process."""
     python_version = _python_version()
 
-    from ._runtime import ensure_comfyui_on_path
+    from ._runtime import ensure_comfyui_available, ensure_comfyui_on_path
+
+    try:
+        ensure_comfyui_available()
+    except Exception as exc:
+        return _runtime_not_found(python_version, str(exc))
+
     ensure_comfyui_on_path()
 
     try:
