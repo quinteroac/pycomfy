@@ -126,6 +126,64 @@ def test_load_llm_resolves_relative_name_under_models_dir_llm(
     assert calls["get_folder_paths"] == ["embeddings"]
 
 
+def test_load_llm_falls_back_to_text_encoders_for_relative_name(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    models_dir = tmp_path / "models"
+    (models_dir / "checkpoints").mkdir(parents=True)
+    embeddings_dir = models_dir / "embeddings"
+    embeddings_dir.mkdir(parents=True)
+    llm_file = models_dir / "text_encoders" / "qwen3_4b.safetensors"
+    llm_file.parent.mkdir(parents=True)
+    llm_file.write_text("stub llm")
+
+    calls = _install_fake_llm_loader_modules(
+        monkeypatch,
+        embeddings_paths=[str(embeddings_dir)],
+        llm_object=object(),
+    )
+
+    ModelManager(models_dir=models_dir).load_llm("qwen3_4b.safetensors")
+
+    assert calls["load_clip"] == [
+        (
+            [str(llm_file.resolve())],
+            [str(embeddings_dir)],
+        )
+    ]
+    assert calls["get_folder_paths"] == ["embeddings"]
+
+
+def test_load_llm_falls_back_to_clip_for_relative_name(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    models_dir = tmp_path / "models"
+    (models_dir / "checkpoints").mkdir(parents=True)
+    embeddings_dir = models_dir / "embeddings"
+    embeddings_dir.mkdir(parents=True)
+    llm_file = models_dir / "clip" / "qwen3_8b.safetensors"
+    llm_file.parent.mkdir(parents=True)
+    llm_file.write_text("stub llm")
+
+    calls = _install_fake_llm_loader_modules(
+        monkeypatch,
+        embeddings_paths=[str(embeddings_dir)],
+        llm_object=object(),
+    )
+
+    ModelManager(models_dir=models_dir).load_llm("qwen3_8b.safetensors")
+
+    assert calls["load_clip"] == [
+        (
+            [str(llm_file.resolve())],
+            [str(embeddings_dir)],
+        )
+    ]
+    assert calls["get_folder_paths"] == ["embeddings"]
+
+
 def test_load_llm_raises_file_not_found_before_loader(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

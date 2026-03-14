@@ -286,7 +286,8 @@ class ModelManager:
         """Load a standalone LLM/VLM text model from a path or filename.
 
         If ``path`` is an absolute path to an existing file, that file is loaded.
-        Otherwise ``path`` is treated as a filename under ``models_dir/llm``.
+        Otherwise ``path`` is treated as a filename searched in this order:
+        ``models_dir/llm`` → ``models_dir/text_encoders`` → ``models_dir/clip``.
         """
         ensure_comfyui_on_path()
 
@@ -300,10 +301,18 @@ class ModelManager:
             raise FileNotFoundError(f"llm file not found: {p}")
         else:
             name = path if isinstance(path, str) else p.name
-            candidate = self.models_dir / "llm" / name
-            if not candidate.is_file():
-                raise FileNotFoundError(f"llm file not found: {candidate.resolve()}")
-            llm_path = str(candidate.resolve())
+            candidates = [
+                self.models_dir / "llm" / name,
+                self.models_dir / "text_encoders" / name,
+                self.models_dir / "clip" / name,
+            ]
+            resolved = next((c.resolve() for c in candidates if c.is_file()), None)
+            if resolved is None:
+                raise FileNotFoundError(
+                    "llm file not found: "
+                    f"{name} (tried {candidates[0].resolve()}, {candidates[1].resolve()}, {candidates[2].resolve()})"
+                )
+            llm_path = str(resolved)
 
         return comfy_sd.load_clip(
             ckpt_paths=[llm_path],
