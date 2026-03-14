@@ -218,6 +218,79 @@ def test_load_clip_raises_value_error_when_called_without_paths(
     assert calls["load_clip"] == []
 
 
+def test_load_clip_resolves_relative_folder_paths_results_to_absolute_ckpt_paths(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    models_dir = tmp_path / "models"
+    embeddings_dir = models_dir / "embeddings"
+    (models_dir / "checkpoints").mkdir(parents=True)
+    embeddings_dir.mkdir(parents=True)
+
+    clip_l = tmp_path / "text_encoders" / "clip_l.safetensors"
+    t5 = tmp_path / "text_encoders" / "t5xxl_fp16.safetensors"
+    clip_l.parent.mkdir(parents=True)
+    clip_l.write_text("stub clip l")
+    t5.write_text("stub t5")
+
+    monkeypatch.chdir(tmp_path)
+    calls = _install_fake_clip_loader_modules(
+        monkeypatch,
+        text_encoders_dir=Path("text_encoders"),
+        embeddings_paths=[str(embeddings_dir)],
+        clip_object=object(),
+    )
+
+    ModelManager(models_dir=models_dir).load_clip(
+        "clip_l.safetensors",
+        "t5xxl_fp16.safetensors",
+    )
+
+    assert calls["load_clip"] == [
+        (
+            [str(clip_l.resolve()), str(t5.resolve())],
+            _FakeCLIPType.STABLE_DIFFUSION,
+            [str(embeddings_dir)],
+        )
+    ]
+
+
+def test_load_clip_raises_file_not_found_when_second_path_is_missing_before_loader(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    models_dir = tmp_path / "models"
+    (models_dir / "checkpoints").mkdir(parents=True)
+    (models_dir / "embeddings").mkdir(parents=True)
+
+    text_encoders_dir = tmp_path / "text_encoders"
+    existing_clip = text_encoders_dir / "clip_l.safetensors"
+    existing_clip.parent.mkdir(parents=True)
+    existing_clip.write_text("stub clip")
+
+    calls = _install_fake_clip_loader_modules(
+        monkeypatch,
+        text_encoders_dir=text_encoders_dir,
+        embeddings_paths=[str(models_dir / "embeddings")],
+        clip_object=object(),
+    )
+
+    with pytest.raises(
+        FileNotFoundError, match=r"clip file not found: missing_second\.safetensors"
+    ):
+        ModelManager(models_dir=models_dir).load_clip(
+            "clip_l.safetensors",
+            "missing_second.safetensors",
+        )
+
+    assert calls["get_full_path_or_raise"] == [
+        ("text_encoders", "clip_l.safetensors"),
+        ("text_encoders", "missing_second.safetensors"),
+    ]
+    assert calls["get_folder_paths"] == []
+    assert calls["load_clip"] == []
+
+
 def test_load_clip_raises_file_not_found_when_relative_resolution_is_missing(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

@@ -160,9 +160,10 @@ class ModelManager:
             except FileNotFoundError as exc:
                 raise FileNotFoundError(f"clip file not found: {path}") from exc
 
-            if not Path(resolved_path).is_file():
+            resolved_path_obj = Path(resolved_path)
+            if not resolved_path_obj.is_file():
                 raise FileNotFoundError(f"clip file not found: {path}")
-            resolved_paths.append(resolved_path)
+            resolved_paths.append(str(resolved_path_obj.resolve()))
 
         return comfy_sd.load_clip(
             ckpt_paths=resolved_paths,
