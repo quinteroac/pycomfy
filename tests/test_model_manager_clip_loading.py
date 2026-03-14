@@ -15,16 +15,20 @@ from comfy_diffusion.models import ModelManager
 
 class _FakeCLIPType(enum.Enum):
     STABLE_DIFFUSION = "stable_diffusion"
+    SDXL = "sdxl"
+    FLUX = "flux"
 
 
 def _install_fake_clip_loader_modules(
     monkeypatch: pytest.MonkeyPatch,
     *,
+    text_encoders_dir: Path,
     embeddings_paths: list[str],
     clip_object: Any,
 ) -> dict[str, list[Any]]:
     calls: dict[str, list[Any]] = {
         "add_model_folder_path": [],
+        "get_full_path_or_raise": [],
         "get_folder_paths": [],
         "load_clip": [],
     }
@@ -42,8 +46,15 @@ def _install_fake_clip_loader_modules(
             raise AssertionError(f"unexpected folder name: {folder_name}")
         return embeddings_paths
 
+    def get_full_path_or_raise(folder_name: str, filename: str) -> str:
+        calls["get_full_path_or_raise"].append((folder_name, filename))
+        if folder_name != "text_encoders":
+            raise AssertionError(f"unexpected folder name: {folder_name}")
+        return str(text_encoders_dir / filename)
+
     setattr(folder_paths_module, "add_model_folder_path", add_model_folder_path)
     setattr(folder_paths_module, "get_folder_paths", get_folder_paths)
+    setattr(folder_paths_module, "get_full_path_or_raise", get_full_path_or_raise)
 
     comfy_sd_module = ModuleType("comfy.sd")
     setattr(comfy_sd_module, "CLIPType", _FakeCLIPType)
@@ -85,7 +96,10 @@ def test_load_clip_calls_comfy_loader_with_resolved_path_and_returns_raw_clip(
     embeddings_paths = [str(embeddings_dir)]
     fake_clip = object()
     calls = _install_fake_clip_loader_modules(
-        monkeypatch, embeddings_paths=embeddings_paths, clip_object=fake_clip
+        monkeypatch,
+        text_encoders_dir=tmp_path / "text_encoders",
+        embeddings_paths=embeddings_paths,
+        clip_object=fake_clip,
     )
 
     manager = ModelManager(models_dir=models_dir)
@@ -96,6 +110,7 @@ def test_load_clip_calls_comfy_loader_with_resolved_path_and_returns_raw_clip(
         ([str(clip_file.resolve())], _FakeCLIPType.STABLE_DIFFUSION, embeddings_paths)
     ]
     assert calls["get_folder_paths"] == ["embeddings"]
+    assert calls["get_full_path_or_raise"] == []
     assert calls["add_model_folder_path"] == [
         ("checkpoints", str(checkpoints_dir), True),
         ("embeddings", str(embeddings_dir), True),
@@ -117,6 +132,7 @@ def test_load_clip_raises_file_not_found_before_comfy_loader(
 
     calls = _install_fake_clip_loader_modules(
         monkeypatch,
+        text_encoders_dir=tmp_path / "text_encoders",
         embeddings_paths=[str(models_dir / "embeddings")],
         clip_object=object(),
     )
@@ -128,5 +144,134 @@ def test_load_clip_raises_file_not_found_before_comfy_loader(
         ModelManager(models_dir=models_dir).load_clip(str(missing_clip_path))
 
     assert expected_path in str(exc_info.value)
+    assert calls["get_folder_paths"] == []
+    assert calls["get_full_path_or_raise"] == []
+    assert calls["load_clip"] == []
+
+
+def test_load_clip_resolves_two_relative_paths_and_uses_requested_clip_type(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    models_dir = tmp_path / "models"
+    embeddings_dir = models_dir / "embeddings"
+    (models_dir / "checkpoints").mkdir(parents=True)
+    embeddings_dir.mkdir(parents=True)
+
+    clip_l = tmp_path / "text_encoders" / "clip_l.safetensors"
+    t5 = tmp_path / "text_encoders" / "t5xxl_fp16.safetensors"
+    clip_l.parent.mkdir(parents=True)
+    clip_l.write_text("stub clip l")
+    t5.write_text("stub t5")
+
+    embeddings_paths = [str(embeddings_dir)]
+    fake_clip = object()
+    calls = _install_fake_clip_loader_modules(
+        monkeypatch,
+        text_encoders_dir=tmp_path / "text_encoders",
+        embeddings_paths=embeddings_paths,
+        clip_object=fake_clip,
+    )
+
+    manager = ModelManager(models_dir=models_dir)
+    result = manager.load_clip(
+        "clip_l.safetensors",
+        "t5xxl_fp16.safetensors",
+        clip_type="flux",
+    )
+
+    assert result is fake_clip
+    assert calls["get_full_path_or_raise"] == [
+        ("text_encoders", "clip_l.safetensors"),
+        ("text_encoders", "t5xxl_fp16.safetensors"),
+    ]
+    assert calls["load_clip"] == [
+        (
+            [str(clip_l), str(t5)],
+            _FakeCLIPType.FLUX,
+            embeddings_paths,
+        )
+    ]
+    assert calls["get_folder_paths"] == ["embeddings"]
+
+
+def test_load_clip_raises_value_error_when_called_without_paths(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    models_dir = tmp_path / "models"
+    (models_dir / "checkpoints").mkdir(parents=True)
+    (models_dir / "embeddings").mkdir(parents=True)
+
+    calls = _install_fake_clip_loader_modules(
+        monkeypatch,
+        text_encoders_dir=tmp_path / "text_encoders",
+        embeddings_paths=[str(models_dir / "embeddings")],
+        clip_object=object(),
+    )
+
+    with pytest.raises(ValueError, match="load_clip requires at least one path"):
+        ModelManager(models_dir=models_dir).load_clip()
+
+    assert calls["get_full_path_or_raise"] == []
+    assert calls["get_folder_paths"] == []
+    assert calls["load_clip"] == []
+
+
+def test_load_clip_raises_file_not_found_when_relative_resolution_is_missing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    models_dir = tmp_path / "models"
+    (models_dir / "checkpoints").mkdir(parents=True)
+    (models_dir / "embeddings").mkdir(parents=True)
+
+    calls = _install_fake_clip_loader_modules(
+        monkeypatch,
+        text_encoders_dir=tmp_path / "text_encoders",
+        embeddings_paths=[str(models_dir / "embeddings")],
+        clip_object=object(),
+    )
+
+    with pytest.raises(
+        FileNotFoundError,
+        match=r"clip file not found: missing_relative\.safetensors",
+    ):
+        ModelManager(models_dir=models_dir).load_clip("missing_relative.safetensors")
+
+    assert calls["get_full_path_or_raise"] == [
+        ("text_encoders", "missing_relative.safetensors")
+    ]
+    assert calls["get_folder_paths"] == []
+    assert calls["load_clip"] == []
+
+
+def test_load_clip_raises_value_error_for_invalid_clip_type_with_valid_names(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    models_dir = tmp_path / "models"
+    (models_dir / "checkpoints").mkdir(parents=True)
+    (models_dir / "embeddings").mkdir(parents=True)
+
+    clip_file = tmp_path / "text_encoders" / "clip_l.safetensors"
+    clip_file.parent.mkdir(parents=True)
+    clip_file.write_text("stub")
+
+    calls = _install_fake_clip_loader_modules(
+        monkeypatch,
+        text_encoders_dir=tmp_path / "text_encoders",
+        embeddings_paths=[str(models_dir / "embeddings")],
+        clip_object=object(),
+    )
+
+    with pytest.raises(ValueError, match="invalid clip_type 'not_real'") as exc_info:
+        ModelManager(models_dir=models_dir).load_clip(clip_file, clip_type="not_real")
+
+    message = str(exc_info.value)
+    assert "stable_diffusion" in message
+    assert "sdxl" in message
+    assert "flux" in message
+    assert calls["get_full_path_or_raise"] == []
     assert calls["get_folder_paths"] == []
     assert calls["load_clip"] == []

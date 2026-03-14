@@ -116,14 +116,13 @@ class ModelManager:
 
     def load_clip(
         self,
-        path: str | Path,
-        *,
+        *paths: str | Path,
         clip_type: str = "stable_diffusion",
     ) -> Any:
         """Load a standalone text encoder (CLIP) from a path or filename.
 
-        If ``path`` is an absolute path to an existing file, that file is loaded.
-        Otherwise ``path`` is treated as a filename under ``text_encoders`` / ``clip``.
+        If a path is absolute, it must point to an existing file.
+        Otherwise each path is treated as a filename under ``text_encoders`` / ``clip``.
 
         ``clip_type`` selects the encoder architecture (e.g. ``"wan"`` for Wan / UMT5-XXL,
         ``"stable_diffusion"``, ``"sd3"``, ``"flux"``). Must match the model weights.
@@ -133,24 +132,42 @@ class ModelManager:
         import folder_paths
         from comfy import sd as comfy_sd
 
-        p = Path(path)
-        if p.is_absolute() and p.is_file():
-            full_path = str(p.resolve())
-        elif p.is_absolute():
-            raise FileNotFoundError(f"clip file not found: {p}")
-        else:
-            name = path if isinstance(path, str) else p.name
-            full_path = folder_paths.get_full_path_or_raise("text_encoders", name)
+        if not paths:
+            raise ValueError("load_clip requires at least one path")
 
-        clip_type_enum = getattr(
-            comfy_sd.CLIPType,
-            clip_type.upper(),
-            comfy_sd.CLIPType.STABLE_DIFFUSION,
-        )
+        valid_clip_types = {
+            member.name.lower(): member for member in comfy_sd.CLIPType
+        }
+        normalized_clip_type = clip_type.lower()
+        if normalized_clip_type not in valid_clip_types:
+            valid_names = ", ".join(sorted(valid_clip_types))
+            raise ValueError(
+                f"invalid clip_type '{clip_type}'. valid values: {valid_names}"
+            )
+
+        resolved_paths: list[str] = []
+        for path in paths:
+            p = Path(path)
+            if p.is_absolute():
+                if not p.is_file():
+                    raise FileNotFoundError(f"clip file not found: {p}")
+                resolved_paths.append(str(p.resolve()))
+                continue
+
+            name = path if isinstance(path, str) else p.name
+            try:
+                resolved_path = folder_paths.get_full_path_or_raise("text_encoders", name)
+            except FileNotFoundError as exc:
+                raise FileNotFoundError(f"clip file not found: {path}") from exc
+
+            if not Path(resolved_path).is_file():
+                raise FileNotFoundError(f"clip file not found: {path}")
+            resolved_paths.append(resolved_path)
+
         return comfy_sd.load_clip(
-            ckpt_paths=[full_path],
+            ckpt_paths=resolved_paths,
             embedding_directory=folder_paths.get_folder_paths("embeddings"),
-            clip_type=clip_type_enum,
+            clip_type=valid_clip_types[normalized_clip_type],
         )
 
     def load_clip_vision(self, path: str | Path) -> Any:
