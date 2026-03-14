@@ -127,3 +127,32 @@ def test_runtime_pinned_ref_constant_matches_git_submodule_pin() -> None:
     )
 
     assert f"Pinned ComfyUI release tag: {_runtime.COMFYUI_PINNED_REF}" in gitmodules_text
+
+
+@pytest.mark.parametrize(
+    ("failure", "expected_phrase"),
+    [
+        (ConnectionError("network timeout while downloading archive"), "network timeout"),
+        (PermissionError("permission denied writing vendor directory"), "permission denied"),
+        (OSError("no space left on device"), "no space left on device"),
+    ],
+)
+def test_check_runtime_returns_error_dict_when_autodownload_bootstrap_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    failure: Exception,
+    expected_phrase: str,
+) -> None:
+    def fake_ensure_available() -> Path:
+        raise failure
+
+    monkeypatch.setattr(_runtime, "ensure_comfyui_available", fake_ensure_available)
+
+    payload = check_runtime()
+
+    assert "error" in payload
+    assert expected_phrase in payload["error"]
+    assert payload["comfyui_version"] is None
+    assert payload["device"] is None
+    assert payload["vram_total_mb"] is None
+    assert payload["vram_free_mb"] is None
+    assert isinstance(payload["python_version"], str)
