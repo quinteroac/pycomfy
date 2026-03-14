@@ -16,6 +16,31 @@ print(check_runtime())
 
 ---
 
+## Quick Start
+
+Call `check_runtime()` before any other `comfy_diffusion` API (model loading, prompt encoding, sampling, etc.).
+
+On first use, `check_runtime()` bootstraps the runtime and triggers an automatic download of the pinned ComfyUI release if `vendor/ComfyUI` is not available yet.
+
+```python
+from comfy_diffusion import check_runtime
+
+runtime = check_runtime()
+if "error" in runtime:
+    # check_runtime() returns an error dict instead of raising
+    print(f"Runtime bootstrap failed: {runtime['error']}")
+    raise SystemExit(1)
+
+from comfy_diffusion.models import ModelManager
+
+manager = ModelManager(models_dir="/path/to/models")
+checkpoint = manager.load_checkpoint("model.safetensors")
+```
+
+After this succeeds, continue with the rest of your inference flow.
+
+---
+
 ## Why I built this
 
 I've been building creative AI applications — tools that generate music, visuals, and video for streaming platforms. For a while I used `diffusers` and `DiffSynth-Studio` as my inference backends. They're great libraries, well-documented, easy to import. But I kept hitting the same wall: the best models, the best fine-tunes, the ones that actually produce good results, are all built for ComfyUI.
