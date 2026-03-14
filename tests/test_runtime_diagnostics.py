@@ -116,7 +116,7 @@ def test_check_runtime_returns_error_dict_when_runtime_is_missing(
     payload = check_runtime()
 
     assert "error" in payload
-    assert "git submodule update --init" in payload["error"]
+    assert "bootstrap failed" in payload["error"]
     assert payload["comfyui_version"] is None
     assert payload["device"] is None
     assert payload["vram_total_mb"] is None

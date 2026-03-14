@@ -1,0 +1,31 @@
+{
+  "iteration": "000021",
+  "outcome": "refactor",
+  "refactorPlan": [
+    {
+      "id": "R-1",
+      "title": "Rename COMFYUI_PINNED_REF to COMFYUI_PINNED_TAG",
+      "files": [
+        "comfy_diffusion/_runtime.py",
+        "tests/test_runtime_autodownload.py"
+      ],
+      "description": "Rename the module-level constant COMFYUI_PINNED_REF to COMFYUI_PINNED_TAG in _runtime.py (also update COMFYUI_PINNED_ARCHIVE_URL f-string). Update all references in tests/test_runtime_autodownload.py from _runtime.COMFYUI_PINNED_REF to _runtime.COMFYUI_PINNED_TAG."
+    },
+    {
+      "id": "R-2",
+      "title": "Fix stale _runtime_not_found error message",
+      "files": [
+        "comfy_diffusion/runtime.py"
+      ],
+      "description": "Update the _runtime_not_found helper to produce a message that reflects the auto-download context ('ComfyUI runtime bootstrap failed.') rather than the old 'Run: git submodule update --init' instruction which no longer applies as primary guidance."
+    },
+    {
+      "id": "R-3",
+      "title": "Have ensure_comfyui_on_path() call ensure_comfyui_available()",
+      "files": [
+        "comfy_diffusion/_runtime.py"
+      ],
+      "description": "Call ensure_comfyui_available() at the start of ensure_comfyui_on_path() so direct callers (not going through check_runtime) also trigger the bootstrap automatically."
+    }
+  ]
+}

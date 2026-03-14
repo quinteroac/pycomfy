@@ -12,9 +12,9 @@ def _python_version() -> str:
 
 
 def _runtime_not_found(python_version: str, detail: str = "") -> dict[str, Any]:
-    msg = "ComfyUI runtime not found. Run: git submodule update --init"
+    msg = "ComfyUI runtime bootstrap failed."
     if detail:
-        msg += f" (or install missing deps). Cause: {detail}"
+        msg += f" Cause: {detail}"
     return {
         "error": msg,
         "comfyui_version": None,

@@ -13,10 +13,10 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-COMFYUI_PINNED_REF = "v0.16.3"
+COMFYUI_PINNED_TAG = "v0.16.3"
 COMFYUI_PINNED_ARCHIVE_URL = (
     "https://github.com/comfyanonymous/ComfyUI/archive/refs/tags/"
-    f"{COMFYUI_PINNED_REF}.zip"
+    f"{COMFYUI_PINNED_TAG}.zip"
 )
 
 
@@ -77,8 +77,8 @@ def ensure_comfyui_available() -> Path:
 
 
 def ensure_comfyui_on_path() -> Path:
-    """Ensure vendored ComfyUI is importable and return the inserted path."""
-    comfyui_root = _comfyui_root()
+    """Ensure vendored ComfyUI is available and importable; return the inserted path."""
+    comfyui_root = ensure_comfyui_available()
     comfyui_root_str = str(comfyui_root)
 
     if comfyui_root_str not in sys.path:
