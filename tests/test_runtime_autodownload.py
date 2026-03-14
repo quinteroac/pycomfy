@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import importlib
+import io
+import sys
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -12,6 +14,66 @@ import pytest
 
 from comfy_diffusion import _runtime
 from comfy_diffusion.runtime import check_runtime
+
+
+def _build_minimal_comfyui_zip() -> bytes:
+    archive_buffer = io.BytesIO()
+    archive_root = f"ComfyUI-{_runtime.COMFYUI_PINNED_REF}"
+
+    with zipfile.ZipFile(archive_buffer, mode="w") as archive:
+        archive.writestr(f"{archive_root}/comfy/__init__.py", "")
+        archive.writestr(
+            f"{archive_root}/comfy/model_management.py",
+            (
+                "def get_torch_device():\n"
+                "    return 'cpu'\n\n"
+                "def get_total_memory(_device):\n"
+                "    return 0\n\n"
+                "def get_free_memory(_device):\n"
+                "    return 0\n"
+            ),
+        )
+        archive.writestr(
+            f"{archive_root}/comfyui_version.py",
+            "__version__ = '0.16.3'\n",
+        )
+
+    return archive_buffer.getvalue()
+
+
+def test_check_runtime_bootstraps_from_absent_vendor_comfyui_dir(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    comfyui_root = tmp_path / "vendor" / "ComfyUI"
+    zip_fixture = _build_minimal_comfyui_zip()
+    download_calls = {"count": 0}
+    original_sys_path = list(sys.path)
+
+    def fake_urlretrieve(url: str, filename: str | Path, *_args: Any, **_kwargs: Any) -> None:
+        download_calls["count"] += 1
+        assert url == _runtime.COMFYUI_PINNED_ARCHIVE_URL
+        Path(filename).write_bytes(zip_fixture)
+
+    monkeypatch.setattr(_runtime, "_comfyui_root", lambda: comfyui_root)
+    monkeypatch.setattr(urllib.request, "urlretrieve", fake_urlretrieve)
+
+    for module_name in ("comfyui_version", "comfy.model_management", "comfy"):
+        sys.modules.pop(module_name, None)
+
+    payload = check_runtime()
+
+    for module_name in ("comfyui_version", "comfy.model_management", "comfy"):
+        sys.modules.pop(module_name, None)
+    sys.path[:] = original_sys_path
+
+    assert download_calls["count"] == 1
+    assert (comfyui_root / "comfy").is_dir()
+    assert "error" not in payload
+    assert payload["comfyui_version"] == "0.16.3"
+    assert payload["device"] == "cpu"
+    assert payload["vram_total_mb"] == 0
+    assert payload["vram_free_mb"] == 0
+    assert isinstance(payload["python_version"], str)
 
 
 def test_ensure_comfyui_available_skips_download_when_runtime_is_present(
