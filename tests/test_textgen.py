@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import inspect
 import json
 import os
@@ -11,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 import comfy_diffusion.textgen as textgen_module
-from comfy_diffusion.textgen import generate_text
+from comfy_diffusion.textgen import generate_ltx2_prompt, generate_text
 
 
 def _repo_root() -> Path:
@@ -36,7 +37,8 @@ def _run_python(code: str) -> subprocess.CompletedProcess[str]:
 
 def test_textgen_module_exports_generate_text() -> None:
     assert generate_text.__name__ == "generate_text"
-    assert textgen_module.__all__ == ["generate_text"]
+    assert generate_ltx2_prompt.__name__ == "generate_ltx2_prompt"
+    assert textgen_module.__all__ == ["generate_text", "generate_ltx2_prompt"]
 
 
 def test_generate_text_signature_matches_contract() -> None:
@@ -49,6 +51,11 @@ def test_generate_text_signature_matches_contract() -> None:
         "min_p: 'float' = 0.05, repetition_penalty: 'float' = 1.05, "
         "seed: 'int' = 0) -> 'str'"
     )
+
+
+def test_generate_ltx2_prompt_signature_matches_generate_text() -> None:
+    assert inspect.signature(generate_ltx2_prompt) == inspect.signature(generate_text)
+    assert inspect.signature(generate_ltx2_prompt).return_annotation == "str"
 
 
 def test_generate_text_calls_tokenize_generate_decode_with_sampling() -> None:
@@ -167,6 +174,98 @@ def test_generate_text_does_not_forward_sampling_params_when_disabled() -> None:
     assert clip.generate_kwargs == {"do_sample": False, "max_length": 256}
 
 
+def test_generate_ltx2_prompt_uses_t2v_template_when_image_is_none(monkeypatch: Any) -> None:
+    calls: list[dict[str, Any]] = []
+
+    def fake_generate_text(**kwargs: Any) -> str:
+        calls.append(kwargs)
+        return "enhanced"
+
+    monkeypatch.setattr(textgen_module, "generate_text", fake_generate_text)
+
+    result = generate_ltx2_prompt(
+        clip="clip",
+        prompt="raw prompt",
+        image=None,
+        max_length=120,
+        do_sample=False,
+        temperature=0.5,
+        top_k=10,
+        top_p=0.8,
+        min_p=0.2,
+        repetition_penalty=1.1,
+        seed=99,
+    )
+
+    assert result == "enhanced"
+    assert len(calls) == 1
+    forwarded = calls[0]
+    expected_prompt = (
+        f"<start_of_turn>system\n{textgen_module.LTX2_T2V_SYSTEM_PROMPT.strip()}<end_of_turn>\n"
+        "<start_of_turn>user\nUser Raw Input Prompt: raw prompt.<end_of_turn>\n"
+        "<start_of_turn>model\n"
+    )
+    assert forwarded["prompt"] == expected_prompt
+    assert forwarded["image"] is None
+    assert forwarded["clip"] == "clip"
+    assert forwarded["max_length"] == 120
+    assert forwarded["do_sample"] is False
+    assert forwarded["temperature"] == 0.5
+    assert forwarded["top_k"] == 10
+    assert forwarded["top_p"] == 0.8
+    assert forwarded["min_p"] == 0.2
+    assert forwarded["repetition_penalty"] == 1.1
+    assert forwarded["seed"] == 99
+
+
+def test_generate_ltx2_prompt_uses_i2v_template_when_image_is_set(monkeypatch: Any) -> None:
+    calls: list[dict[str, Any]] = []
+    image = object()
+
+    def fake_generate_text(**kwargs: Any) -> str:
+        calls.append(kwargs)
+        return "enhanced"
+
+    monkeypatch.setattr(textgen_module, "generate_text", fake_generate_text)
+
+    result = generate_ltx2_prompt(
+        clip="clip",
+        prompt="raw prompt",
+        image=image,
+    )
+
+    assert result == "enhanced"
+    assert len(calls) == 1
+    forwarded = calls[0]
+    expected_prompt = (
+        f"<start_of_turn>system\n{textgen_module.LTX2_I2V_SYSTEM_PROMPT.strip()}<end_of_turn>\n"
+        "<start_of_turn>user\n\n<image_soft_token>\n\n"
+        "User Raw Input Prompt: raw prompt.<end_of_turn>\n<start_of_turn>model\n"
+    )
+    assert forwarded["prompt"] == expected_prompt
+    assert forwarded["image"] is image
+
+
+def test_ltx2_templates_match_comfyui_verbatim() -> None:
+    source_path = _repo_root() / "vendor/ComfyUI/comfy_extras/nodes_textgen.py"
+    tree = ast.parse(source_path.read_text(encoding="utf-8"), filename=str(source_path))
+
+    constants: dict[str, str] = {}
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and len(node.targets) == 1:
+            target = node.targets[0]
+            if (
+                isinstance(target, ast.Name)
+                and target.id in {"LTX2_T2V_SYSTEM_PROMPT", "LTX2_I2V_SYSTEM_PROMPT"}
+                and isinstance(node.value, ast.Constant)
+                and isinstance(node.value.value, str)
+            ):
+                constants[target.id] = node.value.value
+
+    assert constants["LTX2_T2V_SYSTEM_PROMPT"] == textgen_module.LTX2_T2V_SYSTEM_PROMPT
+    assert constants["LTX2_I2V_SYSTEM_PROMPT"] == textgen_module.LTX2_I2V_SYSTEM_PROMPT
+
+
 def test_textgen_import_has_no_torch_or_comfy_side_effects() -> None:
     result = _run_python(
         "import json\n"
@@ -184,13 +283,15 @@ def test_textgen_import_has_no_torch_or_comfy_side_effects() -> None:
         "  'torch_loaded': 'torch' in sys.modules,\n"
         "  'comfy_loaded': any(m == 'comfy' or m.startswith('comfy.') for m in sys.modules),\n"
         "  'heavy': heavy_modules,\n"
-        "  'function_name': textgen.generate_text.__name__,\n"
+        "  'functions': sorted(\n"
+        "      [textgen.generate_text.__name__, textgen.generate_ltx2_prompt.__name__]\n"
+        "  ),\n"
         "}\n"
         "print(json.dumps(payload))\n"
     )
 
     payload = json.loads(result.stdout)
-    assert payload["function_name"] == "generate_text"
+    assert payload["functions"] == ["generate_ltx2_prompt", "generate_text"]
     assert payload["torch_loaded"] is False
     assert payload["comfy_loaded"] is False
     assert payload["heavy"] == []
