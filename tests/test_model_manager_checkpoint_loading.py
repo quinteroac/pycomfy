@@ -114,6 +114,7 @@ def test_load_checkpoint_resolves_filename_and_returns_typed_result(
         ("text_encoders", str(models_dir / "text_encoders"), True),
         ("text_encoders", str(models_dir / "clip"), False),
         ("vae", str(models_dir / "vae"), True),
+        ("llm", str(models_dir / "llm"), True),
     ]
     assert calls["get_full_path_or_raise"] == [("checkpoints", checkpoint_filename)]
     assert calls["get_folder_paths"] == ["embeddings"]

@@ -119,6 +119,7 @@ def test_load_clip_calls_comfy_loader_with_resolved_path_and_returns_raw_clip(
         ("text_encoders", str(models_dir / "text_encoders"), True),
         ("text_encoders", str(models_dir / "clip"), False),
         ("vae", str(models_dir / "vae"), True),
+        ("llm", str(models_dir / "llm"), True),
     ]
 
 

@@ -23,8 +23,14 @@
 | 16 | `mask` | `LoadImageMask`, `ImageToMask`, `MaskToImage`, `GrowMask`, `FeatherMask`, inpaint masks | ✅ Done |
 | 17 | `model` — patches | `ModelSamplingFlux`, `ModelSamplingSD3`, `ModelSamplingAuraFlow`, video CFG guidance | ✅ Done |
 | 18 | packaging | pip-installable, type stubs, DX polish, extras (`[video]`, `[audio]`, `[all]`) | ✅ Done |
-| 19 | Implement dual clip loader to accept more than one clip.
-| 20 | `custom-node-importer` skill | Agent skill for automated custom node onboarding: discovery → classification → PRD → implementation | ✅ Done |
+| 19 | Implement dual clip loader to accept more than one clip. | ✅ Done |
+| 20 | `textgen` | Expose LLM/VLM text generation wrappers from ComfyUI (`TextGenerate`, `TextGenerateLTX2Prompt`) as importable Python functions (e.g. `generate_text()`) |
+
+---
+
+## Candidates
+
+- [ ] [candidate] **`custom-node-importer` skill** — agent skill para onboarding automatizado de custom nodes de ComfyUI: discovery → classification → PRD → implementation. Effort: L.
 
 ---
 
@@ -72,6 +78,9 @@
 **Audio**
 `VAEEncodeAudio`, `VAEDecodeAudio`, `VAEDecodeAudioTiled`, `EmptyLatentAudio`, `ConditioningStableAudio`, `AudioEncoderLoader`, `AudioEncoderEncode`, `LTXVAudioVAELoader`, `LTXVAudioVAEEncode`, `LTXVAudioVAEDecode`, `LTXVEmptyLatentAudio`, `LTXAVTextEncoderLoader`, `TextEncodeAceStepAudio`, `TextEncodeAceStepAudio1.5`, `EmptyAceStepLatentAudio`, `EmptyAceStep1.5LatentAudio`
 
+**Textgen (LLM/VLM)**
+`TextGenerate`, `TextGenerateLTX2Prompt`
+
 ---
 
 ### Nice-to-have nodes
@@ -117,7 +126,7 @@
 `GLIGENTextBoxApply`, `unCLIPConditioning`, `SVD_img2vid_Conditioning`, `PerpNeg`, `PerpNegGuider`, `SamplerLCMUpscale`, `VPScheduler`, `ManualSigmas`, `LatentApplyOperation`, `LatentApplyOperationCFG`, `LatentOperationTonemapReinhard`, `LatentOperationSharpen`, `CLIPTextEncodePixArtAlpha`, `CLIPTextEncodeLumina2`, `CLIPTextEncodeHiDream`, `CLIPTextEncodeKandinsky5`, `StableCascade_StageB_Conditioning`, `LotusConditioning`, `PhotoMakerEncode`, `InstructPixToPixConditioning`, `TextEncodeQwenImageEdit`, `TextEncodeZImageOmni`
 
 **Full modules discarded**
-`nodes_train.py`, `nodes_dataset.py`, `nodes_hypernetwork.py`, `nodes_webcam.py`, `nodes_preview_any.py`, `nodes_nop.py`, `nodes_glsl.py`, `nodes_load_3d.py`, `nodes_stable3d.py`, `nodes_hunyuan3d.py`, `nodes_string.py`, `nodes_logic.py`, `nodes_primitive.py`, `nodes_textgen.py`, `nodes_cosmos.py`, `nodes_mochi.py`, `nodes_lotus.py`, `nodes_pixart.py`, `nodes_kandinsky5.py`, `nodes_stable_cascade.py`, `nodes_mahiro.py`, `nodes_fresca.py`, `nodes_model_patch.py`, `nodes_lora_debug.py`, `nodes_edit_model.py`, `nodes_lora_extract.py`, `nodes_model_merging_model_specific.py` (except Flux1, SDXL, LTXV in nice-to-have)
+`nodes_train.py`, `nodes_dataset.py`, `nodes_hypernetwork.py`, `nodes_webcam.py`, `nodes_preview_any.py`, `nodes_nop.py`, `nodes_glsl.py`, `nodes_load_3d.py`, `nodes_stable3d.py`, `nodes_hunyuan3d.py`, `nodes_string.py`, `nodes_logic.py`, `nodes_primitive.py`, `nodes_cosmos.py`, `nodes_mochi.py`, `nodes_lotus.py`, `nodes_pixart.py`, `nodes_kandinsky5.py`, `nodes_stable_cascade.py`, `nodes_mahiro.py`, `nodes_fresca.py`, `nodes_model_patch.py`, `nodes_lora_debug.py`, `nodes_edit_model.py`, `nodes_lora_extract.py`, `nodes_model_merging_model_specific.py` (except Flux1, SDXL, LTXV in nice-to-have)
 
 ---
 
