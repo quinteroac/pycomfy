@@ -1,5 +1,5 @@
 {
-  "current_iteration": "000020",
+  "current_iteration": "000021",
   "current_phase": "prototype",
   "phases": {
     "define": {
@@ -9,17 +9,17 @@
       },
       "requirement_definition": {
         "status": "approved",
-        "file": "it_000020_product-requirement-document.md"
+        "file": "it_000021_product-requirement-document.md"
       },
       "prd_generation": {
         "status": "completed",
-        "file": "it_000020_PRD.json"
+        "file": "it_000021_PRD.json"
       }
     },
     "prototype": {
       "prototype_creation": {
         "status": "completed",
-        "file": "it_000020_progress.json"
+        "file": "it_000021_progress.json"
       },
       "prototype_audit": {
         "status": "pending",
@@ -34,8 +34,8 @@
         "file": null
       },
       "project_context": {
-        "status": "pending",
-        "file": null
+        "status": "created",
+        "file": ".agents/PROJECT_CONTEXT.md"
       },
       "test_plan": {
         "status": "pending",
@@ -74,8 +74,8 @@
       }
     }
   },
-  "last_updated": "2026-03-14T18:13:11.496Z",
-  "updated_by": "nvst:create-prototype",
+  "last_updated": "2026-03-14T19:41:43.371Z",
+  "updated_by": "nvst:approve-project-context",
   "history": [
     {
       "iteration": "000001",
@@ -176,6 +176,11 @@
       "iteration": "000019",
       "archived_at": "2026-03-14T17:48:57.380Z",
       "archived_path": ".agents/flow/archived/000019"
+    },
+    {
+      "iteration": "000020",
+      "archived_at": "2026-03-14T18:47:25.861Z",
+      "archived_path": ".agents/flow/archived/000020"
     }
   ]
 }

@@ -24,7 +24,8 @@
 | 17 | `model` — patches | `ModelSamplingFlux`, `ModelSamplingSD3`, `ModelSamplingAuraFlow`, video CFG guidance | ✅ Done |
 | 18 | packaging | pip-installable, type stubs, DX polish, extras (`[video]`, `[audio]`, `[all]`) | ✅ Done |
 | 19 | Implement dual clip loader to accept more than one clip. | ✅ Done |
-| 20 | `textgen` | Expose LLM/VLM text generation wrappers from ComfyUI (`TextGenerate`, `TextGenerateLTX2Prompt`) as importable Python functions (e.g. `generate_text()`) |
+| 20 | `textgen` | Expose LLM/VLM text generation wrappers from ComfyUI (`TextGenerate`, `TextGenerateLTX2Prompt`) as importable Python functions (e.g. `generate_text()`) | ✅ Done |
+| 21 | `runtime` — ComfyUI auto-bootstrap | `check_runtime()` detects missing `vendor/ComfyUI` and downloads it automatically so `pip install comfy-diffusion` works without git submodule init | ⬜ |
 
 ---
 
