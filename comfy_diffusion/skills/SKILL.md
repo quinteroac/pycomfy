@@ -25,11 +25,35 @@ def my_helper(model: Any) -> Any:
 import comfy.sd  # DO NOT do this at module level
 ```
 
-### 2. Path Parameters: `str | Path`
+### 2. Runtime Preflight (required for agents)
+
+Before executing any codepath that relies on ComfyUI (`comfy.*`, `nodes`,
+`node_helpers`, `comfy_extras.*`, `comfyui_version`), agents MUST call
+`comfy_diffusion.runtime.check_runtime()` as an initial preflight step.
+
+```python
+import comfy_diffusion
+
+info = comfy_diffusion.check_runtime()
+if "error" in info:
+    raise RuntimeError(f"ComfyUI runtime unavailable: {info['error']}")
+# Safe to proceed with ComfyUI-dependent imports and calls
+```
+
+Key contract:
+- `check_runtime()` **never raises**; it always returns a structured `dict`.
+- `"python_version"` is **always** present in the returned dict.
+- If the dict contains an `"error"` key, agents **MUST NOT** proceed with any
+  ComfyUI imports or ComfyUI-dependent execution.
+- The most common failure mode is that the `vendor/ComfyUI` git submodule is
+  not initialized in the working copy (`git submodule update --init --recursive`
+  fixes this). The preflight is the canonical way to detect this condition.
+
+### 3. Path Parameters: `str | Path`
 All file-path parameters accept `str | Path`. Internally paths are always resolved
 via `pathlib.Path`. Never pass bare strings with `os.path`; use `Path(x)` first.
 
-### 3. Image Tensor Layout: BHWC float32 in [0, 1]
+### 4. Image Tensor Layout: BHWC float32 in [0, 1]
 ComfyUI image tensors use `(Batch, Height, Width, Channels)` — not `BCHW`.
 Values are `float32` in the range `[0.0, 1.0]`.
 
@@ -38,7 +62,7 @@ Values are `float32` in the range `[0.0, 1.0]`.
 image_tensor = load_image("photo.png")[0]
 ```
 
-### 4. LATENT Dict Format
+### 5. LATENT Dict Format
 Latents are plain Python `dict[str, Any]` with a mandatory `"samples"` tensor key.
 Optional metadata keys include `"noise_mask"`, `"type"` (e.g. `"audio"`).
 
@@ -48,7 +72,7 @@ latent_with_mask = {"samples": ..., "noise_mask": mask_tensor}          # inpain
 audio_latent = {"samples": ..., "sample_rate": 44100, "type": "audio"}  # audio
 ```
 
-### 5. Discovering Bundled Skills
+### 6. Discovering Bundled Skills
 Use `get_skills_path()` (or `importlib.resources.files` directly) to locate skill
 files distributed with the installed package:
 
