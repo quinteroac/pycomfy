@@ -191,12 +191,6 @@ In most cases you want **one of**:
 - CPU: `comfy-diffusion[cpu,comfyui]`
 - CUDA: `comfy-diffusion[cuda,comfyui]`
 
-### Using npx skills
-
-```bash
-npx skills add https://github.com/quinteroac/comfy-diffusion/tree/master/comfy_diffusion/skills
-```
-
 ### From PyPI
 
 ```bash
@@ -344,6 +338,12 @@ print([p.name for p in skills_root.iterdir()])  # e.g. ["README.md", "SKILL.md",
 ```
 
 These are intentionally separate from any repo-local agent workflow assets under `.agents/`.
+
+### Install skills via npx
+
+```bash
+npx skills add https://github.com/quinteroac/comfy-diffusion/tree/master/comfy_diffusion/skills
+```
 
 ### Agent discovery (copy into AGENTS.md)
 
