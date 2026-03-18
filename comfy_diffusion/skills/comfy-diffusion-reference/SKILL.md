@@ -1,8 +1,36 @@
+---
+name: comfy-diffusion-reference
+description: Project conventions and complete public API reference for comfy_diffusion — covers coding patterns, data formats, and every module signature.
+user-invocable: false
+---
+
 # comfy_diffusion — Project Conventions and Public API Reference
 
 This document is the canonical skill reference for AI agents working with the
 `comfy_diffusion` package. It covers coding conventions, data format contracts,
 and complete public signatures for every module.
+
+---
+
+## Runtime Bootstrap (mandatory first step)
+
+**Always call `check_runtime()` before any other `comfy_diffusion` API.** It bootstraps
+the ComfyUI runtime (vendored at `vendor/ComfyUI`), validates device availability, and
+returns an error dict instead of raising — so you can detect failure explicitly.
+
+```python
+from comfy_diffusion import check_runtime
+
+runtime = check_runtime()
+if "error" in runtime:
+    print(f"Runtime bootstrap failed: {runtime['error']}")
+    raise SystemExit(1)
+
+# Safe to call model loading, sampling, VAE, etc.
+```
+
+Skipping this step will cause import errors or undefined behaviour in any module that
+depends on `comfy.*` internals being on `sys.path`.
 
 ---
 
@@ -25,35 +53,11 @@ def my_helper(model: Any) -> Any:
 import comfy.sd  # DO NOT do this at module level
 ```
 
-### 2. Runtime Preflight (required for agents)
-
-Before executing any codepath that relies on ComfyUI (`comfy.*`, `nodes`,
-`node_helpers`, `comfy_extras.*`, `comfyui_version`), agents MUST call
-`comfy_diffusion.runtime.check_runtime()` as an initial preflight step.
-
-```python
-import comfy_diffusion
-
-info = comfy_diffusion.check_runtime()
-if "error" in info:
-    raise RuntimeError(f"ComfyUI runtime unavailable: {info['error']}")
-# Safe to proceed with ComfyUI-dependent imports and calls
-```
-
-Key contract:
-- `check_runtime()` **never raises**; it always returns a structured `dict`.
-- `"python_version"` is **always** present in the returned dict.
-- If the dict contains an `"error"` key, agents **MUST NOT** proceed with any
-  ComfyUI imports or ComfyUI-dependent execution.
-- The most common failure mode is that the `vendor/ComfyUI` git submodule is
-  not initialized in the working copy (`git submodule update --init --recursive`
-  fixes this). The preflight is the canonical way to detect this condition.
-
-### 3. Path Parameters: `str | Path`
+### 2. Path Parameters: `str | Path`
 All file-path parameters accept `str | Path`. Internally paths are always resolved
 via `pathlib.Path`. Never pass bare strings with `os.path`; use `Path(x)` first.
 
-### 4. Image Tensor Layout: BHWC float32 in [0, 1]
+### 3. Image Tensor Layout: BHWC float32 in [0, 1]
 ComfyUI image tensors use `(Batch, Height, Width, Channels)` — not `BCHW`.
 Values are `float32` in the range `[0.0, 1.0]`.
 
@@ -62,7 +66,7 @@ Values are `float32` in the range `[0.0, 1.0]`.
 image_tensor = load_image("photo.png")[0]
 ```
 
-### 5. LATENT Dict Format
+### 4. LATENT Dict Format
 Latents are plain Python `dict[str, Any]` with a mandatory `"samples"` tensor key.
 Optional metadata keys include `"noise_mask"`, `"type"` (e.g. `"audio"`).
 
@@ -72,7 +76,7 @@ latent_with_mask = {"samples": ..., "noise_mask": mask_tensor}          # inpain
 audio_latent = {"samples": ..., "sample_rate": 44100, "type": "audio"}  # audio
 ```
 
-### 6. Discovering Bundled Skills
+### 5. Discovering Bundled Skills
 Use `get_skills_path()` (or `importlib.resources.files` directly) to locate skill
 files distributed with the installed package:
 
@@ -80,7 +84,7 @@ files distributed with the installed package:
 from comfy_diffusion.skills import get_skills_path
 
 skills_root = get_skills_path()
-skill_text = (skills_root / "SKILL.md").read_text(encoding="utf-8")
+skill_text = (skills_root / "comfy-diffusion-reference" / "SKILL.md").read_text(encoding="utf-8")
 ```
 
 ---
@@ -134,7 +138,11 @@ class CheckpointResult:
 
 class ModelManager:
     def __init__(self, models_dir: str | Path) -> None:
-        """Validate and register models_dir with ComfyUI folder_paths."""
+        """Validate and register models_dir with ComfyUI folder_paths.
+
+        Registers subdirectories: checkpoints, embeddings, diffusion_models/unet,
+        text_encoders/clip, vae, llm.
+        """
 
     def load_checkpoint(self, filename: str) -> CheckpointResult:
         """Load a .safetensors/.ckpt checkpoint from models_dir/checkpoints/."""
@@ -142,22 +150,25 @@ class ModelManager:
     def load_vae(self, path: str | Path) -> Any:
         """Load a standalone VAE (absolute path or filename under models_dir/vae/)."""
 
-    def load_clip(
-        self,
-        path: str | Path,
-        *,
-        clip_type: str = "stable_diffusion",
-    ) -> Any:
-        """Load a text encoder. clip_type: "stable_diffusion" | "wan" | "sd3" | "flux" | "ltxv"."""
+    def load_clip(self, *paths: str | Path, clip_type: str = "stable_diffusion") -> Any:
+        """Load a standalone text encoder from one or more paths/filenames.
+
+        Accepts variadic paths for multi-file encoders (e.g. dual text encoders).
+        clip_type: "stable_diffusion" | "wan" | "sd3" | "flux" | "ltxv" (any CLIPType name).
+        Paths are resolved under models_dir/text_encoders/ or models_dir/clip/.
+        """
 
     def load_clip_vision(self, path: str | Path) -> Any:
         """Load a CLIP vision model from models_dir/clip_vision/ or absolute path."""
 
     def load_unet(self, path: str | Path) -> Any:
-        """Load a standalone diffusion model (UNet/transformer)."""
+        """Load a standalone diffusion model (UNet/transformer).
+
+        Resolved under models_dir/unet/ or models_dir/diffusion_models/.
+        """
 
     def load_ltxv_audio_vae(self, path: str | Path) -> object:
-        """Load an LTXV audio VAE checkpoint."""
+        """Load an LTXV audio VAE checkpoint from models_dir/checkpoints/ or absolute path."""
 
     def load_ltxav_text_encoder(
         self,
@@ -165,6 +176,33 @@ class ModelManager:
         checkpoint_path: str | Path,
     ) -> object:
         """Load an LTXAV text encoder from two files (text encoder + companion checkpoint)."""
+
+    def load_llm(self, path: str | Path) -> Any:
+        """Load a standalone LLM/VLM text model.
+
+        Search order for relative paths: models_dir/llm → models_dir/text_encoders → models_dir/clip.
+        """
+
+# Module-level model patching helpers
+
+def model_sampling_flux(
+    model: Any,
+    max_shift: float,
+    min_shift: float,
+    width: int,
+    height: int,
+) -> Any:
+    """Patch a model clone with Flux sampling shift settings.
+
+    The shift is interpolated between min_shift and max_shift based on latent token count
+    derived from width and height.
+    """
+
+def model_sampling_sd3(model: Any, shift: float) -> Any:
+    """Patch a model clone with SD3 discrete-flow sampling shift settings."""
+
+def model_sampling_aura_flow(model: Any, shift: float) -> Any:
+    """Patch a model clone with AuraFlow continuous V-prediction shift settings."""
 ```
 
 ---
@@ -243,11 +281,19 @@ def sample_advanced(
 def sample_custom(
     noise: Any, guider: Any, sampler: Any, sigmas: Any, latent_image: Any,
 ) -> tuple[Any, Any]:
-    """Run SamplerCustomAdvanced; returns (output_latent, denoised_output)."""
+    """Run SamplerCustomAdvanced; returns (output_latent, denoised_output).
+    The model is embedded in the guider — use basic_guider() or cfg_guider()."""
 
 # Guider builders (for sample_custom)
 def basic_guider(model: Any, conditioning: Any) -> Any: ...
 def cfg_guider(model: Any, positive: Any, negative: Any, cfg: Any) -> Any: ...
+
+# Video CFG guidance model patches
+def video_linear_cfg_guidance(model: Any, min_cfg: float) -> Any:
+    """Patch a model clone with a frame-wise linear CFG ramp from cfg_scale down to min_cfg."""
+
+def video_triangle_cfg_guidance(model: Any, min_cfg: float) -> Any:
+    """Patch a model clone with a frame-wise triangle CFG ramp oscillating between min_cfg and cfg_scale."""
 
 # Noise builders
 def random_noise(noise_seed: int) -> Any: ...
@@ -478,4 +524,50 @@ def encode_ace_step_15_audio(
     """ACE Step 1.5 text/audio metadata conditioning."""
 def empty_ace_step_15_latent_audio(seconds: float, batch_size: int = 1) -> dict[str, Any]:
     """Returns {"samples": zeros tensor, "type": "audio"}."""
+```
+
+---
+
+### `comfy_diffusion.textgen`
+
+```python
+def generate_text(
+    clip: Any,
+    prompt: str,
+    *,
+    image: Any | None = None,
+    max_length: int = 256,
+    do_sample: bool = True,
+    temperature: float = 0.7,
+    top_k: int = 64,
+    top_p: float = 0.95,
+    min_p: float = 0.05,
+    repetition_penalty: float = 1.05,
+    seed: int = 0,
+) -> str:
+    """Generate text with a ComfyUI-compatible text encoder (LLM/VLM clip object).
+
+    Pass image (BHWC tensor) for vision-language models.
+    Returns the decoded string output.
+    """
+
+def generate_ltx2_prompt(
+    clip: Any,
+    prompt: str,
+    *,
+    image: Any | None = None,
+    max_length: int = 256,
+    do_sample: bool = True,
+    temperature: float = 0.7,
+    top_k: int = 64,
+    top_p: float = 0.95,
+    min_p: float = 0.05,
+    repetition_penalty: float = 1.05,
+    seed: int = 0,
+) -> str:
+    """Expand a short user prompt into a rich LTX-Video 2 generation prompt.
+
+    Automatically selects the T2V or I2V system prompt based on whether image is provided.
+    image: BHWC tensor of the first frame (I2V mode), or None (T2V mode).
+    """
 ```
