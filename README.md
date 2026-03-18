@@ -191,6 +191,12 @@ In most cases you want **one of**:
 - CPU: `comfy-diffusion[cpu,comfyui]`
 - CUDA: `comfy-diffusion[cuda,comfyui]`
 
+### Using npx skills
+
+```bash
+npx skills add https://github.com/quinteroac/comfy-diffusion/tree/master/comfy_diffusion/skills
+```
+
 ### From PyPI
 
 ```bash
