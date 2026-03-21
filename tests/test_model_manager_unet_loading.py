@@ -84,6 +84,7 @@ def test_load_unet_calls_comfy_loader_with_resolved_path_and_returns_raw_model(
         ("text_encoders", str(models_dir / "clip"), False),
         ("vae", str(models_dir / "vae"), True),
         ("llm", str(models_dir / "llm"), True),
+        ("upscale_models", str(models_dir / "upscale_models"), True),
     ]
 
 
