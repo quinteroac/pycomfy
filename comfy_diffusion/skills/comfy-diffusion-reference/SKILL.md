@@ -141,7 +141,7 @@ class ModelManager:
         """Validate and register models_dir with ComfyUI folder_paths.
 
         Registers subdirectories: checkpoints, embeddings, diffusion_models/unet,
-        text_encoders/clip, vae, llm.
+        text_encoders/clip, vae, llm, upscale_models.
         """
 
     def load_checkpoint(self, filename: str) -> CheckpointResult:
