@@ -1,6 +1,6 @@
 {
-  "current_iteration": "000021",
-  "current_phase": "prototype",
+  "current_iteration": "000022",
+  "current_phase": "define",
   "phases": {
     "define": {
       "ideation": {
@@ -9,17 +9,17 @@
       },
       "requirement_definition": {
         "status": "approved",
-        "file": "it_000021_product-requirement-document.md"
+        "file": "it_000022_product-requirement-document.md"
       },
       "prd_generation": {
         "status": "completed",
-        "file": "it_000021_PRD.json"
+        "file": "it_000022_PRD.json"
       }
     },
     "prototype": {
       "prototype_creation": {
-        "status": "completed",
-        "file": "it_000021_progress.json"
+        "status": "pending",
+        "file": null
       },
       "prototype_audit": {
         "status": "pending",
@@ -74,8 +74,8 @@
       }
     }
   },
-  "last_updated": "2026-03-14T19:41:43.371Z",
-  "updated_by": "nvst:approve-project-context",
+  "last_updated": "2026-03-21T15:02:43.711Z",
+  "updated_by": "nvst:approve-requirement",
   "history": [
     {
       "iteration": "000001",
@@ -181,6 +181,11 @@
       "iteration": "000020",
       "archived_at": "2026-03-14T18:47:25.861Z",
       "archived_path": ".agents/flow/archived/000020"
+    },
+    {
+      "iteration": "000021",
+      "archived_at": "2026-03-21T14:57:08.830Z",
+      "archived_path": ".agents/flow/archived/000021"
     }
   ]
 }

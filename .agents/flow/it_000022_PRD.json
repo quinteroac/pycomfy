@@ -1,0 +1,144 @@
+{
+  "goals": [
+    "Expose `ModelManager.load_upscale_model(path)` as a first-class public API method.",
+    "Register the `upscale_models` folder path with ComfyUI's `folder_paths` inside",
+    "Remove the private loader helper from the example file and replace it with the",
+    "Document the new method in the `comfy-diffusion-reference` skill so AI agents have"
+  ],
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "`ModelManager.load_upscale_model(path)` method",
+      "description": "As a Python developer or automated pipeline, I want to call `manager.load_upscale_model(path)` so that I can obtain a spandrel `ImageModelDescriptor` that is directly usable with `image_upscale_with_model()`.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-001-AC01",
+          "text": "`ModelManager.load_upscale_model(path: str | Path)` is implemented in"
+        },
+        {
+          "id": "US-001-AC02",
+          "text": "When `path` is an absolute path to an existing file, that file is loaded"
+        },
+        {
+          "id": "US-001-AC03",
+          "text": "When `path` is a relative filename, it is resolved against"
+        },
+        {
+          "id": "US-001-AC04",
+          "text": "When `path` is an absolute path that does not exist, `FileNotFoundError` is"
+        },
+        {
+          "id": "US-001-AC05",
+          "text": "The loader uses `comfy.utils.load_torch_file(..., safe_load=True)` to read the"
+        },
+        {
+          "id": "US-001-AC06",
+          "text": "If the loaded descriptor is not a `spandrel.ImageModelDescriptor`, `TypeError`"
+        },
+        {
+          "id": "US-001-AC07",
+          "text": "All ComfyUI and spandrel imports are deferred to function body (lazy import"
+        },
+        {
+          "id": "US-001-AC08",
+          "text": "The returned object can be passed directly to `image_upscale_with_model()` in"
+        },
+        {
+          "id": "US-001-AC09",
+          "text": "`load_upscale_model` is added to `ModelManager`'s `__all__` (or the module"
+        },
+        {
+          "id": "US-001-AC10",
+          "text": "Typecheck / lint passes."
+        }
+      ]
+    },
+    {
+      "id": "US-002",
+      "title": "`upscale_models` folder registered in `ModelManager.__init__`",
+      "description": "As a developer, I want `folder_paths` to know about `models_dir/upscale_models/` when a `ModelManager` is instantiated so that relative filenames resolve consistently via ComfyUI's path registry.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-002-AC01",
+          "text": "`ModelManager.__init__` calls `folder_paths.add_model_folder_path(\"upscale_models\", str(self.models_dir / \"upscale_models\"), is_default=True)`."
+        },
+        {
+          "id": "US-002-AC02",
+          "text": "The registration follows the same pattern as all other model-type registrations"
+        },
+        {
+          "id": "US-002-AC03",
+          "text": "Typecheck / lint passes."
+        }
+      ]
+    },
+    {
+      "id": "US-003",
+      "title": "Example file updated to use public API",
+      "description": "As a developer reading example code, I want the example script to call `manager.load_upscale_model()` so that it demonstrates the canonical usage and does not contain a private reimplementation.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-003-AC01",
+          "text": "`_load_image_upscale_model()` private helper function is removed from"
+        },
+        {
+          "id": "US-003-AC02",
+          "text": "A `ModelManager` instance is constructed (or reused from the checkpoint step)"
+        },
+        {
+          "id": "US-003-AC03",
+          "text": "The example produces the same observable behaviour (loads model, runs upscale,"
+        },
+        {
+          "id": "US-003-AC04",
+          "text": "Typecheck / lint passes."
+        }
+      ]
+    },
+    {
+      "id": "US-004",
+      "title": "Reference skill updated",
+      "description": "As an AI agent using the `comfy-diffusion-reference` skill, I want the skill to document `load_upscale_model` so that I can use the correct signature without guessing.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-004-AC01",
+          "text": "`comfy_diffusion/skills/comfy-diffusion-reference/SKILL.md` is updated to"
+        },
+        {
+          "id": "US-004-AC02",
+          "text": "The entry documents the path resolution order"
+        },
+        {
+          "id": "US-004-AC03",
+          "text": "The entry is consistent in style with the existing loader entries (`load_vae`,"
+        }
+      ]
+    }
+  ],
+  "functionalRequirements": [
+    {
+      "id": "FR-1",
+      "description": "** `ModelManager.load_upscale_model(path: str | Path) -> Any` — loads a"
+    },
+    {
+      "id": "FR-2",
+      "description": "** Path resolution order for relative filenames:"
+    },
+    {
+      "id": "FR-3",
+      "description": "** State dict preprocessing: strip `module.` prefix when"
+    },
+    {
+      "id": "FR-4",
+      "description": "** Guard: raise `TypeError` if loaded descriptor is not a"
+    },
+    {
+      "id": "FR-5",
+      "description": "** `folder_paths` registration: `upscale_models` key added in"
+    },
+    {
+      "id": "FR-6",
+      "description": "** All imports from `comfy.*` and `spandrel` are deferred (lazy import"
+    }
+  ]
+}
