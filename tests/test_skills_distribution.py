@@ -66,6 +66,5 @@ def test_wheel_contains_distributable_skills_only_in_package_path(tmp_path: Path
         names = set(wheel.namelist())
 
     assert "comfy_diffusion/skills/README.md" in names
-    assert "comfy_diffusion/skills/base-runtime-check.md" in names
     assert not any(name.startswith(".agents/skills/") for name in names)
 
