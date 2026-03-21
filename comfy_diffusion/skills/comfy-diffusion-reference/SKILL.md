@@ -183,6 +183,18 @@ class ModelManager:
         Search order for relative paths: models_dir/llm → models_dir/text_encoders → models_dir/clip.
         """
 
+    def load_upscale_model(self, path: str | Path) -> Any:
+        """Load an upscale (super-resolution) model from a path or filename.
+
+        Path resolution order:
+          1. Absolute path — loaded directly if the file exists; raises FileNotFoundError otherwise.
+          2. Relative path — resolved as models_dir/upscale_models/<path>.
+
+        Returns a spandrel.ImageModelDescriptor usable with image_upscale_with_model().
+        Raises TypeError if the loaded model is not a single-image descriptor.
+        Raises FileNotFoundError if the file cannot be located.
+        """
+
 # Module-level model patching helpers
 
 def model_sampling_flux(

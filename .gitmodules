@@ -1,4 +1,4 @@
-# Pinned ComfyUI release tag: v0.16.3
+# Pinned ComfyUI release tag: v0.18.0
 [submodule "vendor/ComfyUI"]
 	path = vendor/ComfyUI
 	url = https://github.com/comfyanonymous/ComfyUI.git
