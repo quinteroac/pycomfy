@@ -319,6 +319,46 @@ class ModelManager:
             embedding_directory=folder_paths.get_folder_paths("embeddings"),
         )
 
+    def load_upscale_model(self, path: str | Path) -> Any:
+        """Load an upscale (super-resolution) model from a path or filename.
+
+        If ``path`` is an absolute path to an existing file, that file is loaded.
+        Otherwise ``path`` is treated as a filename under the ``upscale_models`` folder.
+
+        Returns a ``spandrel.ImageModelDescriptor`` usable with ``image_upscale_with_model()``.
+        Raises ``TypeError`` if the loaded model is not a single-image descriptor.
+        """
+        ensure_comfyui_on_path()
+
+        import comfy.utils
+        from spandrel import ImageModelDescriptor, ModelLoader
+
+        p = Path(path)
+        if p.is_absolute() and p.is_file():
+            model_path = str(p.resolve())
+        elif p.is_absolute():
+            raise FileNotFoundError(f"upscale model file not found: {p}")
+        else:
+            name = path if isinstance(path, str) else p.name
+            candidate = self.models_dir / "upscale_models" / name
+            if not candidate.is_file():
+                raise FileNotFoundError(f"upscale model file not found: {candidate.resolve()}")
+            model_path = str(candidate.resolve())
+
+        sd = comfy.utils.load_torch_file(model_path, safe_load=True)
+        if "module.layers.0.residual_group.blocks.0.norm1.weight" in sd:
+            sd = comfy.utils.state_dict_prefix_replace(sd, {"module.": ""})
+
+        out = ModelLoader().load_from_state_dict(sd).eval()
+
+        if not isinstance(out, ImageModelDescriptor):
+            raise TypeError(
+                f"upscale model must be a single-image model (ImageModelDescriptor), "
+                f"got {type(out).__name__}"
+            )
+
+        return out
+
 def model_sampling_flux(
     model: Any,
     max_shift: float,
