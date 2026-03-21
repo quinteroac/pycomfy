@@ -32,3 +32,13 @@ def test_model_manager_raises_value_error_for_non_existing_models_dir(
         ModelManager(models_dir=missing_dir)
 
     assert str(missing_dir) in str(exc_info.value)
+
+
+def test_model_manager_registers_upscale_models_folder(tmp_path: Path) -> None:
+    import folder_paths
+
+    ModelManager(models_dir=tmp_path)
+
+    registered = folder_paths.get_folder_paths("upscale_models")
+    expected = str(tmp_path / "upscale_models")
+    assert expected in registered

@@ -67,6 +67,9 @@ class ModelManager:
         folder_paths.add_model_folder_path(
             "llm", str(self.models_dir / "llm"), is_default=True
         )
+        folder_paths.add_model_folder_path(
+            "upscale_models", str(self.models_dir / "upscale_models"), is_default=True
+        )
 
     def load_checkpoint(self, filename: str) -> CheckpointResult:
         """Load a checkpoint by filename from the configured checkpoints directory."""
