@@ -1,5 +1,5 @@
 {
-  "version": "1.1.0",
+  "version": "1.2.0",
   "scripts": {
     "bump:version": "bun run scripts/bump-version.ts",
     "bump:patch": "BUMP_KIND=patch bun run scripts/bump-version.ts",
