@@ -60,49 +60,6 @@ def _empty_latent(width: int, height: int, batch_size: int = 1) -> dict:
     return {"samples": latent, "downscale_ratio_spacial": 8}
 
 
-def _load_image_upscale_model(models_dir: Path, filename: str) -> object:
-    """
-    Load an IMAGE upscaler model (e.g. ESRGAN) from <models-dir>/upscale/<filename>
-    or from an absolute path if filename already points to an existing file.
-    """
-    from comfy_diffusion._runtime import ensure_comfyui_on_path
-
-    ensure_comfyui_on_path()
-    import comfy.utils
-    from spandrel import ImageModelDescriptor, ModelLoader
-
-    path = Path(filename)
-    if not path.is_absolute():
-        # Prefer the typical ComfyUI layout first: upscale_models/
-        candidates = [
-            models_dir / "upscale_models" / filename,
-            models_dir / "upscale" / filename,
-        ]
-        for candidate in candidates:
-            if candidate.is_file():
-                path = candidate
-                break
-        else:
-            raise FileNotFoundError(
-                "image upscale checkpoint not found in any of the expected locations: "
-                f"{candidates[0]!s} or {candidates[1]!s} "
-                "(or provide an absolute path)"
-            )
-
-    # Mirror the logic from ComfyUI's UpscaleModelLoader node:
-    #  - load the state dict with comfy.utils.load_torch_file
-    #  - construct an ImageModelDescriptor with Spandrel's ModelLoader
-    state_dict = comfy.utils.load_torch_file(str(path), safe_load=True)
-    if "module.layers.0.residual_group.blocks.0.norm1.weight" in state_dict:
-        state_dict = comfy.utils.state_dict_prefix_replace(state_dict, {"module.": ""})
-
-    descriptor = ModelLoader().load_from_state_dict(state_dict).eval()
-    if not isinstance(descriptor, ImageModelDescriptor):
-        raise TypeError("upscale model must be a single-image ESRGAN/GAN model")
-
-    return descriptor
-
-
 def _bhwc_tensor_to_pil(image_tensor: Any) -> Image.Image:
     """
     Convert a single BHWC float32 tensor in [0, 1] range into a RGB PIL image.
@@ -304,12 +261,8 @@ def main() -> int:
     print("saved base image:", args.output_base)
 
     # 7) Load ESRGAN / GAN image upscaler model
-    models_dir = Path(args.models_dir)
     try:
-        esrgan_model = _load_image_upscale_model(
-            models_dir,
-            args.esrgan_checkpoint.strip(),
-        )
+        esrgan_model = manager.load_upscale_model(args.esrgan_checkpoint.strip())
     except Exception as exc:  # noqa: BLE001
         print("error: could not load ESRGAN upscaler model:", exc, file=sys.stderr)
         return 1
