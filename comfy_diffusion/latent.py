@@ -321,6 +321,24 @@ def latent_composite_masked(
     )
 
 
+def ltxv_empty_latent_video(
+    width: int, height: int, length: int = 97, batch_size: int = 1
+) -> dict[str, Any]:
+    """Create empty LTXV video latents compatible with the LTX-Video model."""
+    import torch
+
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    import comfy.model_management
+
+    latent = torch.zeros(
+        [batch_size, 128, ((length - 1) // 8) + 1, height // 32, width // 32],
+        device=comfy.model_management.intermediate_device(),
+    )
+    return {"samples": latent}
+
+
 def set_latent_noise_mask(latent: dict[str, Any], mask: Any) -> dict[str, Any]:
     """Return a LATENT dict with noise mask metadata for inpainting sampling."""
     torch_tensor_type = _get_torch_tensor_type()
@@ -369,6 +387,7 @@ def inpaint_model_conditioning(
 
 __all__ = [
     "empty_latent_image",
+    "ltxv_empty_latent_video",
     "latent_from_batch",
     "latent_cut_to_batch",
     "repeat_latent_batch",
