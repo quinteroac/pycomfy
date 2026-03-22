@@ -290,6 +290,57 @@ def ltxv_conditioning(
     )
 
 
+def ltxv_crop_guides(
+    positive: Any,
+    negative: Any,
+    latent: dict[str, Any],
+) -> tuple[Any, Any, dict[str, Any]]:
+    """Crop keyframe guide frames from LTXV conditioning and latent before the main sampling pass.
+
+    Removes ``keyframe_idxs`` and ``guide_attention_entries`` from both conditioning
+    objects and slices the corresponding frames off the end of the latent tensor.
+    When there are no keyframe guides (``num_keyframes == 0``) the inputs are
+    returned unchanged.
+    """
+    # Extract keyframe_idxs without importing torch so the function is import-safe.
+    keyframe_idxs = None
+    for entry in positive:
+        if "keyframe_idxs" in entry[1]:
+            keyframe_idxs = entry[1]["keyframe_idxs"]
+            break
+
+    if keyframe_idxs is None:
+        return positive, negative, latent
+
+    torch, _, _, node_helpers = _get_ltxv_conditioning_dependencies()
+
+    num_keyframes: int = torch.unique(keyframe_idxs[:, 0, :, 0]).shape[0]
+
+    if num_keyframes == 0:
+        return positive, negative, latent
+
+    latent_image = latent["samples"].clone()
+    noise_mask = latent.get("noise_mask", None)
+    if noise_mask is None:
+        batch_size, _, latent_length, _, _ = latent_image.shape
+        noise_mask = torch.ones(
+            (batch_size, 1, latent_length, 1, 1),
+            dtype=torch.float32,
+            device=latent_image.device,
+        )
+    else:
+        noise_mask = noise_mask.clone()
+
+    latent_image = latent_image[:, :, :-num_keyframes]
+    noise_mask = noise_mask[:, :, :-num_keyframes]
+
+    guide_values: dict[str, Any] = {"keyframe_idxs": None, "guide_attention_entries": None}
+    positive = node_helpers.conditioning_set_values(positive, guide_values)
+    negative = node_helpers.conditioning_set_values(negative, guide_values)
+
+    return positive, negative, {"samples": latent_image, "noise_mask": noise_mask}
+
+
 def conditioning_combine(
     cond_a: Any,
     cond_b: Any | None = None,
@@ -396,6 +447,7 @@ __all__ = [
     "wan_first_last_frame_to_video",
     "ltxv_img_to_video",
     "ltxv_conditioning",
+    "ltxv_crop_guides",
     "conditioning_combine",
     "conditioning_set_mask",
     "conditioning_set_timestep_range",
