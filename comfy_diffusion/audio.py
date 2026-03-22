@@ -100,7 +100,7 @@ def ltxv_audio_vae_decode(vae: _LtxvAudioVaeDecoder, latent: Any) -> dict[str, A
     latent_tensor = latent["samples"] if isinstance(latent, dict) else latent
     if getattr(latent_tensor, "is_nested", False):
         latent_tensor = latent_tensor.unbind()[-1]
-    audio = vae.decode(latent_tensor).to(latent_tensor.device)
+    audio = vae.decode(latent_tensor).to(latent_tensor.device).detach()
     return {"waveform": audio, "sample_rate": int(vae.output_sample_rate)}
 
 

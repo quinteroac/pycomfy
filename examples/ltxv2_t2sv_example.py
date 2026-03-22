@@ -77,6 +77,31 @@ def _save_audio(waveform: Any, sample_rate: int, output_path: str) -> None:
             raise
 
 
+def _combine_video(frame_dir: str, audio_path: str, output_path: str, frame_rate: float) -> None:
+    """Combine PNG frames and a WAV file into an MP4 using ffmpeg."""
+    import subprocess
+
+    frame_pattern = str(Path(frame_dir) / "frame_%05d.png")
+    cmd = [
+        "ffmpeg", "-y",
+        "-framerate", str(frame_rate),
+        "-i", frame_pattern,
+        "-i", audio_path,
+        "-map", "0:v:0",
+        "-map", "1:a:0",
+        "-c:v", "libx264",
+        "-pix_fmt", "yuv420p",
+        "-c:a", "aac",
+        "-shortest",
+        output_path,
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.stderr:
+        print(f"ffmpeg: {result.stderr}", file=sys.stderr)
+    if result.returncode != 0:
+        raise RuntimeError(f"ffmpeg failed:\n{result.stderr}")
+
+
 def _save_video_frames(frames: list[Any], output_dir: str) -> list[str]:
     """Save decoded video frames as numbered PNG files; return the saved paths."""
     dir_path = Path(output_dir)
@@ -119,7 +144,7 @@ def main() -> int:
     parser.add_argument(
         "--audio-vae",
         default=os.environ.get("PYCOMFY_LTXV2_AUDIO_VAE", ""),
-        help="LTX-Video 2 audio VAE filename in checkpoints/. Default: PYCOMFY_LTXV2_AUDIO_VAE.",
+        help="LTX-Video 2 audio VAE filename in vae/. Default: PYCOMFY_LTXV2_AUDIO_VAE.",
     )
     parser.add_argument(
         "--text-encoder",
@@ -223,6 +248,13 @@ def main() -> int:
             "Default: ltxv2_output."
         ),
     )
+    parser.add_argument(
+        "--reserve-vram",
+        type=float,
+        default=None,
+        metavar="GB",
+        help="Amount of VRAM in GB to reserve for other applications (e.g. 1.0).",
+    )
     args = parser.parse_args()
 
     # --- Validate required arguments ---
@@ -274,6 +306,13 @@ def main() -> int:
         print("error: runtime check failed:", runtime["error"], file=sys.stderr)
         return 1
     print("runtime:", runtime.get("comfyui_version", "?"), runtime.get("device", "?"))
+
+    if args.reserve_vram is not None:
+        from comfy_diffusion._runtime import ensure_comfyui_on_path
+        ensure_comfyui_on_path()
+        import comfy.model_management
+        comfy.model_management.EXTRA_RESERVED_VRAM = args.reserve_vram * 1024 * 1024 * 1024
+        print(f"reserved {args.reserve_vram} GB VRAM")
 
     mm = ModelManager(args.models_dir)
 
@@ -389,11 +428,34 @@ def main() -> int:
     print(f"saved {len(frame_paths)} video frames to {args.output_dir}/")
 
     audio_path = str(Path(args.output_dir) / "audio.wav")
+    audio_saved = False
     try:
         _save_audio(waveform, audio_sample_rate, audio_path)
         print(f"saved audio to {audio_path}")
+        audio_saved = True
     except Exception as exc:  # noqa: BLE001
         print(f"warning: could not save audio: {exc}", file=sys.stderr)
+
+    video_path = str(Path(args.output_dir) / "output.mp4")
+    try:
+        if audio_saved:
+            _combine_video(args.output_dir, audio_path, video_path, args.frame_rate)
+        else:
+            import subprocess
+            frame_pattern = str(Path(args.output_dir) / "frame_%05d.png")
+            result = subprocess.run(
+                ["ffmpeg", "-y", "-framerate", str(args.frame_rate), "-i", frame_pattern,
+                 "-c:v", "libx264", "-pix_fmt", "yuv420p", video_path],
+                capture_output=True, text=True,
+            )
+            if result.returncode != 0:
+                raise RuntimeError(f"ffmpeg failed:\n{result.stderr}")
+        print(f"saved video to {video_path}")
+    except Exception as exc:  # noqa: BLE001
+        print(f"warning: could not combine video: {exc}", file=sys.stderr)
+    finally:
+        for fp in frame_paths:
+            Path(fp).unlink(missing_ok=True)
 
     return 0
 

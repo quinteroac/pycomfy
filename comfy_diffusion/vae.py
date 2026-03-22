@@ -221,10 +221,7 @@ def vae_decode_batch_tiled(
         samples = samples.unbind()[0]
 
     sample_dims = len(samples.shape)
-    was_5d = sample_dims == 5
-    if sample_dims == 5:
-        samples = samples.reshape(-1, samples.shape[-3], samples.shape[-2], samples.shape[-1])
-    elif sample_dims != 4:
+    if sample_dims not in (4, 5):
         raise ValueError("latent samples must be 4D or 5D")
 
     if samples.shape[0] == 0:
@@ -233,18 +230,19 @@ def vae_decode_batch_tiled(
     result: list[Image.Image] = []
     for index in range(samples.shape[0]):
         frame_samples = samples[index : index + 1]
-        # Video VAEs in ComfyUI (e.g. Wan) expect 5D in memory_used_decode;
-        # passing 4D causes IndexError. Pass (1, C, 1, H, W) so decode_tiled
-        # receives 5D and can estimate memory and run decode_tiled_3d.
-        if was_5d and hasattr(frame_samples, "unsqueeze"):
+        # 4D latents need a temporal dim for video VAEs (e.g. Wan) that call
+        # decode_tiled_3d internally; 5D latents are passed as-is.
+        if sample_dims == 4 and hasattr(frame_samples, "unsqueeze"):
             # frame_samples: (1, C, H, W) -> (1, C, 1, H, W)
             frame_samples = frame_samples.unsqueeze(2)
-        images = vae.decode_tiled(
-            frame_samples,
-            tile_x=tile_size,
-            tile_y=tile_size,
-            overlap=overlap,
-        )
+        import torch
+        with torch.inference_mode():
+            images = vae.decode_tiled(
+                frame_samples,
+                tile_x=tile_size,
+                tile_y=tile_size,
+                overlap=overlap,
+            )
 
         image_dims = len(images.shape)
         if image_dims == 5:
@@ -255,12 +253,16 @@ def vae_decode_batch_tiled(
         if images.shape[0] == 0:
             raise ValueError("decoded image tensor is empty")
 
-        image = images[0]
-        if hasattr(image, "detach"):
-            image = image.detach()
-        if hasattr(image, "cpu"):
-            image = image.cpu()
-        result.append(_tensor_like_to_pil(image))
+        for frame_index in range(images.shape[0]):
+            image = images[frame_index]
+            if hasattr(image, "detach"):
+                image = image.detach()
+            if hasattr(image, "cpu"):
+                image = image.cpu()
+            result.append(_tensor_like_to_pil(image))
+
+    if not result:
+        raise ValueError("decoded image tensor is empty")
 
     return result
 

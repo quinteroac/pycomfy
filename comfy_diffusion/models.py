@@ -227,7 +227,7 @@ class ModelManager:
         """Load an LTXV audio VAE checkpoint from a path or filename.
 
         If ``path`` is an absolute path to an existing file, that file is loaded.
-        Otherwise ``path`` is treated as a filename under the ``checkpoints`` folder.
+        Otherwise ``path`` is treated as a filename under the ``vae`` folder.
         """
         ensure_comfyui_on_path()
 
@@ -242,7 +242,7 @@ class ModelManager:
             raise FileNotFoundError(f"ltxv audio vae file not found: {p}")
         else:
             name = path if isinstance(path, str) else p.name
-            checkpoint_path = folder_paths.get_full_path_or_raise("checkpoints", name)
+            checkpoint_path = folder_paths.get_full_path_or_raise("vae", name)
 
         state_dict, metadata = comfy_utils.load_torch_file(
             checkpoint_path, return_metadata=True
