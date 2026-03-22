@@ -25,7 +25,8 @@
 | 18 | packaging | pip-installable, type stubs, DX polish, extras (`[video]`, `[audio]`, `[all]`) | ✅ Done |
 | 19 | Implement dual clip loader to accept more than one clip. | ✅ Done |
 | 20 | `textgen` | Expose LLM/VLM text generation wrappers from ComfyUI (`TextGenerate`, `TextGenerateLTX2Prompt`) as importable Python functions (e.g. `generate_text()`) | ✅ Done |
-| 21 | `runtime` — ComfyUI auto-bootstrap | `check_runtime()` detects missing `vendor/ComfyUI` and downloads it automatically so `pip install comfy-diffusion` works without git submodule init | ⬜ |
+| 21 | `runtime` — ComfyUI auto-bootstrap | `check_runtime()` detects missing `vendor/ComfyUI` and downloads it automatically so `pip install comfy-diffusion` works without git submodule init | ✅ Done  |
+| 22 | `ltxv2` — LTX-2 full pipeline | Complete LTX-2 T2V + I2V support: `ltxv_empty_latent_video`, `ltxv_concat_av_latent`, `ltxv_separate_av_latent`, `ltxv_crop_guides`, `ltxv_latent_upsample`, `load_latent_upscale_model`, `manual_sigmas` | ⬜ |
 
 ---
 
@@ -56,7 +57,7 @@
 ### Roadmap nodes
 
 **Latent**
-`EmptyLatentImage`, `SetLatentNoiseMask`, `LatentUpscale`, `LatentUpscaleBy`, `LatentCrop`, `LatentFromBatch`, `RepeatLatentBatch`, `LatentConcat`, `LatentCutToBatch`, `ReplaceVideoLatentFrames`, `LatentComposite`, `LatentCompositeMasked`, `VAEEncodeForInpaint`, `InpaintModelConditioning`, `VAEDecodeTiled`, `VAEEncodeTiled`
+`EmptyLatentImage`, `SetLatentNoiseMask`, `LatentUpscale`, `LatentUpscaleBy`, `LatentCrop`, `LatentFromBatch`, `RepeatLatentBatch`, `LatentConcat`, `LatentCutToBatch`, `ReplaceVideoLatentFrames`, `LatentComposite`, `LatentCompositeMasked`, `VAEEncodeForInpaint`, `InpaintModelConditioning`, `VAEDecodeTiled`, `VAEEncodeTiled`, `EmptyLTXVLatentVideo`, `LTXVLatentUpsampler`, `LatentUpscaleModelLoader`
 
 **Image**
 `LoadImage`, `ImagePadForOutpaint`, `ImageFromBatch`, `RepeatImageBatch`, `ImageCompositeMasked`, `ImageUpscaleWithModel`, `GetVideoComponents`, `CreateVideo`, `SaveWEBM`, `SaveVideo`, `LoadVideo`, `LTXVImgToVideo`, `LTXVPreprocess`, `WanImageToVideo`, `WanFirstLastFrameToVideo`
@@ -65,19 +66,19 @@
 `LoadImageMask`, `ImageToMask`, `MaskToImage`, `SolidMask`, `InvertMask`, `GrowMask`, `FeatherMask`, `CropMask`
 
 **Conditioning**
-`ConditioningCombine`, `ConditioningSetMask`, `ConditioningSetTimestepRange`, `CLIPVisionEncode`, `StyleModelApply`, `CLIPTextEncodeFlux`, `FluxGuidance`, `WanImageToVideo`, `WanFirstLastFrameToVideo`, `WanFunInpaintToVideo`, `LTXVImgToVideo`, `LTXVConditioning`
+`ConditioningCombine`, `ConditioningSetMask`, `ConditioningSetTimestepRange`, `CLIPVisionEncode`, `StyleModelApply`, `CLIPTextEncodeFlux`, `FluxGuidance`, `WanImageToVideo`, `WanFirstLastFrameToVideo`, `WanFunInpaintToVideo`, `LTXVImgToVideo`, `LTXVConditioning`, `LTXVCropGuides`
 
 **ControlNet**
 `ControlNetLoader`, `DiffControlNetLoader`, `ControlNetApplyAdvanced`, `SetUnionControlNetType`
 
 **Sampling**
-`KSamplerAdvanced`, `SamplerCustomAdvanced`, `BasicGuider`, `CFGGuider`, `RandomNoise`, `DisableNoise`, `BasicScheduler`, `KarrasScheduler`, `AlignYourStepsScheduler`, `Flux2Scheduler`, `LTXVScheduler`, `SplitSigmas`, `SplitSigmasDenoise`, `KSamplerSelect`, `SamplerDPMPP_3M_SDE`, `SamplerDPMPP_2M_SDE`, `SamplerEulerAncestral`, `VideoLinearCFGGuidance`, `VideoTriangleCFGGuidance`
+`KSamplerAdvanced`, `SamplerCustomAdvanced`, `BasicGuider`, `CFGGuider`, `RandomNoise`, `DisableNoise`, `BasicScheduler`, `KarrasScheduler`, `AlignYourStepsScheduler`, `Flux2Scheduler`, `LTXVScheduler`, `SplitSigmas`, `SplitSigmasDenoise`, `KSamplerSelect`, `SamplerDPMPP_3M_SDE`, `SamplerDPMPP_2M_SDE`, `SamplerEulerAncestral`, `VideoLinearCFGGuidance`, `VideoTriangleCFGGuidance`, `ManualSigmas`
 
 **Model**
 `ModelSamplingFlux`, `ModelSamplingSD3`, `ModelSamplingAuraFlow`, `VideoLinearCFGGuidance`, `VideoTriangleCFGGuidance`
 
 **Audio**
-`VAEEncodeAudio`, `VAEDecodeAudio`, `VAEDecodeAudioTiled`, `EmptyLatentAudio`, `ConditioningStableAudio`, `AudioEncoderLoader`, `AudioEncoderEncode`, `LTXVAudioVAELoader`, `LTXVAudioVAEEncode`, `LTXVAudioVAEDecode`, `LTXVEmptyLatentAudio`, `LTXAVTextEncoderLoader`, `TextEncodeAceStepAudio`, `TextEncodeAceStepAudio1.5`, `EmptyAceStepLatentAudio`, `EmptyAceStep1.5LatentAudio`
+`VAEEncodeAudio`, `VAEDecodeAudio`, `VAEDecodeAudioTiled`, `EmptyLatentAudio`, `ConditioningStableAudio`, `AudioEncoderLoader`, `AudioEncoderEncode`, `LTXVAudioVAELoader`, `LTXVAudioVAEEncode`, `LTXVAudioVAEDecode`, `LTXVEmptyLatentAudio`, `LTXAVTextEncoderLoader`, `TextEncodeAceStepAudio`, `TextEncodeAceStepAudio1.5`, `EmptyAceStepLatentAudio`, `EmptyAceStep1.5LatentAudio`, `LTXVConcatAVLatent`, `LTXVSeparateAVLatent`
 
 **Textgen (LLM/VLM)**
 `TextGenerate`, `TextGenerateLTX2Prompt`
@@ -87,10 +88,10 @@
 ### Nice-to-have nodes
 
 **Latent**
-`SaveLatent`, `LoadLatent`, `LatentFlip`, `LatentRotate`, `LatentBatchSeedBehavior`, `LatentCut`, `LatentBlend`, `LatentInterpolate`, `LatentAdd`, `LatentSubtract`, `LatentMultiply`, `LTXVLatentUpsampler`, `SVD_img2vid_Conditioning`
+`SaveLatent`, `LoadLatent`, `LatentFlip`, `LatentRotate`, `LatentBatchSeedBehavior`, `LatentCut`, `LatentBlend`, `LatentInterpolate`, `LatentAdd`, `LatentSubtract`, `LatentMultiply`, `SVD_img2vid_Conditioning`
 
 **Image**
-`EmptyImage`, `ImageScaleToTotalPixels`, `ImageFlip`, `ImageRotate`, `ImageStitch`, `SplitImageToTileList`, `ImageMergeTileList`, `BatchImagesNode`, `ImageColorToMask`, `SaveAnimatedWEBP`, `SaveAnimatedPNG`, `WanVaceToVideo`, `WanCameraImageToVideo`, `WanPhantomSubjectToVideo`, `LTXVAddGuide`
+`EmptyImage`, `ImageScaleToTotalPixels`, `ImageFlip`, `ImageRotate`, `ImageStitch`, `SplitImageToTileList`, `ImageMergeTileList`, `BatchImagesNode`, `ImageColorToMask`, `SaveAnimatedWEBP`, `SaveAnimatedPNG`, `WanVaceToVideo`, `WanCameraImageToVideo`, `WanPhantomSubjectToVideo`
 
 **Mask**
 `ImageColorToMask`, `ThresholdMask`, `MaskComposite`
@@ -124,7 +125,7 @@
 `CheckpointLoader`, `DiffusersLoader`, `ControlNetApply`, `ControlNetApplySD3`, `LatentBatch`, `ImageBatch`, `ImageCrop`
 
 **Out of scope / niche**
-`GLIGENTextBoxApply`, `unCLIPConditioning`, `SVD_img2vid_Conditioning`, `PerpNeg`, `PerpNegGuider`, `SamplerLCMUpscale`, `VPScheduler`, `ManualSigmas`, `LatentApplyOperation`, `LatentApplyOperationCFG`, `LatentOperationTonemapReinhard`, `LatentOperationSharpen`, `CLIPTextEncodePixArtAlpha`, `CLIPTextEncodeLumina2`, `CLIPTextEncodeHiDream`, `CLIPTextEncodeKandinsky5`, `StableCascade_StageB_Conditioning`, `LotusConditioning`, `PhotoMakerEncode`, `InstructPixToPixConditioning`, `TextEncodeQwenImageEdit`, `TextEncodeZImageOmni`
+`GLIGENTextBoxApply`, `unCLIPConditioning`, `SVD_img2vid_Conditioning`, `PerpNeg`, `PerpNegGuider`, `SamplerLCMUpscale`, `VPScheduler`, `LatentApplyOperation`, `LatentApplyOperationCFG`, `LatentOperationTonemapReinhard`, `LatentOperationSharpen`, `CLIPTextEncodePixArtAlpha`, `CLIPTextEncodeLumina2`, `CLIPTextEncodeHiDream`, `CLIPTextEncodeKandinsky5`, `StableCascade_StageB_Conditioning`, `LotusConditioning`, `PhotoMakerEncode`, `InstructPixToPixConditioning`, `TextEncodeQwenImageEdit`, `TextEncodeZImageOmni`
 
 **Full modules discarded**
 `nodes_train.py`, `nodes_dataset.py`, `nodes_hypernetwork.py`, `nodes_webcam.py`, `nodes_preview_any.py`, `nodes_nop.py`, `nodes_glsl.py`, `nodes_load_3d.py`, `nodes_stable3d.py`, `nodes_hunyuan3d.py`, `nodes_string.py`, `nodes_logic.py`, `nodes_primitive.py`, `nodes_cosmos.py`, `nodes_mochi.py`, `nodes_lotus.py`, `nodes_pixart.py`, `nodes_kandinsky5.py`, `nodes_stable_cascade.py`, `nodes_mahiro.py`, `nodes_fresca.py`, `nodes_model_patch.py`, `nodes_lora_debug.py`, `nodes_edit_model.py`, `nodes_lora_extract.py`, `nodes_model_merging_model_specific.py` (except Flux1, SDXL, LTXV in nice-to-have)
