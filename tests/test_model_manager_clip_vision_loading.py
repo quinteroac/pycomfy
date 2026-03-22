@@ -83,6 +83,7 @@ def test_load_clip_vision_calls_comfy_loader_with_resolved_absolute_path(
         ("vae", str(models_dir / "vae"), True),
         ("llm", str(models_dir / "llm"), True),
         ("upscale_models", str(models_dir / "upscale_models"), True),
+        ("latent_upscale_models", str(models_dir / "upscale"), True),
     ]
 
 

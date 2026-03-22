@@ -124,6 +124,7 @@ def test_load_ltxv_audio_vae_calls_loader_and_returns_raw_object(
         ("vae", str(models_dir / "vae"), True),
         ("llm", str(models_dir / "llm"), True),
         ("upscale_models", str(models_dir / "upscale_models"), True),
+        ("latent_upscale_models", str(models_dir / "upscale"), True),
     ]
 
 
