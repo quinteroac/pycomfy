@@ -23,6 +23,7 @@ from comfy_diffusion.sampling import (
     get_sampler,
     karras_scheduler,
     ltxv_scheduler,
+    manual_sigmas,
     random_noise,
     sample,
     sample_advanced,
@@ -90,6 +91,7 @@ def test_sampling_public_api_exports_all_entrypoints() -> None:
         "split_sigmas",
         "split_sigmas_denoise",
         "get_sampler",
+        "manual_sigmas",
     ]
 
 
@@ -1509,9 +1511,9 @@ def test_import_comfy_diffusion_sampling_has_no_additional_heavy_side_effects() 
         "baseline_modules = set(sys.modules)\n"
         "from comfy_diffusion.sampling import "
         "ays_scheduler, basic_guider, basic_scheduler, cfg_guider, disable_noise, "
-        "flux2_scheduler, get_sampler, karras_scheduler, ltxv_scheduler, random_noise, "
-        "sample, sample_advanced, sample_custom, split_sigmas, split_sigmas_denoise, "
-        "video_linear_cfg_guidance, video_triangle_cfg_guidance\n"
+        "flux2_scheduler, get_sampler, karras_scheduler, ltxv_scheduler, manual_sigmas, "
+        "random_noise, sample, sample_advanced, sample_custom, split_sigmas, "
+        "split_sigmas_denoise, video_linear_cfg_guidance, video_triangle_cfg_guidance\n"
         "post_modules = set(sys.modules)\n"
         "new_modules = sorted(post_modules - baseline_modules)\n"
         "payload = {\n"
@@ -1532,6 +1534,7 @@ def test_import_comfy_diffusion_sampling_has_no_additional_heavy_side_effects() 
         "  'video_triangle_cfg_name': video_triangle_cfg_guidance.__name__,\n"
         "  'random_name': random_noise.__name__,\n"
         "  'disable_name': disable_noise.__name__,\n"
+        "  'manual_sigmas_name': manual_sigmas.__name__,\n"
         "  'path_unchanged': baseline_path == list(sys.path),\n"
         "  'torch_loaded': 'torch' in sys.modules,\n"
         "  'nodes_loaded': 'nodes' in sys.modules,\n"
@@ -1559,6 +1562,7 @@ def test_import_comfy_diffusion_sampling_has_no_additional_heavy_side_effects() 
     assert payload["video_triangle_cfg_name"] == "video_triangle_cfg_guidance"
     assert payload["random_name"] == "random_noise"
     assert payload["disable_name"] == "disable_noise"
+    assert payload["manual_sigmas_name"] == "manual_sigmas"
     assert payload["path_unchanged"] is True
     assert payload["torch_loaded"] is False
     assert payload["nodes_loaded"] is False
@@ -1570,3 +1574,67 @@ def test_import_comfy_diffusion_sampling_has_no_additional_heavy_side_effects() 
         or module.startswith(("torch", "folder_paths", "comfy.", "numpy"))
     ]
     assert heavy == [], f"Unexpected heavy modules loaded on import: {heavy}"
+
+
+def test_manual_sigmas_signature_matches_contract() -> None:
+    signature = inspect.signature(manual_sigmas)
+
+    assert str(signature) == "(sigmas: 'str') -> 'Any'"
+
+
+def test_manual_sigmas_parses_space_separated_integers() -> None:
+    import torch
+
+    result = manual_sigmas("14 7 3 0")
+
+    assert isinstance(result, torch.FloatTensor)
+    assert list(result) == [14.0, 7.0, 3.0, 0.0]
+
+
+def test_manual_sigmas_parses_decimal_values() -> None:
+    import torch
+
+    result = manual_sigmas("3.5, 1.75, 0.875")
+
+    assert isinstance(result, torch.FloatTensor)
+    assert result.tolist() == pytest.approx([3.5, 1.75, 0.875])
+
+
+def test_manual_sigmas_parses_negative_values() -> None:
+    import torch
+
+    result = manual_sigmas("-1.5 0.0 1.5")
+
+    assert isinstance(result, torch.FloatTensor)
+    assert result.tolist() == pytest.approx([-1.5, 0.0, 1.5])
+
+
+def test_manual_sigmas_returns_float_tensor() -> None:
+    import torch
+
+    result = manual_sigmas("1 2 3")
+
+    assert result.dtype == torch.float32
+
+
+def test_manual_sigmas_is_in_all() -> None:
+    assert "manual_sigmas" in sampling_module.__all__
+
+
+def test_manual_sigmas_torch_import_is_deferred() -> None:
+    result = _run_python(
+        "import sys\n"
+        "import json\n"
+        "baseline = set(sys.modules)\n"
+        "from comfy_diffusion.sampling import manual_sigmas\n"
+        "post = set(sys.modules)\n"
+        "new = sorted(post - baseline)\n"
+        "torch_loaded = 'torch' in sys.modules\n"
+        "print(json.dumps({'torch_loaded': torch_loaded, 'func_name': manual_sigmas.__name__}))\n"
+    )
+
+    import json as _json
+
+    payload = _json.loads(result.stdout)
+    assert payload["func_name"] == "manual_sigmas"
+    assert payload["torch_loaded"] is False
