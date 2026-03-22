@@ -187,6 +187,23 @@ def ltxv_concat_av_latent(
     return output
 
 
+def ltxv_separate_av_latent(
+    av_latent: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Separate a joint AV NestedTensor latent into individual video and audio latents."""
+    video_samples, audio_samples = av_latent["samples"].unbind()
+
+    video_latent: dict[str, Any] = {"samples": video_samples}
+    audio_latent: dict[str, Any] = {"samples": audio_samples}
+
+    if "noise_mask" in av_latent:
+        video_mask, audio_mask = av_latent["noise_mask"].unbind()
+        video_latent["noise_mask"] = video_mask
+        audio_latent["noise_mask"] = audio_mask
+
+    return video_latent, audio_latent
+
+
 def empty_ace_step_15_latent_audio(seconds: float, batch_size: int = 1) -> dict[str, Any]:
     """Create empty ACE Step 1.5 latents used as sampler noise input."""
     torch, model_management = _get_ace_step_15_latent_audio_dependencies()
@@ -202,4 +219,5 @@ __all__ = [
     "encode_ace_step_15_audio",
     "empty_ace_step_15_latent_audio",
     "ltxv_concat_av_latent",
+    "ltxv_separate_av_latent",
 ]

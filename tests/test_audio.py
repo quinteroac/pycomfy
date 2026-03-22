@@ -18,6 +18,7 @@ from comfy_diffusion.audio import (
     ltxv_audio_vae_encode,
     ltxv_concat_av_latent,
     ltxv_empty_latent_audio,
+    ltxv_separate_av_latent,
 )
 
 
@@ -49,6 +50,7 @@ def test_audio_module_exports_ltxv_audio_vae_helpers() -> None:
         "encode_ace_step_15_audio",
         "empty_ace_step_15_latent_audio",
         "ltxv_concat_av_latent",
+        "ltxv_separate_av_latent",
     ]
 
 
@@ -550,6 +552,74 @@ def test_empty_ace_step_15_latent_audio_is_importable_from_comfy_diffusion_audio
     assert result.stdout.strip() == "ok"
 
 
+def test_ltxv_separate_av_latent_signature_matches_contract() -> None:
+    signature = inspect.signature(ltxv_separate_av_latent)
+    assert (
+        str(signature)
+        == "(av_latent: 'dict[str, Any]') -> 'tuple[dict[str, Any], dict[str, Any]]'"
+    )
+
+
+def test_ltxv_separate_av_latent_unbinds_samples_into_video_and_audio() -> None:
+    video_samples = object()
+    audio_samples = object()
+
+    class FakeNestedTensor:
+        def __init__(self, tensors: tuple[Any, Any]) -> None:
+            self.tensors = tensors
+
+        def unbind(self) -> tuple[Any, Any]:
+            return self.tensors
+
+    av_latent: dict[str, Any] = {
+        "samples": FakeNestedTensor((video_samples, audio_samples)),
+    }
+
+    video_latent, audio_latent = ltxv_separate_av_latent(av_latent)
+
+    assert video_latent["samples"] is video_samples
+    assert audio_latent["samples"] is audio_samples
+    assert "noise_mask" not in video_latent
+    assert "noise_mask" not in audio_latent
+
+
+def test_ltxv_separate_av_latent_unbinds_noise_mask_when_present() -> None:
+    video_samples = object()
+    audio_samples = object()
+    video_mask = object()
+    audio_mask = object()
+
+    class FakeNestedTensor:
+        def __init__(self, tensors: tuple[Any, Any]) -> None:
+            self.tensors = tensors
+
+        def unbind(self) -> tuple[Any, Any]:
+            return self.tensors
+
+    av_latent: dict[str, Any] = {
+        "samples": FakeNestedTensor((video_samples, audio_samples)),
+        "noise_mask": FakeNestedTensor((video_mask, audio_mask)),
+    }
+
+    video_latent, audio_latent = ltxv_separate_av_latent(av_latent)
+
+    assert video_latent["samples"] is video_samples
+    assert audio_latent["samples"] is audio_samples
+    assert video_latent["noise_mask"] is video_mask
+    assert audio_latent["noise_mask"] is audio_mask
+
+
+def test_ltxv_separate_av_latent_is_importable_from_comfy_diffusion_audio() -> None:
+    result = _run_python(
+        "from comfy_diffusion.audio import ltxv_separate_av_latent; "
+        "assert ltxv_separate_av_latent.__name__ == 'ltxv_separate_av_latent'; "
+        "print('ok')"
+    )
+
+    assert result.returncode == 0
+    assert result.stdout.strip() == "ok"
+
+
 def test_import_comfy_diffusion_audio_has_no_torch_or_comfy_side_effects() -> None:
     result = _run_python(
         "import json\n"
@@ -563,6 +633,7 @@ def test_import_comfy_diffusion_audio_has_no_torch_or_comfy_side_effects() -> No
         "  ltxv_audio_vae_encode,\n"
         "  ltxv_concat_av_latent,\n"
         "  ltxv_empty_latent_audio,\n"
+        "  ltxv_separate_av_latent,\n"
         ")\n"
         "post_modules = set(sys.modules)\n"
         "new_modules = sorted(post_modules - baseline_modules)\n"
@@ -573,6 +644,7 @@ def test_import_comfy_diffusion_audio_has_no_torch_or_comfy_side_effects() -> No
         "  'decode_func_name': ltxv_audio_vae_decode.__name__,\n"
         "  'concat_av_func_name': ltxv_concat_av_latent.__name__,\n"
         "  'empty_latent_func_name': ltxv_empty_latent_audio.__name__,\n"
+        "  'separate_av_func_name': ltxv_separate_av_latent.__name__,\n"
         "  'torch_loaded': 'torch' in sys.modules,\n"
         "  'comfy_loaded': 'comfy' in sys.modules,\n"
         "  'comfy_sd_loaded': 'comfy.sd' in sys.modules,\n"
@@ -588,6 +660,7 @@ def test_import_comfy_diffusion_audio_has_no_torch_or_comfy_side_effects() -> No
     assert payload["decode_func_name"] == "ltxv_audio_vae_decode"
     assert payload["concat_av_func_name"] == "ltxv_concat_av_latent"
     assert payload["empty_latent_func_name"] == "ltxv_empty_latent_audio"
+    assert payload["separate_av_func_name"] == "ltxv_separate_av_latent"
     assert payload["torch_loaded"] is False
     assert payload["comfy_loaded"] is False
     assert payload["comfy_sd_loaded"] is False
