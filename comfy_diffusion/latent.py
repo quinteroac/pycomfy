@@ -339,6 +339,38 @@ def ltxv_empty_latent_video(
     return {"samples": latent}
 
 
+def _load_latent_upscale_model() -> Any:
+    """Resolve LTXVLatentUpsampler node at call time."""
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    from comfy_extras.nodes_lt_upsampler import LTXVLatentUpsampler
+
+    return LTXVLatentUpsampler
+
+
+def _upsample_latent(samples: dict[str, Any], upscale_model: Any, vae: Any) -> dict[str, Any]:
+    """Delegate to LTXVLatentUpsampler.upsample_latent."""
+    ltxv_upsampler_type = _load_latent_upscale_model()
+    return cast(
+        dict[str, Any],
+        _unwrap_node_output(
+            ltxv_upsampler_type().upsample_latent(
+                samples=samples,
+                upscale_model=upscale_model,
+                vae=vae,
+            )
+        ),
+    )
+
+
+def ltxv_latent_upsample(
+    samples: dict[str, Any], upscale_model: Any, vae: Any
+) -> dict[str, Any]:
+    """Upsample a video latent by factor 2 in latent space using LTXVLatentUpsampler."""
+    return _upsample_latent(samples=samples, upscale_model=upscale_model, vae=vae)
+
+
 def set_latent_noise_mask(latent: dict[str, Any], mask: Any) -> dict[str, Any]:
     """Return a LATENT dict with noise mask metadata for inpainting sampling."""
     torch_tensor_type = _get_torch_tensor_type()
@@ -400,4 +432,5 @@ __all__ = [
     "latent_composite_masked",
     "set_latent_noise_mask",
     "inpaint_model_conditioning",
+    "ltxv_latent_upsample",
 ]

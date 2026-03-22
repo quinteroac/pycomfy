@@ -27,6 +27,7 @@ from comfy_diffusion.latent import (
     latent_upscale,
     latent_upscale_by,
     ltxv_empty_latent_video,
+    ltxv_latent_upsample,
     repeat_latent_batch,
     replace_video_latent_frames,
     set_latent_noise_mask,
@@ -70,6 +71,7 @@ def test_latent_module_exports_empty_latent_image() -> None:
         "latent_composite_masked",
         "set_latent_noise_mask",
         "inpaint_model_conditioning",
+        "ltxv_latent_upsample",
     ]
 
 
@@ -1085,3 +1087,87 @@ def test_inpaint_model_conditioning_outputs_are_compatible_with_sampling_and_con
     assert patched_positive[0][1]["concat_mask"] is latent["noise_mask"]
     assert patched_negative[0][1]["concat_latent_image"] is latent["samples"]
     assert len(combined) == 2
+
+
+# ---------------------------------------------------------------------------
+# ltxv_latent_upsample tests
+# ---------------------------------------------------------------------------
+
+
+def test_ltxv_latent_upsample_signature_matches_contract() -> None:
+    signature = inspect.signature(ltxv_latent_upsample)
+    assert str(signature) == (
+        "(samples: 'dict[str, Any]', upscale_model: 'Any', vae: 'Any') -> 'dict[str, Any]'"
+    )
+
+
+def test_ltxv_latent_upsample_in_all() -> None:
+    assert "ltxv_latent_upsample" in latent_module.__all__
+
+
+def test_ltxv_latent_upsample_delegates_to_node(monkeypatch: Any) -> None:
+    expected_output: dict[str, Any] = {"samples": object()}
+    upscale_model = object()
+    vae = object()
+    input_samples: dict[str, Any] = {"samples": object()}
+
+    class FakeLTXVLatentUpsampler:
+        def upsample_latent(
+            self,
+            samples: dict[str, Any],
+            upscale_model: Any,
+            vae: Any,
+        ) -> tuple[dict[str, Any]]:
+            assert samples is input_samples
+            return (expected_output,)
+
+    monkeypatch.setattr(
+        latent_module,
+        "_load_latent_upscale_model",
+        lambda: FakeLTXVLatentUpsampler,
+    )
+
+    result = ltxv_latent_upsample(
+        samples=input_samples, upscale_model=upscale_model, vae=vae
+    )
+    assert result is expected_output
+
+
+def test_ltxv_latent_upsample_removes_noise_mask(monkeypatch: Any) -> None:
+    upsampled = {"samples": object()}
+    noise_mask = object()
+    input_samples: dict[str, Any] = {"samples": object(), "noise_mask": noise_mask}
+
+    class FakeLTXVLatentUpsampler:
+        def upsample_latent(
+            self,
+            samples: dict[str, Any],
+            upscale_model: Any,
+            vae: Any,
+        ) -> tuple[dict[str, Any]]:
+            result = dict(samples)
+            result.pop("noise_mask", None)
+            result["samples"] = upsampled["samples"]
+            return (result,)
+
+    monkeypatch.setattr(
+        latent_module,
+        "_load_latent_upscale_model",
+        lambda: FakeLTXVLatentUpsampler,
+    )
+
+    result = ltxv_latent_upsample(
+        samples=input_samples, upscale_model=object(), vae=object()
+    )
+    assert "noise_mask" not in result
+
+
+def test_ltxv_latent_upsample_lazy_imports() -> None:
+    result = _run_python(
+        "import sys\n"
+        "import comfy_diffusion.latent as m\n"
+        "assert 'torch' not in sys.modules, 'torch imported at module level'\n"
+        "assert 'comfy' not in sys.modules, 'comfy imported at module level'\n"
+        "print('ok')"
+    )
+    assert result.stdout.strip() == "ok"
