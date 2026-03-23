@@ -242,7 +242,7 @@ class ModelManager:
             raise FileNotFoundError(f"ltxv audio vae file not found: {p}")
         else:
             name = path if isinstance(path, str) else p.name
-            checkpoint_path = folder_paths.get_full_path_or_raise("vae", name)
+            checkpoint_path = folder_paths.get_full_path_or_raise("checkpoints", name)
 
         state_dict, metadata = comfy_utils.load_torch_file(
             checkpoint_path, return_metadata=True

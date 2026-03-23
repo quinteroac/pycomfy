@@ -571,7 +571,6 @@ __all__ = [
     "encode_clip_vision",
     "wan_image_to_video",
     "wan_first_last_frame_to_video",
-    "wan_vace_to_video",
     "ltxv_img_to_video",
     "ltxv_conditioning",
     "ltxv_crop_guides",

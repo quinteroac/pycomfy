@@ -108,10 +108,13 @@ def ltxv_audio_vae_decode(vae: _LtxvAudioVaeDecoder, latent: Any) -> dict[str, A
 
     if hasattr(vae, "to"):
         vae.to("cpu")
-    latent_tensor = latent_tensor.cpu()
+    if hasattr(latent_tensor, "cpu"):
+        latent_tensor = latent_tensor.cpu()
 
     with torch.no_grad():
-        audio = vae.decode(latent_tensor).detach()
+        audio = vae.decode(latent_tensor)
+    if hasattr(audio, "detach"):
+        audio = audio.detach()
     return {"waveform": audio, "sample_rate": int(vae.output_sample_rate)}
 
 
