@@ -45,3 +45,5 @@ output_separate.png
 wan_output.mp4
 ace_output.wav
 output_esrgan.png
+ltxv2_output/output.mp4
+ltxv2_output/audio.wav

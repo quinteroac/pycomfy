@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import re
 from typing import Any
 
 
@@ -316,6 +317,19 @@ def get_sampler(sampler_name: str) -> Any:
     return _unwrap_node_output(ksampler_select_type.execute(sampler_name))
 
 
+def manual_sigmas(sigmas: str) -> Any:
+    """Parse a string of numeric values into a ``torch.FloatTensor`` of sigmas.
+
+    Extracts all numeric tokens (including negative and decimal values) from
+    *sigmas* using a regular expression and returns them as a float tensor
+    suitable for passing directly to ``sample_custom()``.
+    """
+    import torch
+
+    values = [float(m) for m in re.findall(r"-?\d+(?:\.\d+)?", sigmas)]
+    return torch.FloatTensor(values)
+
+
 def sample(
     model: Any,
     positive: Any,
@@ -435,4 +449,5 @@ __all__ = [
     "split_sigmas",
     "split_sigmas_denoise",
     "get_sampler",
+    "manual_sigmas",
 ]

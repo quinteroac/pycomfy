@@ -26,6 +26,8 @@ from comfy_diffusion.latent import (
     latent_from_batch,
     latent_upscale,
     latent_upscale_by,
+    ltxv_empty_latent_video,
+    ltxv_latent_upsample,
     repeat_latent_batch,
     replace_video_latent_frames,
     set_latent_noise_mask,
@@ -56,6 +58,7 @@ def _run_python(code: str) -> subprocess.CompletedProcess[str]:
 def test_latent_module_exports_empty_latent_image() -> None:
     assert latent_module.__all__ == [
         "empty_latent_image",
+        "ltxv_empty_latent_video",
         "latent_from_batch",
         "latent_cut_to_batch",
         "repeat_latent_batch",
@@ -68,6 +71,7 @@ def test_latent_module_exports_empty_latent_image() -> None:
         "latent_composite_masked",
         "set_latent_noise_mask",
         "inpaint_model_conditioning",
+        "ltxv_latent_upsample",
     ]
 
 
@@ -264,6 +268,96 @@ def test_empty_latent_image_import_contract() -> None:
     )
     payload = json.loads(result.stdout)
     assert payload["func_name"] == "empty_latent_image"
+
+
+def test_ltxv_empty_latent_video_signature_matches_contract() -> None:
+    signature = inspect.signature(ltxv_empty_latent_video)
+    assert str(signature) == (
+        "(width: 'int', height: 'int', length: 'int' = 97, batch_size: 'int' = 1)"
+        " -> 'dict[str, Any]'"
+    )
+
+
+def test_ltxv_empty_latent_video_returns_correct_shape(monkeypatch: Any) -> None:
+    import types
+
+    class FakeTensor:
+        def __init__(self, shape: Any) -> None:
+            self.shape = tuple(shape)
+
+    fake_torch = types.SimpleNamespace(zeros=lambda s, device=None: FakeTensor(s))
+    fake_comfy_mm = types.SimpleNamespace(intermediate_device=lambda: "cpu")
+    fake_comfy = types.SimpleNamespace(model_management=fake_comfy_mm)
+
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    monkeypatch.setitem(sys.modules, "comfy", fake_comfy)
+    monkeypatch.setitem(sys.modules, "comfy.model_management", fake_comfy_mm)
+
+    result = ltxv_empty_latent_video(width=768, height=512, length=97, batch_size=1)
+
+    assert isinstance(result, dict)
+    assert "samples" in result
+    # ((97-1)//8)+1=13; 512//32=16; 768//32=24
+    assert result["samples"].shape == (1, 128, 13, 16, 24)
+
+
+def test_ltxv_empty_latent_video_default_length_and_batch_size(monkeypatch: Any) -> None:
+    import types
+
+    class FakeTensor:
+        def __init__(self, shape: Any) -> None:
+            self.shape = tuple(shape)
+
+    fake_torch = types.SimpleNamespace(zeros=lambda s, device=None: FakeTensor(s))
+    fake_comfy_mm = types.SimpleNamespace(intermediate_device=lambda: "cpu")
+    fake_comfy = types.SimpleNamespace(model_management=fake_comfy_mm)
+
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    monkeypatch.setitem(sys.modules, "comfy", fake_comfy)
+    monkeypatch.setitem(sys.modules, "comfy.model_management", fake_comfy_mm)
+
+    result = ltxv_empty_latent_video(width=512, height=512)
+
+    # length=97 default → ((97-1)//8)+1 = 13; 512//32 = 16
+    assert result["samples"].shape == (1, 128, 13, 16, 16)
+
+
+def test_ltxv_empty_latent_video_batch_size(monkeypatch: Any) -> None:
+    import types
+
+    class FakeTensor:
+        def __init__(self, shape: Any) -> None:
+            self.shape = tuple(shape)
+
+    fake_torch = types.SimpleNamespace(zeros=lambda s, device=None: FakeTensor(s))
+    fake_comfy_mm = types.SimpleNamespace(intermediate_device=lambda: "cpu")
+    fake_comfy = types.SimpleNamespace(model_management=fake_comfy_mm)
+
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    monkeypatch.setitem(sys.modules, "comfy", fake_comfy)
+    monkeypatch.setitem(sys.modules, "comfy.model_management", fake_comfy_mm)
+
+    result = ltxv_empty_latent_video(width=256, height=256, length=25, batch_size=3)
+
+    # ((25-1)//8)+1 = 4; 256//32 = 8
+    assert result["samples"].shape == (3, 128, 4, 8, 8)
+
+
+def test_ltxv_empty_latent_video_lazy_imports() -> None:
+    result = _run_python(
+        "import sys\n"
+        "import comfy_diffusion.latent as m\n"
+        "assert 'torch' not in sys.modules, 'torch imported at module level'\n"
+        "assert 'comfy' not in sys.modules, 'comfy imported at module level'\n"
+        "print('ok')"
+    )
+    assert result.stdout.strip() == "ok"
+
+
+def test_ltxv_empty_latent_video_in_all() -> None:
+    import comfy_diffusion.latent as m
+
+    assert "ltxv_empty_latent_video" in m.__all__
 
 
 def test_latent_upscale_supports_all_comfyui_methods_and_returns_sample_compatible_latent(
@@ -993,3 +1087,87 @@ def test_inpaint_model_conditioning_outputs_are_compatible_with_sampling_and_con
     assert patched_positive[0][1]["concat_mask"] is latent["noise_mask"]
     assert patched_negative[0][1]["concat_latent_image"] is latent["samples"]
     assert len(combined) == 2
+
+
+# ---------------------------------------------------------------------------
+# ltxv_latent_upsample tests
+# ---------------------------------------------------------------------------
+
+
+def test_ltxv_latent_upsample_signature_matches_contract() -> None:
+    signature = inspect.signature(ltxv_latent_upsample)
+    assert str(signature) == (
+        "(samples: 'dict[str, Any]', upscale_model: 'Any', vae: 'Any') -> 'dict[str, Any]'"
+    )
+
+
+def test_ltxv_latent_upsample_in_all() -> None:
+    assert "ltxv_latent_upsample" in latent_module.__all__
+
+
+def test_ltxv_latent_upsample_delegates_to_node(monkeypatch: Any) -> None:
+    expected_output: dict[str, Any] = {"samples": object()}
+    upscale_model = object()
+    vae = object()
+    input_samples: dict[str, Any] = {"samples": object()}
+
+    class FakeLTXVLatentUpsampler:
+        def upsample_latent(
+            self,
+            samples: dict[str, Any],
+            upscale_model: Any,
+            vae: Any,
+        ) -> tuple[dict[str, Any]]:
+            assert samples is input_samples
+            return (expected_output,)
+
+    monkeypatch.setattr(
+        latent_module,
+        "_load_latent_upscale_model",
+        lambda: FakeLTXVLatentUpsampler,
+    )
+
+    result = ltxv_latent_upsample(
+        samples=input_samples, upscale_model=upscale_model, vae=vae
+    )
+    assert result is expected_output
+
+
+def test_ltxv_latent_upsample_removes_noise_mask(monkeypatch: Any) -> None:
+    upsampled = {"samples": object()}
+    noise_mask = object()
+    input_samples: dict[str, Any] = {"samples": object(), "noise_mask": noise_mask}
+
+    class FakeLTXVLatentUpsampler:
+        def upsample_latent(
+            self,
+            samples: dict[str, Any],
+            upscale_model: Any,
+            vae: Any,
+        ) -> tuple[dict[str, Any]]:
+            result = dict(samples)
+            result.pop("noise_mask", None)
+            result["samples"] = upsampled["samples"]
+            return (result,)
+
+    monkeypatch.setattr(
+        latent_module,
+        "_load_latent_upscale_model",
+        lambda: FakeLTXVLatentUpsampler,
+    )
+
+    result = ltxv_latent_upsample(
+        samples=input_samples, upscale_model=object(), vae=object()
+    )
+    assert "noise_mask" not in result
+
+
+def test_ltxv_latent_upsample_lazy_imports() -> None:
+    result = _run_python(
+        "import sys\n"
+        "import comfy_diffusion.latent as m\n"
+        "assert 'torch' not in sys.modules, 'torch imported at module level'\n"
+        "assert 'comfy' not in sys.modules, 'comfy imported at module level'\n"
+        "print('ok')"
+    )
+    assert result.stdout.strip() == "ok"

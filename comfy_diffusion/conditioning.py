@@ -62,6 +62,19 @@ def _get_wan_conditioning_dependencies() -> tuple[Any, Any, Any, Any]:
     return torch, comfy.model_management, comfy.utils, node_helpers
 
 
+def _get_wan_vace_dependencies() -> tuple[Any, Any, Any, Any, Any]:
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    import comfy.latent_formats
+    import comfy.model_management
+    import comfy.utils
+    import node_helpers
+    import torch
+
+    return torch, comfy.model_management, comfy.utils, node_helpers, comfy.latent_formats
+
+
 def _get_clip_vision_output_type() -> Any:
     from ._runtime import ensure_comfyui_on_path
 
@@ -290,6 +303,57 @@ def ltxv_conditioning(
     )
 
 
+def ltxv_crop_guides(
+    positive: Any,
+    negative: Any,
+    latent: dict[str, Any],
+) -> tuple[Any, Any, dict[str, Any]]:
+    """Crop keyframe guide frames from LTXV conditioning and latent before the main sampling pass.
+
+    Removes ``keyframe_idxs`` and ``guide_attention_entries`` from both conditioning
+    objects and slices the corresponding frames off the end of the latent tensor.
+    When there are no keyframe guides (``num_keyframes == 0``) the inputs are
+    returned unchanged.
+    """
+    # Extract keyframe_idxs without importing torch so the function is import-safe.
+    keyframe_idxs = None
+    for entry in positive:
+        if "keyframe_idxs" in entry[1]:
+            keyframe_idxs = entry[1]["keyframe_idxs"]
+            break
+
+    if keyframe_idxs is None:
+        return positive, negative, latent
+
+    torch, _, _, node_helpers = _get_ltxv_conditioning_dependencies()
+
+    num_keyframes: int = torch.unique(keyframe_idxs[:, 0, :, 0]).shape[0]
+
+    if num_keyframes == 0:
+        return positive, negative, latent
+
+    latent_image = latent["samples"].clone()
+    noise_mask = latent.get("noise_mask", None)
+    if noise_mask is None:
+        batch_size, _, latent_length, _, _ = latent_image.shape
+        noise_mask = torch.ones(
+            (batch_size, 1, latent_length, 1, 1),
+            dtype=torch.float32,
+            device=latent_image.device,
+        )
+    else:
+        noise_mask = noise_mask.clone()
+
+    latent_image = latent_image[:, :, :-num_keyframes]
+    noise_mask = noise_mask[:, :, :-num_keyframes]
+
+    guide_values: dict[str, Any] = {"keyframe_idxs": None, "guide_attention_entries": None}
+    positive = node_helpers.conditioning_set_values(positive, guide_values)
+    negative = node_helpers.conditioning_set_values(negative, guide_values)
+
+    return positive, negative, {"samples": latent_image, "noise_mask": noise_mask}
+
+
 def conditioning_combine(
     cond_a: Any,
     cond_b: Any | None = None,
@@ -388,14 +452,129 @@ def flux_guidance(conditioning: Any, guidance: float = 3.5) -> list[Any]:
     return output
 
 
+def wan_vace_to_video(
+    positive: Any,
+    negative: Any,
+    vae: _VaeEncoder,
+    width: int = 832,
+    height: int = 480,
+    length: int = 81,
+    batch_size: int = 1,
+    strength: float = 1.0,
+    control_video: Any | None = None,
+    control_masks: Any | None = None,
+    reference_image: Any | None = None,
+) -> tuple[Any, Any, dict[str, Any], int]:
+    """Build WAN VACE conditioning and empty latent samples.
+
+    Args:
+        positive: Positive conditioning.
+        negative: Negative conditioning.
+        vae: VAE model used to encode control frames and reference image.
+        width: Video width in pixels (multiple of 8).
+        height: Video height in pixels (multiple of 8).
+        length: Number of video frames.
+        batch_size: Latent batch size.
+        strength: VACE conditioning strength.
+        control_video: Optional control video tensor ``[T, H, W, C]`` in [0, 1].
+        control_masks: Optional mask tensor ``[T, H, W]`` or ``[T, 1, H, W]`` in [0, 1].
+        reference_image: Optional reference image tensor ``[1, H, W, C]`` in [0, 1].
+
+    Returns:
+        ``(positive, negative, latent, trim_latent)`` where ``trim_latent`` is
+        the number of latent frames prepended for the reference image (0 if none).
+    """
+    torch, model_management, comfy_utils, node_helpers, comfy_latent_formats = _get_wan_vace_dependencies()
+
+    latent_length = ((length - 1) // 4) + 1
+
+    if control_video is not None:
+        control_video = comfy_utils.common_upscale(
+            control_video[:length].movedim(-1, 1), width, height, "bilinear", "center"
+        ).movedim(1, -1)
+        if control_video.shape[0] < length:
+            control_video = torch.nn.functional.pad(
+                control_video, (0, 0, 0, 0, 0, 0, 0, length - control_video.shape[0]), value=0.5
+            )
+    else:
+        control_video = torch.ones((length, height, width, 3)) * 0.5
+
+    if reference_image is not None:
+        reference_image = comfy_utils.common_upscale(
+            reference_image[:1].movedim(-1, 1), width, height, "bilinear", "center"
+        ).movedim(1, -1)
+        ref_latent = vae.encode(reference_image[:, :, :, :3])
+        reference_image = torch.cat(
+            [ref_latent, comfy_latent_formats.Wan21().process_out(torch.zeros_like(ref_latent))], dim=1
+        )
+
+    if control_masks is None:
+        mask = torch.ones((length, height, width, 1))
+    else:
+        mask = control_masks
+        if mask.ndim == 3:
+            mask = mask.unsqueeze(1)
+        mask = comfy_utils.common_upscale(
+            mask[:length], width, height, "bilinear", "center"
+        ).movedim(1, -1)
+        if mask.shape[0] < length:
+            mask = torch.nn.functional.pad(
+                mask, (0, 0, 0, 0, 0, 0, 0, length - mask.shape[0]), value=1.0
+            )
+
+    control_video = control_video - 0.5
+    inactive = (control_video * (1 - mask)) + 0.5
+    reactive = (control_video * mask) + 0.5
+
+    inactive = vae.encode(inactive[:, :, :, :3])
+    reactive = vae.encode(reactive[:, :, :, :3])
+    control_video_latent = torch.cat((inactive, reactive), dim=1)
+    if reference_image is not None:
+        control_video_latent = torch.cat((reference_image, control_video_latent), dim=2)
+
+    vae_stride = 8
+    height_mask = height // vae_stride
+    width_mask = width // vae_stride
+    mask = mask.view(length, height_mask, vae_stride, width_mask, vae_stride)
+    mask = mask.permute(2, 4, 0, 1, 3)
+    mask = mask.reshape(vae_stride * vae_stride, length, height_mask, width_mask)
+    mask = torch.nn.functional.interpolate(
+        mask.unsqueeze(0), size=(latent_length, height_mask, width_mask), mode="nearest-exact"
+    ).squeeze(0)
+
+    trim_latent = 0
+    if reference_image is not None:
+        mask_pad = torch.zeros_like(mask[:, : reference_image.shape[2], :, :])
+        mask = torch.cat((mask_pad, mask), dim=1)
+        latent_length += reference_image.shape[2]
+        trim_latent = reference_image.shape[2]
+
+    mask = mask.unsqueeze(0)
+
+    positive = node_helpers.conditioning_set_values(
+        positive, {"vace_frames": [control_video_latent], "vace_mask": [mask], "vace_strength": [strength]}, append=True
+    )
+    negative = node_helpers.conditioning_set_values(
+        negative, {"vace_frames": [control_video_latent], "vace_mask": [mask], "vace_strength": [strength]}, append=True
+    )
+
+    latent = torch.zeros(
+        [batch_size, 16, latent_length, height // 8, width // 8],
+        device=model_management.intermediate_device(),
+    )
+    return positive, negative, {"samples": latent}, trim_latent
+
+
 __all__ = [
     "encode_prompt",
     "encode_prompt_flux",
     "encode_clip_vision",
     "wan_image_to_video",
     "wan_first_last_frame_to_video",
+    "wan_vace_to_video",
     "ltxv_img_to_video",
     "ltxv_conditioning",
+    "ltxv_crop_guides",
     "conditioning_combine",
     "conditioning_set_mask",
     "conditioning_set_timestep_range",

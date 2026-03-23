@@ -70,6 +70,9 @@ class ModelManager:
         folder_paths.add_model_folder_path(
             "upscale_models", str(self.models_dir / "upscale_models"), is_default=True
         )
+        folder_paths.add_model_folder_path(
+            "latent_upscale_models", str(self.models_dir / "upscale"), is_default=True
+        )
 
     def load_checkpoint(self, filename: str) -> CheckpointResult:
         """Load a checkpoint by filename from the configured checkpoints directory."""
@@ -224,7 +227,7 @@ class ModelManager:
         """Load an LTXV audio VAE checkpoint from a path or filename.
 
         If ``path`` is an absolute path to an existing file, that file is loaded.
-        Otherwise ``path`` is treated as a filename under the ``checkpoints`` folder.
+        Otherwise ``path`` is treated as a filename under the ``vae`` folder.
         """
         ensure_comfyui_on_path()
 
@@ -239,7 +242,7 @@ class ModelManager:
             raise FileNotFoundError(f"ltxv audio vae file not found: {p}")
         else:
             name = path if isinstance(path, str) else p.name
-            checkpoint_path = folder_paths.get_full_path_or_raise("checkpoints", name)
+            checkpoint_path = folder_paths.get_full_path_or_raise("vae", name)
 
         state_dict, metadata = comfy_utils.load_torch_file(
             checkpoint_path, return_metadata=True
@@ -321,6 +324,101 @@ class ModelManager:
             ckpt_paths=[llm_path],
             embedding_directory=folder_paths.get_folder_paths("embeddings"),
         )
+
+    def load_latent_upscale_model(self, path: str | Path) -> Any:
+        """Load a LATENT_UPSCALE_MODEL from a path or filename.
+
+        If ``path`` is an absolute path to an existing file, that file is loaded.
+        Otherwise ``path`` is treated as a filename under the ``upscale`` folder
+        (registered as ``latent_upscale_models`` in folder_paths).
+
+        Returns a latent upscale model (nn.Module) compatible with
+        ``ltxv_latent_upsample()``.
+        """
+        ensure_comfyui_on_path()
+
+        import json
+
+        import folder_paths
+        from comfy import utils as comfy_utils
+
+        p = Path(path)
+        if p.is_absolute() and p.is_file():
+            model_path = str(p.resolve())
+        elif p.is_absolute():
+            raise FileNotFoundError(f"latent upscale model file not found: {p}")
+        else:
+            name = path if isinstance(path, str) else p.name
+            model_path = folder_paths.get_full_path_or_raise("latent_upscale_models", name)
+
+        sd, metadata = comfy_utils.load_torch_file(
+            model_path, safe_load=True, return_metadata=True
+        )
+
+        # Dispatch mirrors LatentUpscaleModelLoader.execute() from nodes_hunyuan.py
+        if "blocks.0.block.0.conv.weight" in sd:
+            from comfy_extras.nodes_hunyuan import HunyuanVideo15SRModel
+
+            config = {
+                "in_channels": sd["in_conv.conv.weight"].shape[1],
+                "out_channels": sd["out_conv.conv.weight"].shape[0],
+                "hidden_channels": sd["in_conv.conv.weight"].shape[0],
+                "num_blocks": len(
+                    [
+                        k
+                        for k in sd.keys()
+                        if k.startswith("blocks.") and k.endswith(".block.0.conv.weight")
+                    ]
+                ),
+                "global_residual": False,
+            }
+            model = HunyuanVideo15SRModel("720p", config)
+            model.load_sd(sd)
+        elif "up.0.block.0.conv1.conv.weight" in sd:
+            from comfy_extras.nodes_hunyuan import HunyuanVideo15SRModel
+
+            sd = {
+                key.replace("nin_shortcut", "nin_shortcut.conv", 1): value
+                for key, value in sd.items()
+            }
+            config = {
+                "z_channels": sd["conv_in.conv.weight"].shape[1],
+                "out_channels": sd["conv_out.conv.weight"].shape[0],
+                "block_out_channels": tuple(
+                    sd[f"up.{i}.block.0.conv1.conv.weight"].shape[0]
+                    for i in range(
+                        len(
+                            [
+                                k
+                                for k in sd.keys()
+                                if k.startswith("up.")
+                                and k.endswith(".block.0.conv1.conv.weight")
+                            ]
+                        )
+                    )
+                ),
+            }
+            model = HunyuanVideo15SRModel("1080p", config)
+            model.load_sd(sd)
+        elif "post_upsample_res_blocks.0.conv2.bias" in sd:
+            import torch
+
+            import comfy.model_management
+            from comfy.ldm.lightricks.latent_upsampler import LatentUpsampler
+
+            config = json.loads(metadata["config"])
+            model = LatentUpsampler.from_config(config).to(
+                dtype=comfy.model_management.vae_dtype(
+                    allowed_dtypes=[torch.bfloat16, torch.float32]
+                )
+            )
+            model.load_state_dict(sd)
+        else:
+            raise ValueError(
+                "unknown latent upscale model type: unrecognized state dict keys"
+            )
+
+        return model
 
     def load_upscale_model(self, path: str | Path) -> Any:
         """Load an upscale (super-resolution) model from a path or filename.
@@ -436,6 +534,7 @@ def model_sampling_aura_flow(model: Any, shift: float) -> Any:
 __all__ = [
     "CheckpointResult",
     "ModelManager",
+    "load_latent_upscale_model",
     "model_sampling_aura_flow",
     "model_sampling_flux",
     "model_sampling_sd3",

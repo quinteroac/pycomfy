@@ -22,6 +22,7 @@ from comfy_diffusion.conditioning import (
     encode_prompt_flux,
     flux_guidance,
     ltxv_conditioning,
+    ltxv_crop_guides,
     ltxv_img_to_video,
     wan_first_last_frame_to_video,
     wan_image_to_video,
@@ -286,6 +287,7 @@ def test_conditioning_public_api_exports_expected_entrypoints() -> None:
         "wan_first_last_frame_to_video",
         "ltxv_img_to_video",
         "ltxv_conditioning",
+        "ltxv_crop_guides",
         "conditioning_combine",
         "conditioning_set_mask",
         "conditioning_set_timestep_range",
@@ -460,6 +462,147 @@ def test_flux_guidance_uses_default_guidance_value() -> None:
     output = flux_guidance(conditioning_input)
 
     assert output == [["a-token", {"source": "base", "guidance": 3.5}]]
+
+
+def test_ltxv_crop_guides_returns_inputs_unchanged_when_no_keyframe_idxs() -> None:
+    """AC03: when num_keyframes == 0 (no keyframe_idxs in conditioning), inputs are returned unchanged."""
+    positive = [["pos-token", {"frame_rate": 25.0}]]
+    negative = [["neg-token", {"frame_rate": 25.0}]]
+
+    class _FakeLatent(dict):  # type: ignore[misc]
+        pass
+
+    latent: dict[str, Any] = _FakeLatent({"samples": object()})
+
+    out_pos, out_neg, out_latent = ltxv_crop_guides(positive, negative, latent)
+
+    assert out_pos is positive
+    assert out_neg is negative
+    assert out_latent is latent
+
+
+def test_ltxv_crop_guides_is_import_safe_without_gpu() -> None:
+    """AC04: importing ltxv_crop_guides must not load torch or comfy.sd modules."""
+    result = _run_python(
+        "import json\n"
+        "import sys\n"
+        "import comfy_diffusion\n"
+        "baseline_modules = set(sys.modules)\n"
+        "from comfy_diffusion.conditioning import ltxv_crop_guides\n"
+        "post_modules = set(sys.modules)\n"
+        "new_modules = sorted(post_modules - baseline_modules)\n"
+        "payload = {\n"
+        "  'func_name': ltxv_crop_guides.__name__,\n"
+        "  'torch_loaded': 'torch' in sys.modules,\n"
+        "  'new_modules': new_modules,\n"
+        "}\n"
+        "print(json.dumps(payload))\n"
+    )
+
+    payload = json.loads(result.stdout)
+    assert payload["func_name"] == "ltxv_crop_guides"
+    assert payload["torch_loaded"] is False
+    heavy = [
+        m
+        for m in payload["new_modules"]
+        if m.startswith(("torch", "folder_paths", "comfy.sd"))
+    ]
+    assert heavy == [], f"Unexpected heavy modules loaded on import: {heavy}"
+
+
+def test_ltxv_crop_guides_crops_latent_and_clears_conditioning_when_keyframes_present() -> None:
+    """AC02: when keyframe_idxs are present, crops latent frames and clears guide keys from conditioning."""
+
+    class _FakeTensor:
+        """Minimal tensor stub: supports clone, slicing, shape, and torch.unique."""
+
+        def __init__(self, data: list[Any], shape: tuple[int, ...]) -> None:
+            self.data = data
+            self.shape = shape
+
+        device = "cpu"
+
+        def clone(self) -> "_FakeTensor":
+            return _FakeTensor(list(self.data), self.shape)
+
+        def __getitem__(self, idx: Any) -> "_FakeTensor":
+            # Handle [:, :, :-n] slicing on the time dimension (dim 2).
+            if isinstance(idx, tuple) and len(idx) == 3:
+                _b, _c, t_slice = idx
+                if isinstance(t_slice, slice) and t_slice.stop is not None and t_slice.stop < 0:
+                    n = -t_slice.stop
+                    new_len = self.shape[2] - n
+                    new_shape = (self.shape[0], self.shape[1], new_len) + self.shape[3:]
+                    return _FakeTensor(self.data, new_shape)
+                if isinstance(t_slice, slice):
+                    return _FakeTensor(self.data, self.shape)
+            # keyframe_idxs[:, 0, :, 0] → return stub for torch.unique
+            if isinstance(idx, tuple) and len(idx) == 4:
+                return _FakeTensor(self.data, (2,))
+            return _FakeTensor(self.data, self.shape)
+
+    class _FakeTorch:
+        """Torch stub providing only `unique` and `ones`."""
+
+        float32 = "float32"
+
+        def unique(self, tensor: _FakeTensor) -> _FakeTensor:
+            # Simulate 2 unique keyframe start positions.
+            return _FakeTensor([], (2,))
+
+        def ones(self, shape: tuple[int, ...], **kwargs: Any) -> _FakeTensor:
+            return _FakeTensor([], shape)
+
+    # Build keyframe_idxs tensor: shape (1, 3, 2, 2) — 2 unique start values
+    keyframe_idxs = _FakeTensor([], (1, 3, 2, 2))
+    # latent with 7 time frames (num_keyframes=2 → 5 remain)
+    latent_samples = _FakeTensor([], (1, 128, 7, 4, 4))
+
+    positive_in = [["pos-token", {"keyframe_idxs": keyframe_idxs, "guide_attention_entries": "entries"}]]
+    negative_in = [["neg-token", {"keyframe_idxs": keyframe_idxs, "guide_attention_entries": "entries"}]]
+    latent_in: dict[str, Any] = {"samples": latent_samples}
+
+    set_values_calls: list[tuple[Any, dict[str, Any]]] = []
+
+    def _conditioning_set_values(cond: Any, values: dict[str, Any]) -> list[Any]:
+        set_values_calls.append((cond, dict(values)))
+        # Return a new conditioning with the values applied (mimic node_helpers behaviour).
+        result = []
+        for entry in cond:
+            updated = [entry[0], {**entry[1], **values}]
+            result.append(updated)
+        return result
+
+    import unittest.mock as mock
+
+    fake_torch = _FakeTorch()
+
+    with (
+        mock.patch(
+            "comfy_diffusion.conditioning._get_ltxv_conditioning_dependencies",
+            return_value=(fake_torch, None, None, mock.Mock(conditioning_set_values=_conditioning_set_values)),
+        ),
+    ):
+        out_pos, out_neg, out_latent = ltxv_crop_guides(positive_in, negative_in, latent_in)
+
+    # Latent must be cropped by num_keyframes=2 frames → 5 remaining
+    assert out_latent["samples"].shape[2] == 5
+    assert "noise_mask" in out_latent
+    assert out_latent["noise_mask"].shape[2] == 5
+
+    # guide keys cleared in both conditioning objects
+    assert len(set_values_calls) == 2
+    for _cond, values in set_values_calls:
+        assert values["keyframe_idxs"] is None
+        assert values["guide_attention_entries"] is None
+
+    # Original latent not mutated
+    assert latent_in["samples"].shape[2] == 7
+
+
+def test_ltxv_crop_guides_in_all() -> None:
+    """AC05: ltxv_crop_guides is listed in conditioning.__all__."""
+    assert "ltxv_crop_guides" in conditioning.__all__
 
 
 def test_import_comfy_diffusion_conditioning_has_no_torch_or_loader_side_effects() -> None:

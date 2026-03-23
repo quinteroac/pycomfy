@@ -69,6 +69,17 @@ def _get_ace_step_15_latent_audio_dependencies() -> tuple[Any, Any]:
     return torch, comfy.model_management
 
 
+def _get_concat_av_latent_dependencies() -> tuple[Any, Any]:
+    """Resolve torch and comfy.nested_tensor at call time."""
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    import comfy.nested_tensor
+    import torch
+
+    return torch, comfy.nested_tensor
+
+
 def _unwrap_node_output(output: Any) -> Any:
     """Return first output for ComfyUI V3 nodes and tuple-style APIs."""
     if hasattr(output, "result"):
@@ -85,11 +96,22 @@ def ltxv_audio_vae_encode(vae: _LtxvAudioVaeEncoder, audio: Any) -> dict[str, An
 
 
 def ltxv_audio_vae_decode(vae: _LtxvAudioVaeDecoder, latent: Any) -> dict[str, Any]:
-    """Decode latent audio with an LTXV audio VAE."""
+    """Decode latent audio with an LTXV audio VAE.
+
+    Decodes on CPU to avoid VRAM contention with the video UNet/VAE.
+    """
+    import torch
+
     latent_tensor = latent["samples"] if isinstance(latent, dict) else latent
     if getattr(latent_tensor, "is_nested", False):
         latent_tensor = latent_tensor.unbind()[-1]
-    audio = vae.decode(latent_tensor).to(latent_tensor.device)
+
+    if hasattr(vae, "to"):
+        vae.to("cpu")
+    latent_tensor = latent_tensor.cpu()
+
+    with torch.no_grad():
+        audio = vae.decode(latent_tensor).detach()
     return {"waveform": audio, "sample_rate": int(vae.output_sample_rate)}
 
 
@@ -151,6 +173,48 @@ def encode_ace_step_15_audio(
     return clip.encode_from_tokens_scheduled(tokens)
 
 
+def ltxv_concat_av_latent(
+    video_latent: dict[str, Any],
+    audio_latent: dict[str, Any],
+) -> dict[str, Any]:
+    """Concatenate video and audio latents into a single NestedTensor latent for joint denoising."""
+    torch, comfy_nested_tensor = _get_concat_av_latent_dependencies()
+
+    output: dict[str, Any] = {}
+    output.update(video_latent)
+    output.update(audio_latent)
+
+    video_noise_mask = video_latent.get("noise_mask", None)
+    audio_noise_mask = audio_latent.get("noise_mask", None)
+
+    if video_noise_mask is not None or audio_noise_mask is not None:
+        if video_noise_mask is None:
+            video_noise_mask = torch.ones_like(video_latent["samples"])
+        if audio_noise_mask is None:
+            audio_noise_mask = torch.ones_like(audio_latent["samples"])
+        output["noise_mask"] = comfy_nested_tensor.NestedTensor((video_noise_mask, audio_noise_mask))
+
+    output["samples"] = comfy_nested_tensor.NestedTensor((video_latent["samples"], audio_latent["samples"]))
+    return output
+
+
+def ltxv_separate_av_latent(
+    av_latent: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Separate a joint AV NestedTensor latent into individual video and audio latents."""
+    video_samples, audio_samples = av_latent["samples"].unbind()
+
+    video_latent: dict[str, Any] = {"samples": video_samples}
+    audio_latent: dict[str, Any] = {"samples": audio_samples}
+
+    if "noise_mask" in av_latent:
+        video_mask, audio_mask = av_latent["noise_mask"].unbind()
+        video_latent["noise_mask"] = video_mask
+        audio_latent["noise_mask"] = audio_mask
+
+    return video_latent, audio_latent
+
+
 def empty_ace_step_15_latent_audio(seconds: float, batch_size: int = 1) -> dict[str, Any]:
     """Create empty ACE Step 1.5 latents used as sampler noise input."""
     torch, model_management = _get_ace_step_15_latent_audio_dependencies()
@@ -165,4 +229,6 @@ __all__ = [
     "ltxv_empty_latent_audio",
     "encode_ace_step_15_audio",
     "empty_ace_step_15_latent_audio",
+    "ltxv_concat_av_latent",
+    "ltxv_separate_av_latent",
 ]
