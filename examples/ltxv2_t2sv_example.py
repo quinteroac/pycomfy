@@ -418,6 +418,11 @@ def main() -> int:
     video_frames = vae_decode_batch_tiled(vae, video_denoised)
     print(f"decoded {len(video_frames)} video frames")
 
+    # Free GPU tensors no longer needed before audio decode
+    import gc
+    del denoised_av, video_denoised
+    gc.collect()
+
     # 18) Decode audio latent to a waveform tensor
     audio_out = ltxv_audio_vae_decode(audio_vae, audio_denoised)
     waveform = audio_out["waveform"]

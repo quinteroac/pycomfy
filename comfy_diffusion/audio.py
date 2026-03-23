@@ -96,11 +96,22 @@ def ltxv_audio_vae_encode(vae: _LtxvAudioVaeEncoder, audio: Any) -> dict[str, An
 
 
 def ltxv_audio_vae_decode(vae: _LtxvAudioVaeDecoder, latent: Any) -> dict[str, Any]:
-    """Decode latent audio with an LTXV audio VAE."""
+    """Decode latent audio with an LTXV audio VAE.
+
+    Decodes on CPU to avoid VRAM contention with the video UNet/VAE.
+    """
+    import torch
+
     latent_tensor = latent["samples"] if isinstance(latent, dict) else latent
     if getattr(latent_tensor, "is_nested", False):
         latent_tensor = latent_tensor.unbind()[-1]
-    audio = vae.decode(latent_tensor).to(latent_tensor.device).detach()
+
+    if hasattr(vae, "to"):
+        vae.to("cpu")
+    latent_tensor = latent_tensor.cpu()
+
+    with torch.no_grad():
+        audio = vae.decode(latent_tensor).detach()
     return {"waveform": audio, "sample_rate": int(vae.output_sample_rate)}
 
 

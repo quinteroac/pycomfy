@@ -235,14 +235,22 @@ def vae_decode_batch_tiled(
         if sample_dims == 4 and hasattr(frame_samples, "unsqueeze"):
             # frame_samples: (1, C, H, W) -> (1, C, 1, H, W)
             frame_samples = frame_samples.unsqueeze(2)
-        import torch
-        with torch.inference_mode():
+        # process_output uses in-place ops that fail on inference tensors produced
+        # by the VAE decoder. Patch the instance attribute temporarily to use
+        # non-in-place equivalents without modifying vendor code.
+        _orig_process_output = getattr(vae, "process_output", None)
+        if _orig_process_output is not None:
+            vae.process_output = lambda image: (image + 1.0).div_(2.0).clamp_(0.0, 1.0)
+        try:
             images = vae.decode_tiled(
                 frame_samples,
                 tile_x=tile_size,
                 tile_y=tile_size,
                 overlap=overlap,
             )
+        finally:
+            if _orig_process_output is not None:
+                vae.process_output = _orig_process_output
 
         image_dims = len(images.shape)
         if image_dims == 5:
