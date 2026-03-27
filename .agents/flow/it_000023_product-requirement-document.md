@@ -1,219 +1,186 @@
-# Requirement: LTX-2 Full Pipeline (T2V / I2V / T2SV)
+# Requirement: WAN Nodes — Full Coverage
 
 ## Context
-`comfy_diffusion` already has partial LTXV support: `ltxv_img_to_video`, `ltxv_conditioning`,
-`ltxv_preprocess`, `ltxv_scheduler`, and the LTXV audio VAE stack. However, the building blocks
-needed for a complete LTX-2 Text-to-Video, Image-to-Video, and Text-to-Sound-to-Video pipeline
-are missing:
 
-- Empty video latent creation (`EmptyLTXVLatentVideo`)
-- Audio/video latent merging and splitting (`LTXVConcatAVLatent`, `LTXVSeparateAVLatent`)
-- Crop-guide conditioning (`LTXVCropGuides`)
-- Latent-space upsampling (`LTXVLatentUpsampler`)
-- Latent upscale model loader (`LatentUpscaleModelLoader`)
-- Manual sigma schedule definition (`ManualSigmas`)
-
-This iteration adds all seven missing public API functions, a CPU-safe unit test suite for
-each, and an end-to-end LTX-2 T2SV (text-to-sound-to-video) example script.
+`comfy-diffusion` already exposes `wan_image_to_video`, `wan_first_last_frame_to_video`, and
+`wan_vace_to_video` (the last one implemented but not exported). The ComfyUI vendor at
+`vendor/ComfyUI/comfy_extras/nodes_wan.py` and `nodes_camera_trajectory.py` ships 15+ additional
+WAN-specific conditioning/latent nodes that are entirely absent from the library. Developers who
+build WAN-based video pipelines (Fun, VACE, Camera, Phantom, Sound, Track, HuMo, Animate, SCAIL,
+InfiniteTalk, WAN 2.2) cannot use them without falling back to raw ComfyUI, which defeats the
+purpose of `comfy-diffusion`.
 
 ## Goals
-- Add `ltxv_empty_latent_video` to `latent.py` — create empty LTXV video latents.
-- Add `ltxv_concat_av_latent` and `ltxv_separate_av_latent` to `audio.py` — merge/split AV latents.
-- Add `ltxv_crop_guides` to `conditioning.py` — apply LTXV keyframe crop guides.
-- Add `ltxv_latent_upsample` to `latent.py` — upsample a video latent with a latent upscale model.
-- Add `ModelManager.load_latent_upscale_model(path)` to `models.py` — load `LATENT_UPSCALE_MODEL`.
-- Add `manual_sigmas` to `sampling.py` — build a sigma tensor from a comma-separated string.
-- Deliver `examples/ltxv2_t2sv_example.py` demonstrating the full LTX-2 T2SV pipeline.
-- Provide a CPU-safe pytest suite covering all seven new functions.
+
+- Expose all missing WAN nodes as importable Python functions following the lazy-import, `str | Path`
+  type-annotation, and `__all__` export conventions already established in `conditioning.py` and
+  `latent.py`.
+- Fix the existing `wan_vace_to_video` export gap.
+- Keep every new function CPU-testable (mock VAE / mock tensors; no GPU required).
 
 ## User Stories
 
-### US-001: `ltxv_empty_latent_video` in `latent.py`
-**As a** Python developer building an LTX-2 pipeline, **I want** to call
-`ltxv_empty_latent_video(width, height, length, batch_size)` **so that** I get an empty
-LTXV video latent with the correct shape for the LTXV model.
+Each story maps one-to-one with a logical group of related nodes.
+
+---
+
+### US-001: Export `wan_vace_to_video`
+
+**As a** developer, **I want** `wan_vace_to_video` to be importable via
+`from comfy_diffusion.conditioning import wan_vace_to_video` **so that** I can use VACE-based
+control conditioning without reaching into private internals.
 
 **Acceptance Criteria:**
-- [ ] `ltxv_empty_latent_video(width: int, height: int, length: int = 97, batch_size: int = 1) -> dict[str, Any]`
-  is implemented in `comfy_diffusion/latent.py`.
-- [ ] Returns a dict `{"samples": tensor}` where tensor shape is
-  `[batch_size, 128, ((length - 1) // 8) + 1, height // 32, width // 32]`, created on
-  `comfy.model_management.intermediate_device()`.
-- [ ] All `comfy.*` and `torch` imports are deferred to the function body (lazy import pattern).
-- [ ] `ltxv_empty_latent_video` is added to `latent.py`'s `__all__`.
-- [ ] Typecheck / lint passes.
+- [ ] `wan_vace_to_video` is added to `__all__` in `conditioning.py`
+- [ ] `from comfy_diffusion.conditioning import wan_vace_to_video` works without error
+- [ ] Typecheck / lint passes
 
-### US-002: `ltxv_concat_av_latent` in `audio.py`
-**As a** Python developer composing an LTX-2 audio-visual pipeline, **I want** to call
-`ltxv_concat_av_latent(video_latent, audio_latent)` **so that** I get a single combined
-latent dict that the sampler can denoise jointly.
+---
+
+### US-002: WAN Fun Control (`wan_fun_control_to_video`, `wan22_fun_control_to_video`)
+
+**As a** developer, **I want** `wan_fun_control_to_video` and `wan22_fun_control_to_video`
+**so that** I can build WAN Fun / WAN 2.2 Fun controllable video pipelines with optional start
+image and control video inputs.
 
 **Acceptance Criteria:**
-- [ ] `ltxv_concat_av_latent(video_latent: dict[str, Any], audio_latent: dict[str, Any]) -> dict[str, Any]`
-  is implemented in `comfy_diffusion/audio.py`.
-- [ ] Output `samples` is a `comfy.nested_tensor.NestedTensor` wrapping `(video_samples, audio_samples)`.
-- [ ] When either input has a `noise_mask`, both masks are filled with ones-tensors of matching
-  shape if absent, and combined into a `NestedTensor` under `"noise_mask"`.
-- [ ] All `comfy.*` and `torch` imports are deferred to the function body.
-- [ ] `ltxv_concat_av_latent` is added to `audio.py`'s `__all__`.
-- [ ] Typecheck / lint passes.
+- [ ] `wan_fun_control_to_video(positive, negative, vae, width, height, length, batch_size, *, clip_vision_output=None, start_image=None, control_video=None)` is implemented in `conditioning.py`, mirroring `WanFunControlToVideo.execute`
+- [ ] `wan22_fun_control_to_video(positive, negative, vae, width, height, length, batch_size, *, ref_image=None, control_video=None)` is implemented, mirroring `Wan22FunControlToVideo.execute`
+- [ ] Both functions use lazy imports via a dedicated helper or reuse the existing `_get_wan_vace_dependencies()`
+- [ ] Both exported in `__all__`
+- [ ] Unit test: CPU mock verifies return type is `tuple[any, any, dict]` (positive, negative, latent)
+- [ ] Typecheck / lint passes
 
-### US-003: `ltxv_separate_av_latent` in `audio.py`
-**As a** Python developer post-processing LTX-2 output, **I want** to call
-`ltxv_separate_av_latent(av_latent)` **so that** I can obtain the video and audio latents
-separately for independent decoding.
+---
 
-**Acceptance Criteria:**
-- [ ] `ltxv_separate_av_latent(av_latent: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]`
-  is implemented in `comfy_diffusion/audio.py`.
-- [ ] Returns `(video_latent, audio_latent)` dicts produced by unbinding the `NestedTensor` samples.
-- [ ] When `"noise_mask"` is present in `av_latent`, it is also unbound and assigned to the
-  respective output dicts.
-- [ ] All `comfy.*` imports deferred; function is import-safe in CPU-only environments.
-- [ ] `ltxv_separate_av_latent` is added to `audio.py`'s `__all__`.
-- [ ] Typecheck / lint passes.
+### US-003: WAN Fun Inpaint (`wan_fun_inpaint_to_video`)
 
-### US-004: `ltxv_crop_guides` in `conditioning.py`
-**As a** Python developer running an LTX-2 pipeline with keyframe guides, **I want** to call
-`ltxv_crop_guides(positive, negative, latent)` **so that** keyframe conditioning entries and
-their corresponding latent frames are cropped out before the main sampling pass.
+**As a** developer, **I want** `wan_fun_inpaint_to_video` **so that** I can run WAN Fun inpaint
+conditioning (first/last frame with optional CLIP vision) through a single function call.
 
 **Acceptance Criteria:**
-- [ ] `ltxv_crop_guides(positive: Any, negative: Any, latent: dict[str, Any]) -> tuple[Any, Any, dict[str, Any]]`
-  is implemented in `comfy_diffusion/conditioning.py`.
-- [ ] Returns `(positive, negative, latent)` where conditioning has `keyframe_idxs` and
-  `guide_attention_entries` cleared and `latent["samples"]` / `latent["noise_mask"]` are
-  trimmed by `num_keyframes` frames along the time axis when keyframes are present.
-- [ ] When `num_keyframes == 0`, the inputs are returned unchanged.
-- [ ] All `comfy.*` imports deferred; function is import-safe in CPU-only environments.
-- [ ] `ltxv_crop_guides` is added to `conditioning.py`'s `__all__`.
-- [ ] Typecheck / lint passes.
+- [ ] `wan_fun_inpaint_to_video(positive, negative, vae, width, height, length, batch_size, *, clip_vision_output=None, start_image=None, end_image=None)` implemented in `conditioning.py`, mirroring `WanFunInpaintToVideo.execute` (thin wrapper over `wan_first_last_frame_to_video`)
+- [ ] Exported in `__all__`
+- [ ] Typecheck / lint passes
 
-### US-005: `ltxv_latent_upsample` in `latent.py`
-**As a** Python developer running a multi-stage LTX-2 pipeline, **I want** to call
-`ltxv_latent_upsample(samples, upscale_model, vae)` **so that** I can upsample a video latent
-by factor 2 in the latent space without decoding to pixel space.
+---
+
+### US-004: WAN Camera (`wan_camera_embedding`, `wan_camera_image_to_video`)
+
+**As a** developer, **I want** `wan_camera_embedding` and `wan_camera_image_to_video` **so that**
+I can generate camera trajectory embeddings and apply them to WAN image-to-video conditioning.
 
 **Acceptance Criteria:**
-- [ ] `ltxv_latent_upsample(samples: dict[str, Any], upscale_model: Any, vae: Any) -> dict[str, Any]`
-  is implemented in `comfy_diffusion/latent.py`.
-- [ ] Implementation wraps `LTXVLatentUpsampler.upsample_latent` from
-  `comfy_extras.nodes_lt_upsampler` (or re-implements the same logic directly with deferred imports).
-- [ ] Memory management follows the same pattern as the node: `free_memory` before moving
-  model to device, `upscale_model.cpu()` in a `finally` block.
-- [ ] `noise_mask` is removed from the returned dict (matching node behaviour).
-- [ ] All `comfy.*` and `torch` imports deferred.
-- [ ] `ltxv_latent_upsample` is added to `latent.py`'s `__all__`.
-- [ ] The private `_load_latent_upscale_model` and `_upsample_latent` helpers in
-  `examples/simple_checkpoint_latent_upscale_example.py` are replaced with calls to the
-  new public API (`manager.load_latent_upscale_model(...)` and `ltxv_latent_upsample(...)`).
-- [ ] Typecheck / lint passes.
+- [ ] `wan_camera_embedding(camera_pose, width, height, length, *, speed=1.0, fx=0.5, fy=0.5, cx=0.5, cy=0.5)` implemented, mirroring `WanCameraEmbedding.execute`; `camera_pose` accepts one of: `"Static"`, `"Pan Up"`, `"Pan Down"`, `"Pan Left"`, `"Pan Right"`, `"Zoom In"`, `"Zoom Out"`, `"Anti Clockwise (ACW)"`, `"ClockWise (CW)"`
+- [ ] Returns `(camera_embedding, width, height, length)` tuple
+- [ ] `wan_camera_image_to_video(positive, negative, vae, width, height, length, batch_size, *, clip_vision_output=None, start_image=None, camera_conditions=None)` implemented, mirroring `WanCameraImageToVideo.execute`
+- [ ] Both use lazy imports; both exported in `__all__`
+- [ ] `wan_camera_embedding` may live in `conditioning.py` (preferred) or a new `camera.py` module — decision recorded in docstring
+- [ ] Unit test: CPU mock verifies `wan_camera_image_to_video` returns `(positive, negative, latent_dict)`
+- [ ] Typecheck / lint passes
 
-### US-006: `ModelManager.load_latent_upscale_model` in `models.py`
-**As a** Python developer, **I want** to call `manager.load_latent_upscale_model(path)` **so
-that** I get a `LATENT_UPSCALE_MODEL` object compatible with `ltxv_latent_upsample`.
+---
+
+### US-005: WAN Phantom Subject (`wan_phantom_subject_to_video`)
+
+**As a** developer, **I want** `wan_phantom_subject_to_video` **so that** I can animate a subject
+image within a WAN video using Phantom subject conditioning.
 
 **Acceptance Criteria:**
-- [ ] `ModelManager.load_latent_upscale_model(path: str | Path) -> Any` is implemented in
-  `comfy_diffusion/models.py`.
-- [ ] When `path` is an absolute path to an existing file, that file is loaded directly.
-- [ ] When `path` is a relative filename, it is resolved against `models_dir/upscale/` first;
-  `FileNotFoundError` is raised with a descriptive message listing the candidate path if
-  the file is not found.
-- [ ] When `path` is an absolute path that does not exist, `FileNotFoundError` is raised immediately.
-- [ ] Loading uses `comfy.utils.load_torch_file(..., safe_load=True, return_metadata=True)` and
-  passes `(sd, metadata)` through the same model-selection logic as `LatentUpscaleModelLoader`
-  in `comfy_extras.nodes_hunyuan` (keys `"blocks.0.block.0.conv.weight"`,
-  `"up.0.block.0.conv1.conv.weight"`, `"post_upsample_res_blocks.0.conv2.bias"`).
-- [ ] `folder_paths.add_model_folder_path("latent_upscale_models", str(self.models_dir / "upscale"), is_default=True)`
-  is called in `ModelManager.__init__` alongside the existing registrations.
-- [ ] All `comfy.*` imports are deferred to the function body (lazy import pattern).
-- [ ] `load_latent_upscale_model` is added to `models.py`'s `__all__`.
-- [ ] Typecheck / lint passes.
+- [ ] `wan_phantom_subject_to_video(positive, negative, vae, width, height, length, batch_size, *, images=None)` implemented, mirroring `WanPhantomSubjectToVideo.execute`
+- [ ] Returns `(positive, negative_text, negative_img_text, latent)` — four-tuple (Phantom produces two distinct negative conditionings)
+- [ ] Exported in `__all__`
+- [ ] Typecheck / lint passes
 
-### US-007: `manual_sigmas` in `sampling.py`
-**As a** Python developer defining a custom noise schedule, **I want** to call
-`manual_sigmas(sigmas_string)` **so that** I get a float tensor of sigma values I can pass
-directly to `SamplerCustomAdvanced`.
+---
+
+### US-006: WAN Track to Video (`wan_track_to_video`)
+
+**As a** developer, **I want** `wan_track_to_video` **so that** I can drive WAN video generation
+with point-track / trajectory conditioning (motion tracking).
 
 **Acceptance Criteria:**
-- [ ] `manual_sigmas(sigmas: str) -> Any` is implemented in `comfy_diffusion/sampling.py`.
-- [ ] Parses all numeric tokens (including negative/decimal values) from `sigmas` using the
-  same `re.findall(r"[-+]?(?:\d*\.*\d+)", ...)` pattern as `ManualSigmas.execute`.
-- [ ] Returns a `torch.FloatTensor` of the parsed values.
-- [ ] All `torch` imports are deferred to the function body.
-- [ ] `manual_sigmas` is added to `sampling.py`'s `__all__`.
-- [ ] Typecheck / lint passes.
+- [ ] `wan_track_to_video(positive, negative, vae, tracks, width, height, length, batch_size, *, temperature=220.0, topk=2, start_image=None, clip_vision_output=None)` implemented, mirroring `WanTrackToVideo.execute`; `tracks` accepts a JSON string (list of `{x, y}` points per track)
+- [ ] When `tracks` is empty / invalid JSON, falls back to `wan_image_to_video` behavior (same as the ComfyUI node)
+- [ ] Helper functions `parse_json_tracks`, `process_tracks`, `pad_pts`, `patch_motion` ported into `conditioning.py` as module-private helpers; not in `__all__`
+- [ ] Exported in `__all__`
+- [ ] Unit test: empty tracks string → returns valid `(positive, negative, latent_dict)`
+- [ ] Typecheck / lint passes
 
-### US-008: CPU-safe unit tests
-**As a** developer merging this iteration, **I want** a pytest test file covering all 7 new
-functions **so that** CI can verify correctness without a GPU.
+---
 
-**Acceptance Criteria:**
-- [ ] `tests/test_ltxv2.py` (or equivalent) contains at least one test per function:
-  `ltxv_empty_latent_video`, `ltxv_concat_av_latent`, `ltxv_separate_av_latent`,
-  `ltxv_crop_guides`, `ltxv_latent_upsample`, `ModelManager.load_latent_upscale_model`,
-  `manual_sigmas`.
-- [ ] All tests run with `uv run pytest` on CPU (no GPU required); ComfyUI internals are
-  stubbed/mocked where needed so no model weights are loaded.
-- [ ] Tests do not import `torch`, `comfy.*`, or `comfy_diffusion.*` at module top level
-  (deferred inside test functions or fixtures) — consistent with the lazy import pattern.
-- [ ] All new tests pass; existing test suite continues to pass.
-- [ ] Typecheck / lint passes.
+### US-007: WAN Sound nodes (`wan_sound_image_to_video`, `wan_sound_image_to_video_extend`, `wan_humo_image_to_video`)
 
-### US-009: `examples/ltxv2_t2sv_example.py`
-**As a** developer wanting to run an end-to-end LTX-2 Text-to-Sound-to-Video pipeline, **I
-want** an example script demonstrating all new functions wired together **so that** I can
-understand the canonical usage and run a real inference pass.
+**As a** developer, **I want** WAN audio-driven conditioning functions **so that** I can build
+sound-to-video and talking-head (HuMo) pipelines.
 
 **Acceptance Criteria:**
-- [ ] `examples/ltxv2_t2sv_example.py` is created following the same structure and style as
-  existing examples (argparse CLI, `PYCOMFY_*` env-var defaults, `check_runtime()` first).
-- [ ] The script exercises the following pipeline steps in order:
-  1. `check_runtime()`
-  2. `ModelManager` + `load_checkpoint` (LTXV UNet/CLIP/VAE)
-  3. `ModelManager.load_latent_upscale_model(...)` for the LTXV latent upscaler
-  4. `ltxv_empty_latent_audio(...)` + `ltxv_audio_vae_encode(...)` (audio latent creation)
-  5. `ltxv_empty_latent_video(...)` (video latent creation)
-  6. `ltxv_concat_av_latent(...)` (merge AV latents)
-  7. Prompt encoding + `ltxv_conditioning(...)` + optional `ltxv_crop_guides(...)`
-  8. `manual_sigmas(...)` or `ltxv_scheduler(...)` + `sample_custom_advanced(...)`
-  9. `ltxv_separate_av_latent(...)` (split back)
-  10. `ltxv_latent_upsample(...)` (optional upscale pass)
-  11. `vae_decode_batch(...)` + save frames
-- [ ] All CLI args include `--models-dir` / `PYCOMFY_MODELS_DIR`, `--checkpoint` /
-  `PYCOMFY_CHECKPOINT`, `--latent-upscale-checkpoint` / `PYCOMFY_LATENT_UPSCALE_CHECKPOINT`,
-  `--prompt`, `--output-dir`.
-- [ ] Script is written entirely in English (comments, docstrings, error messages).
-- [ ] Typecheck / lint passes.
+- [ ] `wan_sound_image_to_video(positive, negative, vae, width, height, length, batch_size, *, audio_encoder_output=None, ref_image=None, control_video=None, ref_motion=None)` implemented, mirroring `WanSoundImageToVideo.execute`
+- [ ] `wan_sound_image_to_video_extend(positive, negative, vae, length, video_latent, *, audio_encoder_output=None, ref_image=None, control_video=None)` implemented, mirroring `WanSoundImageToVideoExtend.execute`
+- [ ] `wan_humo_image_to_video(positive, negative, vae, width, height, length, batch_size, *, audio_encoder_output=None, ref_image=None)` implemented, mirroring `WanHuMoImageToVideo.execute`
+- [ ] Internal helpers `wan_sound_to_video`, `linear_interpolation`, `get_audio_embed_bucket_fps`, `get_sample_indices`, `get_audio_emb_window` ported as module-private; not in `__all__`
+- [ ] All three public functions exported in `__all__`
+- [ ] Typecheck / lint passes
+
+---
+
+### US-008: WAN Animate / InfiniteTalk / SCAIL (`wan_animate_to_video`, `wan_infinite_talk_to_video`, `wan_scail_to_video`)
+
+**As a** developer, **I want** the remaining WAN generative-conditioning functions **so that**
+I have full coverage of all WAN nodes in `nodes_wan.py`.
+
+**Acceptance Criteria:**
+- [ ] `wan_animate_to_video(...)` implemented, mirroring `WanAnimateToVideo.execute`; signature matches node inputs exactly
+- [ ] `wan_infinite_talk_to_video(...)` implemented, mirroring `WanInfiniteTalkToVideo.execute`
+- [ ] `wan_scail_to_video(...)` implemented, mirroring `WanSCAILToVideo.execute`
+- [ ] All three exported in `__all__`
+- [ ] Typecheck / lint passes
+
+---
+
+### US-009: WAN 2.2 Image-to-Video Latent (`wan22_image_to_video_latent`)
+
+**As a** developer, **I want** `wan22_image_to_video_latent` **so that** I can build WAN 2.2
+image-to-video latent tensors (distinct from WAN 2.1 layout).
+
+**Acceptance Criteria:**
+- [ ] `wan22_image_to_video_latent(positive, negative, vae, width, height, length, batch_size, *, start_image=None, end_image=None, clip_vision_output=None)` implemented, mirroring `Wan22ImageToVideoLatent.execute`
+- [ ] Exported in `__all__`
+- [ ] Typecheck / lint passes
+
+---
+
+### US-010: Trim Video Latent (`trim_video_latent`)
+
+**As a** developer, **I want** `trim_video_latent(samples, trim_amount)` in `latent.py`
+**so that** I can trim the leading frames added by VACE reference image padding.
+
+**Acceptance Criteria:**
+- [ ] `trim_video_latent(samples: dict, trim_amount: int) -> dict` implemented in `latent.py`, mirroring `TrimVideoLatent.execute`
+- [ ] Exported in `latent.__all__`
+- [ ] Unit test: given `{"samples": torch.zeros([1,16,5,8,8])}` and `trim_amount=2`, output tensor has shape `[1,16,3,8,8]`
+- [ ] Typecheck / lint passes
+
+---
 
 ## Functional Requirements
-- **FR-1:** `ltxv_empty_latent_video(width, height, length, batch_size) -> dict` — creates LTXV
-  video latent with shape `[B, 128, ((L-1)//8)+1, H//32, W//32]`.
-- **FR-2:** `ltxv_concat_av_latent(video_latent, audio_latent) -> dict` — wraps video + audio
-  samples in a `NestedTensor`; handles optional noise masks.
-- **FR-3:** `ltxv_separate_av_latent(av_latent) -> tuple[dict, dict]` — unbinds `NestedTensor`
-  samples and noise masks back into separate video/audio latent dicts.
-- **FR-4:** `ltxv_crop_guides(positive, negative, latent) -> tuple` — strips keyframe metadata
-  from conditioning and trims latent time dimension by `num_keyframes`; no-op when keyframes = 0.
-- **FR-5:** `ltxv_latent_upsample(samples, upscale_model, vae) -> dict` — runs the latent
-  through `upscale_model`, managing device placement and VAE channel statistics normalisation.
-- **FR-6:** `ModelManager.load_latent_upscale_model(path) -> Any` — loads a `LATENT_UPSCALE_MODEL`
-  via `comfy.utils.load_torch_file` + model-type detection logic matching `LatentUpscaleModelLoader`.
-- **FR-7:** `manual_sigmas(sigmas: str) -> torch.FloatTensor` — parses comma/space-separated
-  float values into a sigma tensor.
-- **FR-8:** `folder_paths` registration: `"latent_upscale_models"` key pointing to
-  `models_dir/upscale/` added in `ModelManager.__init__`.
-- **FR-9:** All seven new public functions follow the lazy import pattern (no `comfy.*` or
-  `torch` at module top level).
+
+- FR-1: All new functions follow the lazy-import pattern — no `torch`, `comfy.*`, or `numpy` at module top level; imports deferred inside function bodies or private helpers.
+- FR-2: Type annotations use `str | Path` for path arguments (none expected here); all other args typed with standard Python types or `Any` for opaque ComfyUI internal types.
+- FR-3: All public functions are added to `__all__` in their respective module (`conditioning.py` or `latent.py`).
+- FR-4: Internal helpers ported from `nodes_wan.py` (`wan_sound_to_video`, `patch_motion`, `parse_json_tracks`, etc.) are not exported — they remain module-private.
+- FR-5: `wan_camera_embedding` depends on camera math helpers from `nodes_camera_trajectory.py` (`get_camera_motion`, `process_pose_params`, `CAMERA_DICT`); these must be accessible at call time via lazy import of the vendor module.
+- FR-6: No new top-level dependencies introduced — `numpy` (already a transitive dep) is acceptable for `wan_track_to_video` and `wan_camera_embedding`.
+- FR-7: All tests must pass on CPU-only CI (`uv run pytest`).
 
 ## Non-Goals (Out of Scope)
-- `LTXVAddGuide` / `LTXVImgToVideoInplace` — not in the roadmap item.
-- `ModelSamplingLTXV` patch — already covered or handled by existing `model_sampling_flux`.
-- Tiled latent upsampling.
-- Updating the `comfy-diffusion-reference` skill (deferred to a documentation iteration).
-- Any change to `vae.py`, `image.py`, `mask.py`, or `controlnet.py`.
-- Publishing / releasing a new package version.
+
+- Re-exporting new symbols at the `comfy_diffusion` package level (`__init__.py`).
+- Adding high-level pipeline wrappers that compose multiple WAN functions.
+- Porting WAN nodes from discarded modules (`nodes_train.py`, `nodes_dataset.py`, etc.).
+- Adding new optional extras to `pyproject.toml`.
+- Updating `ROADMAP.md` or bumping the package version (deferred to approve-prototype step).
 
 ## Open Questions
+
 - None
