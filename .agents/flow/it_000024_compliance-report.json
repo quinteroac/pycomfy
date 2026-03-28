@@ -1,0 +1,100 @@
+{
+  "iteration": "000024",
+  "executive_summary": "The implementation for iteration 000024 is largely compliant with the PRD. All 42 automated tests pass on CPU-only CI with no network calls. The three entry dataclasses, `download_models()`, the `ltx2_t2v.py` reference pipeline, SHA256 integrity verification, idempotency, and progress/quiet handling are all correctly implemented. The one notable gap is FR-5: `huggingface_hub`, `civitai`, and `tqdm` are not declared as optional dependencies in their own extras group in `pyproject.toml` — `huggingface_hub` and `civitai` are absent entirely, while `tqdm` only appears under the unrelated `comfyui` extra. Additionally, the CivitAI download backend bypasses the `civitai` library (US-003-AC03) in favour of direct `urllib.request` calls to the CivitAI REST API, which is functionally superior but diverges from the stated acceptance criterion.",
+
+  "verification_by_fr": [
+    {
+      "frId": "FR-1",
+      "assessment": "comply",
+      "notes": "downloader.py exposes only HFModelEntry, CivitAIModelEntry, URLModelEntry, ModelEntry, and download_models(). No CLI entrypoints, no module-level side effects."
+    },
+    {
+      "frId": "FR-2",
+      "assessment": "comply",
+      "notes": "ltx2_t2v.py owns its manifest; pipelines/__init__.py exports nothing (no __all__, no re-exports)."
+    },
+    {
+      "frId": "FR-3",
+      "assessment": "partially_comply",
+      "notes": "huggingface_hub is lazily imported inside _download_hf_entry; tqdm is lazily imported inside _stream_to_file. The civitai library is never imported at all — the CivitAI backend uses urllib.request directly. The lazy-import contract is satisfied for the two libraries actually used, but the civitai lib is absent from the codebase."
+    },
+    {
+      "frId": "FR-4",
+      "assessment": "comply",
+      "notes": "_resolve_dest correctly prepends models_dir for relative paths and raises RuntimeError when models_dir is None with a relative dest."
+    },
+    {
+      "frId": "FR-5",
+      "assessment": "does_not_comply",
+      "notes": "huggingface_hub is not declared in any optional-dependencies group. civitai is not declared (nor used). tqdm appears only under the comfyui extra — there is no dedicated downloader/hub extra. Users must install huggingface_hub manually, making it undiscoverable via pip extras."
+    },
+    {
+      "frId": "FR-6",
+      "assessment": "comply",
+      "notes": "hashlib.sha256 from stdlib is used in _compute_sha256. No external hashing library."
+    },
+    {
+      "frId": "FR-7",
+      "assessment": "comply",
+      "notes": "URLModelEntry uses urllib.request.urlopen exclusively. The CivitAI backend also uses urllib.request — no requests or httpx anywhere in downloader.py."
+    },
+    {
+      "frId": "FR-8",
+      "assessment": "comply",
+      "notes": "All public symbols (HFModelEntry, CivitAIModelEntry, URLModelEntry, ModelEntry, download_models) have docstrings and are listed in __all__."
+    },
+    {
+      "frId": "FR-9",
+      "assessment": "comply",
+      "notes": "42/42 tests pass via `uv run pytest`. All urllib.request.urlopen and huggingface_hub calls are patched — zero real network calls."
+    },
+    {
+      "frId": "FR-10",
+      "assessment": "comply",
+      "notes": "HF_TOKEN and CIVITAI_API_KEY are read exclusively from os.environ. Tokens are never logged, printed, or embedded in paths."
+    }
+  ],
+
+  "verification_by_us": [
+    {
+      "usId": "US-001",
+      "assessment": "comply",
+      "notes": "All three dataclasses defined with correct fields and defaults. dest accepts str | Path. sha256 defaults to None. Import works. Code is clean."
+    },
+    {
+      "usId": "US-002",
+      "assessment": "comply",
+      "notes": "Signature matches AC01. Dispatches by entry type (AC02). Gated-model RuntimeError raised when HF_TOKEN absent and auth keywords detected (AC03). CIVITAI_API_KEY missing raises RuntimeError immediately (AC04). Tokens not logged/printed/in-paths (AC05). Idempotent skipping (AC06). Parents created (AC07). Failure RuntimeError (AC08). Import works (AC09)."
+    },
+    {
+      "usId": "US-003",
+      "assessment": "partially_comply",
+      "notes": "AC01 (HF progress via huggingface_hub.disable/enable_progress_bars) ✅. AC02 (tqdm for URL downloads) ✅. AC03 — CivitAI downloads do NOT use the civitai library; they use _stream_to_file with tqdm instead. Progress is shown but not via the civitai library as specified. AC04 (quiet=True suppresses all progress) ✅."
+    },
+    {
+      "usId": "US-004",
+      "assessment": "comply",
+      "notes": "All five AC met: hash computed post-download (AC01), hash checked on existing files (AC02), fresh mismatch raises ValueError and deletes file (AC03), existing mismatch deletes and re-downloads (AC04), None skips silently (AC05)."
+    },
+    {
+      "usId": "US-005",
+      "assessment": "comply",
+      "notes": "pipelines/__init__.py created (AC01). ltx2_t2v.py has manifest(), run(), module-level docstring explaining the pattern (AC02, AC05). Import works (AC03). Idempotency with existing files works (AC04)."
+    },
+    {
+      "usId": "US-006",
+      "assessment": "comply",
+      "notes": "test_downloader.py exists with 42 tests covering all required cases. All pass via `uv run pytest` on CPU-only with no network calls (AC01, AC02)."
+    }
+  ],
+
+  "minor_observations": [
+    "FR-5 gap: huggingface_hub is a runtime requirement for HFModelEntry downloads but is not declared as an optional extra. Recommended: add a [downloader] extra with huggingface_hub>=0.20 and tqdm>=4.67.",
+    "civitai library not used: The implementation calls the CivitAI REST API via urllib.request directly. This is functionally superior (no extra dep, better progress via tqdm) but diverges from US-003-AC03 and FR-3 which mention the civitai library. The PRD should be updated or the observation accepted as a deliberate design decision.",
+    "Gated-model detection in _download_hf_entry uses heuristic keyword matching ('gated', '401', '403', etc.) on the exception message. This may produce false positives or miss new error patterns from huggingface_hub. A more robust approach would catch specific exception types from the library.",
+    "HFModelEntry downloads copy the cached file with shutil.copy2 rather than symlinking. For large models this doubles disk usage. Consider using os.link or a symlink as an optimisation in a future iteration.",
+    "ltx2_t2v.py imports check_runtime() at call time but does not act on its return value — it discards the error dict. Consider checking the return value and raising if the runtime is not initialised."
+  ],
+
+  "conclusions_and_recommendations": "The iteration 000024 implementation is functionally solid and production-quality in its core areas. All tests pass, the public API is clean, and the SHA256/idempotency/progress/quiet contract is fully satisfied. The two items requiring action before closing the iteration are: (1) FR-5 — add a `[downloader]` optional-dependencies group in pyproject.toml declaring huggingface_hub and tqdm so users can install them with `pip install comfy-diffusion[downloader]`; and (2) update US-003-AC03 in the PRD (or accept as deliberate) to reflect that CivitAI progress is provided by the shared tqdm-based stream helper rather than the civitai library. The remaining minor observations (gated-model heuristic, copy2 vs link, check_runtime return value) are low priority and can be addressed in a future refactor pass or next iteration."
+}

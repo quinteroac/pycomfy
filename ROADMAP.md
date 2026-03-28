@@ -1,143 +1,136 @@
 # comfy-diffusion Roadmap
 
-## Iteration Plan
+## Intention
 
-| # | Module | Goal | Status |
-|---|--------|-------|--------|
-| 01 | `_runtime` / `check_runtime()` | Package foundation + ComfyUI vendoring | ✅ Done |
-| 02 | `models` | Checkpoint loading (`ModelManager`, `CheckpointResult`) | ✅ Done |
-| 03 | `conditioning` | Prompt encoding via `encode_prompt` | ✅ Done |
-| 04 | `sampling` | KSampler wrapper via `sample()` | ✅ Done |
-| 05 | `vae` | VAE decode latent→PIL via `vae_decode()` | ✅ Done |
-| 06 | `lora` | LoRA loading and stacking via `apply_lora()` | ✅ Done |
-| 07 | `vae` + `models` | VAE encode image→latent (`vae_encode`) + standalone loaders (`load_vae`, `load_clip`, `load_unet`) on `ModelManager` | ✅ Done |
-| 08 | `vae` — tiled | `vae_decode_tiled`, `vae_encode_tiled` for large images without OOM | ✅ Done |
-| 09 | `vae` — batch/video | `vae_decode_batch`, `vae_encode_batch` for video frame sequences (WAN, LTX2) | ✅ Done |
-| 10 | `sampling` — advanced | `KSamplerAdvanced`, `SamplerCustomAdvanced`, guiders, schedulers, sigma manipulation | ✅ Done |
-| 11 | `audio` | Stable Audio, WAN sound-to-video, LTXV audio, ACE Step text-to-audio | ✅ Done |
-| — | **`v0.1.1-preview`** | **Preview release — ACE Step Studio minimum viable stack. Publish after it_11.** | ✅ Done |
-| 12 | `conditioning` — advanced | `ConditioningCombine`, `ConditioningSetMask`, `ConditioningSetTimestepRange`, Flux, WAN, LTXV | ✅ Done |
-| 13 | `controlnet` | `ControlNetLoader`, `ControlNetApplyAdvanced`, `SetUnionControlNetType` | ✅ Done |
-| 14 | `latent` — utilities | `EmptyLatentImage`, `LatentUpscale`, `LatentCrop`, `LatentComposite`, batch ops, video ops | ✅ Done |
-| 15 | `image` — utilities | `LoadImage`, `ImagePadForOutpaint`, `ImageUpscaleWithModel`, video I/O, WAN/LTXV img2vid | ✅ Done |
-| 16 | `mask` | `LoadImageMask`, `ImageToMask`, `MaskToImage`, `GrowMask`, `FeatherMask`, inpaint masks | ✅ Done |
-| 17 | `model` — patches | `ModelSamplingFlux`, `ModelSamplingSD3`, `ModelSamplingAuraFlow`, video CFG guidance | ✅ Done |
-| 18 | packaging | pip-installable, type stubs, DX polish, extras (`[video]`, `[audio]`, `[all]`) | ✅ Done |
-| 19 | Implement dual clip loader to accept more than one clip. | ✅ Done |
-| 20 | `textgen` | Expose LLM/VLM text generation wrappers from ComfyUI (`TextGenerate`, `TextGenerateLTX2Prompt`) as importable Python functions (e.g. `generate_text()`) | ✅ Done |
-| 21 | `runtime` — ComfyUI auto-bootstrap | `check_runtime()` detects missing `vendor/ComfyUI` and downloads it automatically so `pip install comfy-diffusion` works without git submodule init | ✅ Done  |
-| 22 | `ltxv2` — LTX-2 full pipeline | Complete LTX-2 T2V + I2V support: `ltxv_empty_latent_video`, `ltxv_concat_av_latent`, `ltxv_separate_av_latent`, `ltxv_crop_guides`, `ltxv_latent_upsample`, `load_latent_upscale_model`, `manual_sigmas` | ⬜ |
+Build production-ready pipelines powered by the workflows catalogued in `comfyui_official_workflows/`.
 
----
+Each pipeline wraps one or more official ComfyUI workflows into a clean Python interface, enabling programmatic execution, parameterization, and integration with the rest of the comfy-diffusion project.
 
-## Candidates
+## Pipeline Development Priority
 
-- [ ] [candidate] **`custom-node-importer` skill** — agent skill para onboarding automatizado de custom nodes de ComfyUI: discovery → classification → PRD → implementation. Effort: L.
+Pipelines will be developed in the following order. API-based and LLM workflows are out of scope.
 
----
+### 1. Video
 
-## Node Inventory
+Covers all local video generation and editing workflows under `comfyui_official_workflows/video/`:
 
-### Already covered (it_01–07)
+- **LTX** — `ltx1/`, `ltx2/`, `ltx3/`
+- **WAN** — `wan2.1/`, `wan2.2/`, `fun/`, `vace/`, `ati/`, `move/`, `infinitetalk/`, `scail/`
+- **HunyuanVideo** — `hunyuan/`
+- **Others** — `others/`, `utility/`
 
-| comfy-diffusion API | ComfyUI node |
-|-------------|-------------|
-| `vae_decode()` | VAEDecode |
-| `vae_encode()` | VAEEncode |
-| `sample()` | KSampler |
-| `encode_prompt()` | CLIPTextEncode |
-| `ModelManager.load_checkpoint()` | CheckpointLoaderSimple |
-| `ModelManager.load_unet()` | UNETLoader |
-| `ModelManager.load_vae()` | VAE loader (comfy.sd) |
-| `ModelManager.load_clip()` | CLIP loader (comfy.sd) |
-| `apply_lora()` | LoraLoader / LoraLoaderModelOnly |
+### 2. Image
+
+Covers all local image generation and editing workflows under `comfyui_official_workflows/image/`:
+
+- **Generation** — `flux/`, `flux2/`, `flux_klein/`, `hidream/`, `qwen/`, `sdxl/`, `chroma/`, `others/`
+- **Editing** — `flux/`, `flux_kontext/`, `flux2/`, `flux_klein/`, `hidream/`, `qwen/`, `others/`
+- **ControlNet** — `flux/`, `qwen/`, `sd3/`, `z_image/`
+- **Reference & Utility**
+
+### 3. Audio
+
+Covers all local audio generation workflows under `comfyui_official_workflows/audio/`:
+
+- **ACE Step** — `v1.5/`
+- **Chatterbox**
+- **Stable Audio**
+- **Utility**
+
+### 4. 3D
+
+Covers all local 3D generation workflows under `comfyui_official_workflows/3d/`.
+
+## Development Phases
+
+### Phase 1 — Model Downloader Module
+
+Implement an automatic model download module (`comfy_diffusion/downloader.py`) that resolves and fetches all models required by a given pipeline before execution. This removes the manual step of pre-downloading checkpoints, VAEs, LoRAs, and other weights, and is a prerequisite for reliable pipeline execution across environments.
 
 ---
 
-### Roadmap nodes
+### Phase 2 — Expose LTX Core Nodes
 
-**Latent**
-`EmptyLatentImage`, `SetLatentNoiseMask`, `LatentUpscale`, `LatentUpscaleBy`, `LatentCrop`, `LatentFromBatch`, `RepeatLatentBatch`, `LatentConcat`, `LatentCutToBatch`, `ReplaceVideoLatentFrames`, `LatentComposite`, `LatentCompositeMasked`, `VAEEncodeForInpaint`, `InpaintModelConditioning`, `VAEDecodeTiled`, `VAEEncodeTiled`, `EmptyLTXVLatentVideo`, `LTXVLatentUpsampler`, `LatentUpscaleModelLoader`
+Expose the three nodes that block all ltx2 and ltx3 pipelines.
 
-**Image**
-`LoadImage`, `ImagePadForOutpaint`, `ImageFromBatch`, `RepeatImageBatch`, `ImageCompositeMasked`, `ImageUpscaleWithModel`, `GetVideoComponents`, `CreateVideo`, `SaveWEBM`, `SaveVideo`, `LoadVideo`, `LTXVImgToVideo`, `LTXVPreprocess`, `WanImageToVideo`, `WanFirstLastFrameToVideo`
-
-**Mask**
-`LoadImageMask`, `ImageToMask`, `MaskToImage`, `SolidMask`, `InvertMask`, `GrowMask`, `FeatherMask`, `CropMask`
-
-**Conditioning**
-`ConditioningCombine`, `ConditioningSetMask`, `ConditioningSetTimestepRange`, `CLIPVisionEncode`, `StyleModelApply`, `CLIPTextEncodeFlux`, `FluxGuidance`, `WanImageToVideo`, `WanFirstLastFrameToVideo`, `WanFunInpaintToVideo`, `LTXVImgToVideo`, `LTXVConditioning`, `LTXVCropGuides`
-
-**ControlNet**
-`ControlNetLoader`, `DiffControlNetLoader`, `ControlNetApplyAdvanced`, `SetUnionControlNetType`
-
-**Sampling**
-`KSamplerAdvanced`, `SamplerCustomAdvanced`, `BasicGuider`, `CFGGuider`, `RandomNoise`, `DisableNoise`, `BasicScheduler`, `KarrasScheduler`, `AlignYourStepsScheduler`, `Flux2Scheduler`, `LTXVScheduler`, `SplitSigmas`, `SplitSigmasDenoise`, `KSamplerSelect`, `SamplerDPMPP_3M_SDE`, `SamplerDPMPP_2M_SDE`, `SamplerEulerAncestral`, `VideoLinearCFGGuidance`, `VideoTriangleCFGGuidance`, `ManualSigmas`
-
-**Model**
-`ModelSamplingFlux`, `ModelSamplingSD3`, `ModelSamplingAuraFlow`, `VideoLinearCFGGuidance`, `VideoTriangleCFGGuidance`
-
-**Audio**
-`VAEEncodeAudio`, `VAEDecodeAudio`, `VAEDecodeAudioTiled`, `EmptyLatentAudio`, `ConditioningStableAudio`, `AudioEncoderLoader`, `AudioEncoderEncode`, `LTXVAudioVAELoader`, `LTXVAudioVAEEncode`, `LTXVAudioVAEDecode`, `LTXVEmptyLatentAudio`, `LTXAVTextEncoderLoader`, `TextEncodeAceStepAudio`, `TextEncodeAceStepAudio1.5`, `EmptyAceStepLatentAudio`, `EmptyAceStep1.5LatentAudio`, `LTXVConcatAVLatent`, `LTXVSeparateAVLatent`
-
-**Textgen (LLM/VLM)**
-`TextGenerate`, `TextGenerateLTX2Prompt`
+| Node | Scope |
+|---|---|
+| `LTXAVTextEncoderLoader` | All ltx2 and ltx3 workflows |
+| `LTXVAudioVAELoader` | All ltx2 and ltx3 workflows |
+| `LTXVImgToVideoInplace` | i2v, lora, canny, pose, all ltx3 |
 
 ---
 
-### Nice-to-have nodes
+### Phase 3 — LTX2 / LTX3 Base Pipelines
 
-**Latent**
-`SaveLatent`, `LoadLatent`, `LatentFlip`, `LatentRotate`, `LatentBatchSeedBehavior`, `LatentCut`, `LatentBlend`, `LatentInterpolate`, `LatentAdd`, `LatentSubtract`, `LatentMultiply`, `SVD_img2vid_Conditioning`
-
-**Image**
-`EmptyImage`, `ImageScaleToTotalPixels`, `ImageFlip`, `ImageRotate`, `ImageStitch`, `SplitImageToTileList`, `ImageMergeTileList`, `BatchImagesNode`, `ImageColorToMask`, `SaveAnimatedWEBP`, `SaveAnimatedPNG`, `WanVaceToVideo`, `WanCameraImageToVideo`, `WanPhantomSubjectToVideo`
-
-**Mask**
-`ImageColorToMask`, `ThresholdMask`, `MaskComposite`
-
-**Conditioning**
-`ConditioningAverage`, `ConditioningConcat`, `ConditioningSetArea`, `ConditioningSetAreaPercentage`, `ConditioningSetAreaStrength`, `ConditioningZeroOut`, `ControlNetInpaintingAliMamaApply`, `unCLIPConditioning`, `CLIPTextEncodeSD3`, `CLIPTextEncodeHunyuanDiT`, `WanVaceToVideo`, `WanCameraImageToVideo`, `WanPhantomSubjectToVideo`, `LTXVAddGuide`
-
-**Sampling**
-`SamplerCustom`, `DualCFGGuider`, `AddNoise`, `SDTurboScheduler`, `ExponentialScheduler`, `PolyexponentialScheduler`, `LaplaceScheduler`, `BetaSamplingScheduler`, `GITSScheduler`, `OptimalStepsScheduler`, `FlipSigmas`, `SetFirstSigma`, `SamplingPercentToSigma`, `SamplerDPMPP_SDE`, `SamplerDPMPP_2S_Ancestral`, `SamplerLMS`, `SamplerDPMAdaptative`, `SamplerER_SDE`, `SamplerSASolver`, `SamplerSEEDS2`, `SamplerEulerAncestralCFGPP`, `APG`, `TCFG`, `NAGuidance`
-
-**Model**
-`unCLIPCheckpointLoader`, `ImageOnlyCheckpointLoader`, `ModelSamplingDiscrete`, `ModelSamplingContinuousEDM`, `ModelSamplingContinuousV`, `RescaleCFG`, `ModelComputeDtype`, `ModelMergeSimple`, `ModelMergeBlocks`, `ModelMergeSDXL`, `ModelMergeFlux1`, `ModelMergeLTXV`
-
-**Audio**
-`EmptyAudio`, `ReferenceAudio`
+- `ltx2/video_ltx2_t2v` — Text to Video (LTX 2.0)
+- `ltx2/video_ltx2_t2v_distilled` — Text to Video distilled
+- `ltx2/video_ltx2_i2v` — Image to Video
+- `ltx2/video_ltx2_i2v_distilled` — Image to Video distilled
+- `ltx2/video_ltx2_i2v_lora` — Image to Video with LoRA
+- `ltx3/video_ltx2_3_t2v` — Text to Video (LTX 2.3)
+- `ltx3/video_ltx2_3_i2v` — Image to Video (LTX 2.3)
+- `ltx3/video_ltx2_3_flf2v` — First-Last-Frame to Video
 
 ---
 
-### Discarded nodes
+### Phase 4 — Expose Secondary Nodes
 
-**Replaced by Python libraries (PIL, numpy, torch, cv2, torchaudio)**
-- Image transforms: `ImageScale`, `ImageScaleBy`, `ImageScaleToMaxDimension`, `ImageCropV2`, `ResizeAndPadImage`, `ResizeImageMaskNode`, `GetImageSize`, `ImageFlip`, `ImageRotate`, `ImageBlend`, `ImageBlur`, `ImageSharpen`, `ImageInvert`, `ImageAddNoise`
-- Mask ops: `InvertMask`, `SolidMask`, `CropMask`, `ThresholdMask`, `MaskComposite`
-- Audio I/O: `LoadAudio`, `SaveAudio`, `SaveAudioMP3`, `SaveAudioOpus`, `PreviewAudio`, `RecordAudio`, `TrimAudioDuration`, `SplitAudioChannels`, `JoinAudioChannels`, `AudioConcat`, `AudioMerge`, `AudioAdjustVolume`, `AudioEqualizer3Band`
-- Video I/O: handled by `opencv-python` / `imageio`
+**General utility:**
 
-**UI-specific**
-`SaveImage`, `PreviewImage`, `LoadImageOutput`, `WebcamCapture`, `MaskPreview`, `PreviewAudio`, `RecordAudio`
+| Node | Workflows |
+|---|---|
+| `ResizeImageMaskNode` | i2v, canny, depth, pose, ltx3 |
+| `ResizeImagesByLongerEdge` | i2v, lora, ltx3 |
+| `EmptyImage` | t2v, i2v, lora (ltx2) |
+| `ComfyMathExpression` | all ltx3 |
+| `GetVideoComponents` | canny, depth, pose |
 
-**Deprecated**
-`CheckpointLoader`, `DiffusersLoader`, `ControlNetApply`, `ControlNetApplySD3`, `LatentBatch`, `ImageBatch`, `ImageCrop`
+**ControlNet:**
 
-**Out of scope / niche**
-`GLIGENTextBoxApply`, `unCLIPConditioning`, `SVD_img2vid_Conditioning`, `PerpNeg`, `PerpNegGuider`, `SamplerLCMUpscale`, `VPScheduler`, `LatentApplyOperation`, `LatentApplyOperationCFG`, `LatentOperationTonemapReinhard`, `LatentOperationSharpen`, `CLIPTextEncodePixArtAlpha`, `CLIPTextEncodeLumina2`, `CLIPTextEncodeHiDream`, `CLIPTextEncodeKandinsky5`, `StableCascade_StageB_Conditioning`, `LotusConditioning`, `PhotoMakerEncode`, `InstructPixToPixConditioning`, `TextEncodeQwenImageEdit`, `TextEncodeZImageOmni`
+| Node | Notes |
+|---|---|
+| `LTXVAddGuide` | Guide-frame injection for controlnet conditioning |
+| `Canny` | Edge detection preprocessor |
+| `DWPreprocessor` | Pose estimation preprocessor |
+| `LotusConditioning` | Depth map conditioning (Lotus model) |
+| `SetFirstSigma` | Depth workflow sampler adjustment |
+| `ImageInvert` | Depth map post-processing |
 
-**Full modules discarded**
-`nodes_train.py`, `nodes_dataset.py`, `nodes_hypernetwork.py`, `nodes_webcam.py`, `nodes_preview_any.py`, `nodes_nop.py`, `nodes_glsl.py`, `nodes_load_3d.py`, `nodes_stable3d.py`, `nodes_hunyuan3d.py`, `nodes_string.py`, `nodes_logic.py`, `nodes_primitive.py`, `nodes_cosmos.py`, `nodes_mochi.py`, `nodes_lotus.py`, `nodes_pixart.py`, `nodes_kandinsky5.py`, `nodes_stable_cascade.py`, `nodes_mahiro.py`, `nodes_fresca.py`, `nodes_model_patch.py`, `nodes_lora_debug.py`, `nodes_edit_model.py`, `nodes_lora_extract.py`, `nodes_model_merging_model_specific.py` (except Flux1, SDXL, LTXV in nice-to-have)
+**ltx3:**
+
+| Node | Notes |
+|---|---|
+| `TextGenerateLTX2Prompt` | LLM-based prompt generation |
 
 ---
 
-## Optional Dependencies
+### Phase 5 — Remaining LTX Workflows
 
-| Extra | Libraries | Use case |
-|-------|-----------|----------|
-| `comfy-diffusion[cuda]` | torch + CUDA | GPU inference |
-| `comfy-diffusion[cpu]` | torch CPU | CPU inference |
-| `comfy-diffusion[video]` | opencv-python, imageio | Video I/O, mask morphology |
-| `comfy-diffusion[audio]` | torchaudio | Audio pipelines |
-| `comfy-diffusion[all]` | all of the above | Full installation |
+- `ltx2/video_ltx2_canny_to_video`
+- `ltx2/video_ltx2_depth_to_video`
+- `ltx2/video_ltx2_pose_to_video`
+- `ltx3/video_ltx2_3_ia2v` — Image+Audio to Video
+
+---
+
+### Phase 6 — Expose LTX Audio-to-Video Nodes
+
+Experimental LTX2 nodes and third-party integrations required by `ltx2/video_ltx_2_audio_to_video`.
+
+| Node | Notes |
+|---|---|
+| `LTXVAddGuideMulti` | Multi-frame guide injection |
+| `LTXVAudioVAEEncode` | Audio VAE encoding |
+| `LTXVAudioVideoMask` | Audio-video mask generation |
+| `LTXVChunkFeedForward` | Chunk-based feed-forward processing |
+| `LTXVImgToVideoInplaceKJ` | KJ-suite variant of inplace i2v |
+| `LTX2_NAG` | NAG sampling variant |
+| `AudioCrop`, `AudioSeparation`, `TrimAudioDuration` | Audio preprocessing utilities |
+| `VHS_VideoCombine`, `VAELoaderKJ`, `ImageResizeKJv2` | Third-party (VideoHelperSuite / KJ nodes) |
+
+---
+
+### Phase 7 — LTX Audio-to-Video Pipeline
+
+- `ltx2/video_ltx_2_audio_to_video`

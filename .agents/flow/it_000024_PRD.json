@@ -1,0 +1,230 @@
+{
+  "goals": [
+    "Provide a manifest-based model download API (`downloader.py`) with polymorphic entry types for",
+    "Make downloads idempotent — already-present files are skipped without re-downloading.",
+    "Verify file integrity via optional SHA256 hash checking.",
+    "Establish `comfy_diffusion/pipelines/ltx2_t2v.py` as the canonical pipeline pattern: a module"
+  ],
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Model Entry Types",
+      "description": "As a developer, I want typed manifest entry dataclasses for each download source so that I can declare pipeline models with the exact fields each source requires — no spurious `None` fields.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-001-AC01",
+          "text": "Three dataclasses defined in `comfy_diffusion/downloader.py`:"
+        },
+        {
+          "id": "US-001-AC02",
+          "text": "`dest` is interpreted relative to `models_dir` when it is a relative path"
+        },
+        {
+          "id": "US-001-AC03",
+          "text": "`from comfy_diffusion.downloader import HFModelEntry, CivitAIModelEntry, URLModelEntry,"
+        },
+        {
+          "id": "US-001-AC04",
+          "text": "Typecheck / lint passes"
+        }
+      ]
+    },
+    {
+      "id": "US-002",
+      "title": "`download_models()` — Fetch All Models",
+      "description": "As a developer or pipeline, I want `download_models(manifest, *, models_dir=None)` so that all listed models are fetched to the correct local paths before inference begins.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-002-AC01",
+          "text": "`download_models(manifest: list[ModelEntry], *, models_dir: str | Path | None = None, quiet: bool = False) -> None`"
+        },
+        {
+          "id": "US-002-AC02",
+          "text": "Dispatches by entry type:"
+        },
+        {
+          "id": "US-002-AC03",
+          "text": "If `HF_TOKEN` is not set and an `HFModelEntry` targets a gated model, raises a clear `RuntimeError` with instructions to set `HF_TOKEN`"
+        },
+        {
+          "id": "US-002-AC04",
+          "text": "If `CIVITAI_API_KEY` is not set and a `CivitAIModelEntry` is requested, raises a clear `RuntimeError` with instructions to set `CIVITAI_API_KEY`"
+        },
+        {
+          "id": "US-002-AC05",
+          "text": "Tokens are never logged, printed, or embedded in file paths"
+        },
+        {
+          "id": "US-002-AC06",
+          "text": "Files already present at the resolved destination path are skipped (idempotent — no"
+        },
+        {
+          "id": "US-002-AC07",
+          "text": "Destination directories are created automatically (`parents=True, exist_ok=True`)"
+        },
+        {
+          "id": "US-002-AC08",
+          "text": "On download failure, raises a clear `RuntimeError` with source identifier and reason"
+        },
+        {
+          "id": "US-002-AC09",
+          "text": "`from comfy_diffusion.downloader import download_models` works without error"
+        },
+        {
+          "id": "US-002-AC10",
+          "text": "Typecheck / lint passes"
+        }
+      ]
+    },
+    {
+      "id": "US-003",
+      "title": "Progress Reporting",
+      "description": "As a developer, I want download progress shown per file so that I can monitor long-running downloads without writing custom logging.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-003-AC01",
+          "text": "`HFModelEntry` downloads: progress is handled natively by `huggingface_hub`"
+        },
+        {
+          "id": "US-003-AC02",
+          "text": "`URLModelEntry` downloads: when `tqdm` is installed shows a progress bar with filename and"
+        },
+        {
+          "id": "US-003-AC03",
+          "text": "`CivitAIModelEntry` downloads: uses whatever progress the `civitai` library provides"
+        },
+        {
+          "id": "US-003-AC04",
+          "text": "All progress is suppressed when `quiet=True` is passed to `download_models()`"
+        },
+        {
+          "id": "US-003-AC05",
+          "text": "Typecheck / lint passes"
+        }
+      ]
+    },
+    {
+      "id": "US-004",
+      "title": "SHA256 Integrity Verification",
+      "description": "As a developer, I want downloaded files verified against an expected SHA256 hash so that corrupted or mismatched weights are caught before they cause silent inference errors.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-004-AC01",
+          "text": "When `entry.sha256` is set, the file's SHA256 is computed after download and compared to"
+        },
+        {
+          "id": "US-004-AC02",
+          "text": "Hash check also runs on files that were already present (skipped download)"
+        },
+        {
+          "id": "US-004-AC03",
+          "text": "If the hash does not match on a **freshly downloaded** file, a `ValueError` is raised with"
+        },
+        {
+          "id": "US-004-AC04",
+          "text": "If the hash does not match on an **already-present** file, the file is deleted and"
+        },
+        {
+          "id": "US-004-AC05",
+          "text": "When `entry.sha256` is `None`, verification is skipped silently"
+        },
+        {
+          "id": "US-004-AC06",
+          "text": "Typecheck / lint passes"
+        }
+      ]
+    },
+    {
+      "id": "US-005",
+      "title": "`comfy_diffusion/pipelines/ltx2_t2v.py` — Reference Pipeline Pattern",
+      "description": "As a developer, I want a reference pipeline module so that I have a clear template to follow when implementing future pipelines in later iterations.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-005-AC01",
+          "text": "`comfy_diffusion/pipelines/` package created with `__init__.py`"
+        },
+        {
+          "id": "US-005-AC02",
+          "text": "`comfy_diffusion/pipelines/ltx2_t2v.py` created with:"
+        },
+        {
+          "id": "US-005-AC03",
+          "text": "`from comfy_diffusion.pipelines.ltx2_t2v import manifest, run` works without error"
+        },
+        {
+          "id": "US-005-AC04",
+          "text": "Calling `download_models(manifest())` with all files already present completes without"
+        },
+        {
+          "id": "US-005-AC05",
+          "text": "A module-level docstring explains the pattern: \"Each pipeline module exports `manifest()`"
+        },
+        {
+          "id": "US-005-AC06",
+          "text": "Typecheck / lint passes"
+        }
+      ]
+    },
+    {
+      "id": "US-006",
+      "title": "Tests",
+      "description": "As a developer, I want automated tests for the downloader so that CI catches regressions without hitting the network or requiring GPU.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-006-AC01",
+          "text": "`tests/test_downloader.py` exists with at least the following test cases:"
+        },
+        {
+          "id": "US-006-AC02",
+          "text": "All tests pass on CPU-only CI via `uv run pytest`; no real network calls in tests"
+        },
+        {
+          "id": "US-006-AC03",
+          "text": "Typecheck / lint passes"
+        }
+      ]
+    }
+  ],
+  "functionalRequirements": [
+    {
+      "id": "FR-1",
+      "description": "`comfy_diffusion/downloader.py` provides only types and `download_models()` — no"
+    },
+    {
+      "id": "FR-2",
+      "description": "Each pipeline module in `comfy_diffusion/pipelines/` owns its manifest. The `pipelines`"
+    },
+    {
+      "id": "FR-3",
+      "description": "Lazy import pattern — `huggingface_hub`, `civitai`, and `tqdm` are imported inside"
+    },
+    {
+      "id": "FR-4",
+      "description": "`download_models()` resolves relative `dest` paths against `models_dir`; when"
+    },
+    {
+      "id": "FR-5",
+      "description": "`huggingface_hub`, `civitai`, and `tqdm` are declared as optional dependencies in"
+    },
+    {
+      "id": "FR-10",
+      "description": "Authentication tokens are read exclusively from environment variables (`HF_TOKEN`,"
+    },
+    {
+      "id": "FR-6",
+      "description": "SHA256 is computed using `hashlib.sha256` from stdlib — no external hashing library."
+    },
+    {
+      "id": "FR-7",
+      "description": "`URLModelEntry` transport uses `urllib.request` only (stdlib) — no `requests` or"
+    },
+    {
+      "id": "FR-8",
+      "description": "All new public symbols in `downloader.py` (`HFModelEntry`, `CivitAIModelEntry`,"
+    },
+    {
+      "id": "FR-9",
+      "description": "All tests must pass on CPU-only CI (`uv run pytest`); no network calls in tests."
+    }
+  ]
+}
