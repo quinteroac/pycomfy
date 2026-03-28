@@ -53,7 +53,7 @@ def test_ltxv_empty_latent_video_signature() -> None:
     from comfy_diffusion.latent import ltxv_empty_latent_video
 
     sig = inspect.signature(ltxv_empty_latent_video)
-    assert str(sig) == "(width: 'int', height: 'int', length: 'int' = 97, batch_size: 'int' = 1) -> 'dict[str, Any]'"
+    assert str(sig) == "(width: 'int', height: 'int', length: 'int' = 97, batch_size: 'int' = 1, fps: 'int' = 24) -> 'dict[str, Any]'"
 
 
 def test_ltxv_empty_latent_video_returns_correct_shape(monkeypatch: Any) -> None:

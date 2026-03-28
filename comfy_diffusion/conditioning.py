@@ -88,15 +88,26 @@ def _normalize_prompt_text(text: str) -> str:
     return " " if text == "" else text
 
 
-def encode_prompt(clip: _ClipTextEncoder, text: str) -> Any:
+def encode_prompt(
+    clip: _ClipTextEncoder,
+    text: str,
+    negative_text: str | None = None,
+) -> Any:
     """Encode prompt text with a ComfyUI-compatible CLIP object.
 
-    Positive and negative prompts use the same encoding path; prompt
-    semantics are owned by the caller.
+    When ``negative_text`` is ``None`` (default), returns a single conditioning
+    object for the given ``text``.
+
+    When ``negative_text`` is provided, encodes both prompts and returns a
+    ``(positive, negative)`` tuple — the form expected by sampling functions.
     """
-    normalized_text = _normalize_prompt_text(text)
-    tokens = clip.tokenize(normalized_text)
-    return clip.encode_from_tokens_scheduled(tokens)
+    def _encode(t: str) -> Any:
+        tokens = clip.tokenize(_normalize_prompt_text(t))
+        return clip.encode_from_tokens_scheduled(tokens)
+
+    if negative_text is None:
+        return _encode(text)
+    return _encode(text), _encode(negative_text)
 
 
 def encode_prompt_flux(
@@ -352,6 +363,70 @@ def ltxv_crop_guides(
     negative = node_helpers.conditioning_set_values(negative, guide_values)
 
     return positive, negative, {"samples": latent_image, "noise_mask": noise_mask}
+
+
+def _get_ltxv_add_guide_type() -> Any:
+    """Resolve ComfyUI LTXVAddGuide node at call time."""
+    from comfy_extras.nodes_lt import LTXVAddGuide
+
+    return LTXVAddGuide
+
+
+def ltxv_add_guide(
+    positive: Any,
+    negative: Any,
+    vae: Any,
+    latent: dict[str, Any],
+    image: Any,
+    frame_idx: int = 0,
+    strength: float = 1.0,
+) -> tuple[Any, Any, dict[str, Any]]:
+    """Inject an image guide into LTXV video conditioning and latent.
+
+    Mirrors ``LTXVAddGuide.execute()`` from ComfyUI (``comfy_extras.nodes_lt``).
+
+    Use ``frame_idx=0`` to condition the **first** frame and ``frame_idx=-1``
+    to condition the **last** frame.  For multi-frame guide videos the
+    ``frame_idx`` must be divisible by 8 (except when it is 0).
+
+    Parameters
+    ----------
+    positive : Any
+        Positive conditioning from :func:`ltxv_conditioning` (or
+        :func:`encode_prompt`).
+    negative : Any
+        Negative conditioning.
+    vae : Any
+        VAE loaded from the LTX-Video checkpoint (used to encode the guide
+        image into latent space).
+    latent : dict[str, Any]
+        Video latent dictionary (``{"samples": tensor, ...}``).
+    image : Any
+        Image or video tensor (BHWC float32) to use as the guide frame.
+    frame_idx : int, optional
+        Latent frame index to place the guide at.  Negative values are
+        counted from the end of the sequence.  Default ``0`` (first frame).
+    strength : float, optional
+        Conditioning strength in ``[0.0, 1.0]``.  Default ``1.0``.
+
+    Returns
+    -------
+    tuple[Any, Any, dict[str, Any]]
+        Updated ``(positive, negative, latent)`` with the guide frame
+        appended to the keyframe sequence.
+    """
+    add_guide_type = _get_ltxv_add_guide_type()
+    result = add_guide_type.execute(
+        positive=positive,
+        negative=negative,
+        vae=vae,
+        latent=latent,
+        image=image,
+        frame_idx=frame_idx,
+        strength=strength,
+    )
+    r = getattr(result, "result", result)
+    return r[0], r[1], r[2]
 
 
 def conditioning_combine(
@@ -1730,6 +1805,7 @@ __all__ = [
     "wan22_image_to_video_latent",
     "ltxv_img_to_video",
     "ltxv_conditioning",
+    "ltxv_add_guide",
     "ltxv_crop_guides",
     "conditioning_combine",
     "conditioning_set_mask",
