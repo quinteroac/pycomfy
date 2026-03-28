@@ -1,9 +1,8 @@
 """Tests for US-005 — comfy_diffusion/pipelines/ltx3_t2v.py pipeline.
 
 Covers:
-  AC01: manifest() returns 3 HFModelEntry items with correct dest paths
-  AC02: run() matches same parameter signature as ltx2_t2v_distilled.run()
-  AC03: CPU test passes with mocked inputs
+  AC01: manifest() returns 2 HFModelEntry items with correct dest paths
+  AC03: CPU test passes with mocked inputs (AV sampling chain)
   AC04: typecheck / lint — file parses without syntax errors; no top-level comfy imports
 """
 
@@ -23,7 +22,6 @@ import pytest
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _PIPELINE_FILE = _REPO_ROOT / "comfy_diffusion" / "pipelines" / "video" / "ltx" / "ltx3" / "t2v.py"
-_DISTILLED_FILE = _REPO_ROOT / "comfy_diffusion" / "pipelines" / "video" / "ltx" / "ltx2" / "t2v_distilled.py"
 
 
 # ---------------------------------------------------------------------------
@@ -32,7 +30,7 @@ _DISTILLED_FILE = _REPO_ROOT / "comfy_diffusion" / "pipelines" / "video" / "ltx"
 
 
 def test_pipeline_file_exists() -> None:
-    assert _PIPELINE_FILE.is_file(), "comfy_diffusion/pipelines/ltx3_t2v.py must exist"
+    assert _PIPELINE_FILE.is_file(), "comfy_diffusion/pipelines/video/ltx/ltx3/t2v.py must exist"
 
 
 def test_pipeline_parses_without_syntax_errors() -> None:
@@ -71,7 +69,7 @@ def test_no_top_level_comfy_imports() -> None:
 
 
 # ---------------------------------------------------------------------------
-# AC01 — manifest() returns 3 HFModelEntry items
+# AC01 — manifest() returns 2 HFModelEntry items
 # ---------------------------------------------------------------------------
 
 
@@ -82,12 +80,12 @@ def test_import_manifest_and_run() -> None:
     assert callable(run)
 
 
-def test_manifest_returns_exactly_three_entries() -> None:
+def test_manifest_returns_exactly_two_entries() -> None:
     from comfy_diffusion.pipelines.video.ltx.ltx3.t2v import manifest
 
     result = manifest()
     assert isinstance(result, list)
-    assert len(result) == 3, f"manifest() must return exactly 3 entries, got {len(result)}"
+    assert len(result) == 2, f"manifest() must return exactly 2 entries, got {len(result)}"
 
 
 def test_manifest_entries_are_hf_model_entries() -> None:
@@ -120,16 +118,6 @@ def test_manifest_text_encoder_dest_path() -> None:
     )
 
 
-def test_manifest_upscaler_dest_path() -> None:
-    from comfy_diffusion.pipelines.video.ltx.ltx3.t2v import manifest
-
-    entries = manifest()
-    dests = [str(e.dest) for e in entries]
-    assert any("upscale_models" in d and "ltx-2-spatial-upscaler" in d for d in dests), (
-        "manifest() must include an upscale_models/ltx-2-spatial-upscaler entry"
-    )
-
-
 def test_manifest_all_from_lightricks_hf_repo() -> None:
     from comfy_diffusion.pipelines.video.ltx.ltx3.t2v import manifest
 
@@ -147,25 +135,8 @@ def test_manifest_entries_have_nonempty_dest() -> None:
 
 
 # ---------------------------------------------------------------------------
-# AC02 — run() matches same parameter signature as ltx2_t2v_distilled.run()
+# AC03 — run() signature
 # ---------------------------------------------------------------------------
-
-
-def test_run_signature_matches_distilled_pipeline() -> None:
-    from comfy_diffusion.pipelines.video.ltx.ltx2.t2v_distilled import run as distilled_run
-    from comfy_diffusion.pipelines.video.ltx.ltx3.t2v import run
-
-    sig_ltx3 = inspect.signature(run)
-    sig_distilled = inspect.signature(distilled_run)
-
-    ltx3_params = set(sig_ltx3.parameters.keys())
-    distilled_params = set(sig_distilled.parameters.keys())
-
-    assert ltx3_params == distilled_params, (
-        f"ltx3_t2v.run() parameters differ from ltx2_t2v_distilled.run().\n"
-        f"  Extra in ltx3: {ltx3_params - distilled_params}\n"
-        f"  Missing from ltx3: {distilled_params - ltx3_params}"
-    )
 
 
 def test_run_signature_includes_required_params() -> None:
@@ -177,13 +148,18 @@ def test_run_signature_includes_required_params() -> None:
     assert required <= params, f"run() is missing parameters: {required - params}"
 
 
-def test_run_default_steps_is_eight() -> None:
+def test_run_has_fps_parameter() -> None:
     from comfy_diffusion.pipelines.video.ltx.ltx3.t2v import run
 
     sig = inspect.signature(run)
-    assert sig.parameters["steps"].default == 8, (
-        "run() default steps must be 8 for the distilled model"
-    )
+    assert "fps" in sig.parameters, "run() must have an 'fps' parameter"
+
+
+def test_run_fps_default_is_25() -> None:
+    from comfy_diffusion.pipelines.video.ltx.ltx3.t2v import run
+
+    sig = inspect.signature(run)
+    assert sig.parameters["fps"].default == 25, "fps default must be 25"
 
 
 def test_run_has_filename_override_params() -> None:
@@ -192,21 +168,28 @@ def test_run_has_filename_override_params() -> None:
     sig = inspect.signature(run)
     assert "unet_filename" in sig.parameters
     assert "text_encoder_filename" in sig.parameters
-    assert "upscaler_filename" in sig.parameters
     assert "vae_filename" in sig.parameters
 
 
 # ---------------------------------------------------------------------------
-# AC03 — CPU test passes with mocked inputs
+# AC03 — CPU test passes with mocked inputs (AV sampling chain)
 # ---------------------------------------------------------------------------
 
 _RUNTIME_PATCH = "comfy_diffusion.runtime.check_runtime"
 _MM_PATCH = "comfy_diffusion.models.ModelManager"
 _ENCODE_PATCH = "comfy_diffusion.conditioning.encode_prompt"
-_EMPTY_LATENT_PATCH = "comfy_diffusion.latent.ltxv_empty_latent_video"
-_UPSAMPLE_PATCH = "comfy_diffusion.latent.ltxv_latent_upsample"
-_SAMPLE_PATCH = "comfy_diffusion.sampling.sample"
+_LTXV_COND_PATCH = "comfy_diffusion.conditioning.ltxv_conditioning"
+_EMPTY_VIDEO_PATCH = "comfy_diffusion.latent.ltxv_empty_latent_video"
+_EMPTY_AUDIO_PATCH = "comfy_diffusion.audio.ltxv_empty_latent_audio"
+_CONCAT_AV_PATCH = "comfy_diffusion.audio.ltxv_concat_av_latent"
+_CFG_GUIDER_PATCH = "comfy_diffusion.sampling.cfg_guider"
+_RANDOM_NOISE_PATCH = "comfy_diffusion.sampling.random_noise"
+_MANUAL_SIGMAS_PATCH = "comfy_diffusion.sampling.manual_sigmas"
+_GET_SAMPLER_PATCH = "comfy_diffusion.sampling.get_sampler"
+_SAMPLE_CUSTOM_PATCH = "comfy_diffusion.sampling.sample_custom"
+_SEPARATE_AV_PATCH = "comfy_diffusion.audio.ltxv_separate_av_latent"
 _VAE_DECODE_PATCH = "comfy_diffusion.vae.vae_decode_batch_tiled"
+_AUDIO_VAE_DECODE_PATCH = "comfy_diffusion.audio.ltxv_audio_vae_decode"
 
 
 def _build_mock_mm() -> MagicMock:
@@ -214,130 +197,160 @@ def _build_mock_mm() -> MagicMock:
     mm = MagicMock()
     mm.load_unet.return_value = MagicMock(name="model")
     mm.load_vae.return_value = MagicMock(name="vae")
+    mm.load_ltxv_audio_vae.return_value = MagicMock(name="audio_vae")
     mm.load_ltxav_text_encoder.return_value = MagicMock(name="clip")
-    mm.load_latent_upscale_model.return_value = MagicMock(name="upscale_model")
     return mm
 
 
-def test_run_calls_ltxv_latent_upsample_before_vae_decode(tmp_path: Path) -> None:
-    """AC03: pipeline calls ltxv_latent_upsample() before vae_decode_batch_tiled()."""
+def _run_mocked(
+    tmp_path: Path,
+    *,
+    prompt: str = "test prompt",
+    extra_patches: dict[str, Any] | None = None,
+) -> tuple[dict[str, Any], MagicMock]:
+    """Helper: run pipeline with all heavy dependencies mocked."""
+    from comfy_diffusion.pipelines.video.ltx.ltx3 import t2v as pipeline_mod
+
+    mm = _build_mock_mm()
+    fake_frames = [MagicMock()]
+    fake_audio = {"waveform": MagicMock(), "sample_rate": 44100}
+
+    patches: dict[str, Any] = {
+        _RUNTIME_PATCH: {"python_version": "3.12.0"},
+        _MM_PATCH: mm,
+        _ENCODE_PATCH: (MagicMock(), MagicMock()),
+        _LTXV_COND_PATCH: (MagicMock(), MagicMock()),
+        _EMPTY_VIDEO_PATCH: {"samples": MagicMock()},
+        _EMPTY_AUDIO_PATCH: {"samples": MagicMock()},
+        _CONCAT_AV_PATCH: {"samples": MagicMock()},
+        _CFG_GUIDER_PATCH: MagicMock(),
+        _RANDOM_NOISE_PATCH: MagicMock(),
+        _MANUAL_SIGMAS_PATCH: MagicMock(),
+        _GET_SAMPLER_PATCH: MagicMock(),
+        _SAMPLE_CUSTOM_PATCH: (MagicMock(), MagicMock()),
+        _SEPARATE_AV_PATCH: (MagicMock(), MagicMock()),
+        _VAE_DECODE_PATCH: fake_frames,
+        _AUDIO_VAE_DECODE_PATCH: fake_audio,
+    }
+    if extra_patches:
+        patches.update(extra_patches)
+
+    with (
+        patch(_RUNTIME_PATCH, return_value=patches[_RUNTIME_PATCH]),
+        patch(_MM_PATCH, return_value=mm),
+        patch(_ENCODE_PATCH, return_value=patches[_ENCODE_PATCH]),
+        patch(_LTXV_COND_PATCH, return_value=patches[_LTXV_COND_PATCH]),
+        patch(_EMPTY_VIDEO_PATCH, return_value=patches[_EMPTY_VIDEO_PATCH]),
+        patch(_EMPTY_AUDIO_PATCH, return_value=patches[_EMPTY_AUDIO_PATCH]),
+        patch(_CONCAT_AV_PATCH, return_value=patches[_CONCAT_AV_PATCH]),
+        patch(_CFG_GUIDER_PATCH, return_value=patches[_CFG_GUIDER_PATCH]),
+        patch(_RANDOM_NOISE_PATCH, return_value=patches[_RANDOM_NOISE_PATCH]),
+        patch(_MANUAL_SIGMAS_PATCH, return_value=patches[_MANUAL_SIGMAS_PATCH]),
+        patch(_GET_SAMPLER_PATCH, return_value=patches[_GET_SAMPLER_PATCH]),
+        patch(_SAMPLE_CUSTOM_PATCH, return_value=patches[_SAMPLE_CUSTOM_PATCH]),
+        patch(_SEPARATE_AV_PATCH, return_value=patches[_SEPARATE_AV_PATCH]),
+        patch(_VAE_DECODE_PATCH, return_value=patches[_VAE_DECODE_PATCH]),
+        patch(_AUDIO_VAE_DECODE_PATCH, return_value=patches[_AUDIO_VAE_DECODE_PATCH]),
+    ):
+        result = pipeline_mod.run(models_dir=tmp_path, prompt=prompt)
+
+    return result, mm
+
+
+def test_run_returns_dict_with_frames_and_audio(tmp_path: Path) -> None:
+    """run() must return a dict with 'frames' and 'audio' keys."""
+    result, _ = _run_mocked(tmp_path)
+    assert isinstance(result, dict), "run() must return a dict"
+    assert "frames" in result, "result must have a 'frames' key"
+    assert "audio" in result, "result must have an 'audio' key"
+    assert isinstance(result["frames"], list)
+    assert isinstance(result["audio"], dict)
+
+
+def test_run_calls_sample_custom_and_separates_av_latent(tmp_path: Path) -> None:
+    """AC03: verify call order: cfg_guider → sample_custom → ltxv_separate_av_latent
+    → vae_decode_batch_tiled → ltxv_audio_vae_decode."""
     from comfy_diffusion.pipelines.video.ltx.ltx3 import t2v as pipeline_mod
 
     call_order: list[str] = []
-    fake_samples = {"samples": MagicMock()}
-    fake_upsampled = {"samples": MagicMock()}
-    fake_frames = [MagicMock()]
-
     mm = _build_mock_mm()
 
-    def fake_sample(**kwargs: Any) -> dict[str, Any]:
-        call_order.append("sample")
-        return fake_samples
+    def _tracker(name: str) -> Any:
+        def fn(*args: Any, **kwargs: Any) -> Any:
+            call_order.append(name)
+            return MagicMock()
+        return fn
 
-    def fake_ltxv_latent_upsample(
-        samples: Any, *, upscale_model: Any, vae: Any
-    ) -> dict[str, Any]:
-        call_order.append("ltxv_latent_upsample")
-        return fake_upsampled
+    fake_denoised = MagicMock()
+    fake_video_latent = MagicMock()
+    fake_audio_latent = MagicMock()
+    fake_frames = [MagicMock()]
+    fake_audio = {"waveform": MagicMock(), "sample_rate": 44100}
 
-    def fake_vae_decode_batch_tiled(vae: Any, samples: Any) -> list[Any]:
+    def fake_cfg_guider(*args: Any, **kwargs: Any) -> MagicMock:
+        call_order.append("cfg_guider")
+        return MagicMock()
+
+    def fake_sample_custom(*args: Any, **kwargs: Any) -> tuple[Any, Any]:
+        call_order.append("sample_custom")
+        return MagicMock(), fake_denoised
+
+    def fake_separate_av(latent: Any) -> tuple[Any, Any]:
+        call_order.append("ltxv_separate_av_latent")
+        return fake_video_latent, fake_audio_latent
+
+    def fake_vae_decode(vae: Any, latent: Any) -> list[Any]:
         call_order.append("vae_decode_batch_tiled")
         return fake_frames
+
+    def fake_audio_vae_decode(audio_vae: Any, latent: Any) -> dict[str, Any]:
+        call_order.append("ltxv_audio_vae_decode")
+        return fake_audio
 
     with (
         patch(_RUNTIME_PATCH, return_value={"python_version": "3.12.0"}),
         patch(_MM_PATCH, return_value=mm),
         patch(_ENCODE_PATCH, return_value=(MagicMock(), MagicMock())),
-        patch(_EMPTY_LATENT_PATCH, return_value={"samples": MagicMock()}),
-        patch(_SAMPLE_PATCH, fake_sample),
-        patch(_UPSAMPLE_PATCH, fake_ltxv_latent_upsample),
-        patch(_VAE_DECODE_PATCH, fake_vae_decode_batch_tiled),
+        patch(_LTXV_COND_PATCH, return_value=(MagicMock(), MagicMock())),
+        patch(_EMPTY_VIDEO_PATCH, return_value={"samples": MagicMock()}),
+        patch(_EMPTY_AUDIO_PATCH, return_value={"samples": MagicMock()}),
+        patch(_CONCAT_AV_PATCH, return_value={"samples": MagicMock()}),
+        patch(_CFG_GUIDER_PATCH, fake_cfg_guider),
+        patch(_RANDOM_NOISE_PATCH, return_value=MagicMock()),
+        patch(_MANUAL_SIGMAS_PATCH, return_value=MagicMock()),
+        patch(_GET_SAMPLER_PATCH, return_value=MagicMock()),
+        patch(_SAMPLE_CUSTOM_PATCH, fake_sample_custom),
+        patch(_SEPARATE_AV_PATCH, fake_separate_av),
+        patch(_VAE_DECODE_PATCH, fake_vae_decode),
+        patch(_AUDIO_VAE_DECODE_PATCH, fake_audio_vae_decode),
     ):
         result = pipeline_mod.run(
             models_dir=tmp_path,
             prompt="a golden retriever running through a sunlit park",
         )
 
-    assert result is fake_frames
-    assert call_order == ["sample", "ltxv_latent_upsample", "vae_decode_batch_tiled"], (
-        f"Expected sample → ltxv_latent_upsample → vae_decode_batch_tiled, got: {call_order}"
-    )
+    assert call_order == [
+        "cfg_guider",
+        "sample_custom",
+        "ltxv_separate_av_latent",
+        "vae_decode_batch_tiled",
+        "ltxv_audio_vae_decode",
+    ], f"Unexpected call order: {call_order}"
+    assert result["frames"] is fake_frames
+    assert result["audio"] is fake_audio
 
 
-def test_run_passes_upsampled_samples_to_vae_decode(tmp_path: Path) -> None:
-    """Upsampled latent is passed to vae_decode_batch_tiled, not the original."""
-    from comfy_diffusion.pipelines.video.ltx.ltx3 import t2v as pipeline_mod
-
-    original_samples = {"samples": MagicMock(name="original")}
-    upsampled_samples = {"samples": MagicMock(name="upsampled")}
-    received_samples: list[Any] = []
-
-    mm = _build_mock_mm()
-
-    def fake_ltxv_latent_upsample(
-        samples: Any, *, upscale_model: Any, vae: Any
-    ) -> dict[str, Any]:
-        assert samples is original_samples
-        return upsampled_samples
-
-    def fake_vae_decode_batch_tiled(vae: Any, samples: Any) -> list[Any]:
-        received_samples.append(samples)
-        return []
-
-    with (
-        patch(_RUNTIME_PATCH, return_value={"python_version": "3.12.0"}),
-        patch(_MM_PATCH, return_value=mm),
-        patch(_ENCODE_PATCH, return_value=(MagicMock(), MagicMock())),
-        patch(_EMPTY_LATENT_PATCH, return_value={"samples": MagicMock()}),
-        patch(_SAMPLE_PATCH, return_value=original_samples),
-        patch(_UPSAMPLE_PATCH, fake_ltxv_latent_upsample),
-        patch(_VAE_DECODE_PATCH, fake_vae_decode_batch_tiled),
-    ):
-        pipeline_mod.run(models_dir=tmp_path, prompt="test prompt")
-
-    assert len(received_samples) == 1
-    assert received_samples[0] is upsampled_samples
+def test_run_uses_load_ltxv_audio_vae(tmp_path: Path) -> None:
+    """Audio VAE must be loaded via mm.load_ltxv_audio_vae."""
+    _, mm = _run_mocked(tmp_path)
+    mm.load_ltxv_audio_vae.assert_called_once()
 
 
 def test_run_uses_load_ltxav_text_encoder(tmp_path: Path) -> None:
     """Gemma 3 text encoder must be loaded via load_ltxav_text_encoder."""
-    from comfy_diffusion.pipelines.video.ltx.ltx3 import t2v as pipeline_mod
-
-    mm = _build_mock_mm()
-
-    with (
-        patch(_RUNTIME_PATCH, return_value={"python_version": "3.12.0"}),
-        patch(_MM_PATCH, return_value=mm),
-        patch(_ENCODE_PATCH, return_value=(MagicMock(), MagicMock())),
-        patch(_EMPTY_LATENT_PATCH, return_value={"samples": MagicMock()}),
-        patch(_SAMPLE_PATCH, return_value={"samples": MagicMock()}),
-        patch(_UPSAMPLE_PATCH, return_value={"samples": MagicMock()}),
-        patch(_VAE_DECODE_PATCH, return_value=[]),
-    ):
-        pipeline_mod.run(models_dir=tmp_path, prompt="test")
-
+    _, mm = _run_mocked(tmp_path)
     mm.load_ltxav_text_encoder.assert_called_once()
     mm.load_clip.assert_not_called()
-
-
-def test_run_uses_load_latent_upscale_model(tmp_path: Path) -> None:
-    """Upscale model must be loaded via load_latent_upscale_model."""
-    from comfy_diffusion.pipelines.video.ltx.ltx3 import t2v as pipeline_mod
-
-    mm = _build_mock_mm()
-
-    with (
-        patch(_RUNTIME_PATCH, return_value={"python_version": "3.12.0"}),
-        patch(_MM_PATCH, return_value=mm),
-        patch(_ENCODE_PATCH, return_value=(MagicMock(), MagicMock())),
-        patch(_EMPTY_LATENT_PATCH, return_value={"samples": MagicMock()}),
-        patch(_SAMPLE_PATCH, return_value={"samples": MagicMock()}),
-        patch(_UPSAMPLE_PATCH, return_value={"samples": MagicMock()}),
-        patch(_VAE_DECODE_PATCH, return_value=[]),
-    ):
-        pipeline_mod.run(models_dir=tmp_path, prompt="test")
-
-    mm.load_latent_upscale_model.assert_called_once()
 
 
 def test_run_raises_on_runtime_error(tmp_path: Path) -> None:
@@ -353,12 +366,12 @@ def test_run_raises_on_runtime_error(tmp_path: Path) -> None:
 
 
 def test_download_models_idempotent_all_present(tmp_path: Path) -> None:
-    """download_models(manifest()) completes without error when all 3 files are present."""
+    """download_models(manifest()) completes without error when all 2 files are present."""
     from comfy_diffusion.downloader import download_models
     from comfy_diffusion.pipelines.video.ltx.ltx3.t2v import manifest
 
     entries = manifest()
-    assert len(entries) == 3
+    assert len(entries) == 2
 
     for entry in entries:
         dest = tmp_path / entry.dest

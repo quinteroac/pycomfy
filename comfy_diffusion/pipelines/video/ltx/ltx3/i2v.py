@@ -7,24 +7,15 @@ Each pipeline module exports ``manifest()`` and ``run()``.
   weights before the first inference run.
 
 - ``run()`` executes the full inference pipeline end-to-end: model loading,
-  image preprocessing, conditioning, sampling, latent upsampling, and VAE
-  decoding.
+  image preprocessing, conditioning, AV sampling, and decoding.
 
-Key differences from ``ltx3_t2v``:
+This pipeline mirrors the ``video_ltx2_3_i2v`` official workflow.  Key
+differences from :mod:`comfy_diffusion.pipelines.video.ltx.ltx3.t2v`:
 
-- Accepts an ``image`` parameter (file path, ``str``, or
-  :class:`~PIL.Image.Image`) as the first conditioning frame.
-- Accepts an explicit ``fps`` parameter (default 24).  This value is reserved
-  for future use — :func:`~comfy_diffusion.latent.ltxv_empty_latent_video`
-  does not currently expose an fps argument; the parameter is accepted so
-  callers can document their intent and the API will honour it automatically
-  once upstream support is added.
-- The preprocessed image is injected into the latent via
-  :func:`~comfy_diffusion.video.ltxv_img_to_video_inplace` (same mechanism as
-  ``ltx2_i2v``).
-
-Models required are identical to ``ltx3_t2v`` — no extra LoRA is needed
-because the 22B distilled checkpoint is already optimised for fast inference.
+- Accepts an ``image`` parameter as the first conditioning frame.
+- The preprocessed image is injected via ``LTXVAddGuide`` at ``frame_idx=0``
+  (strength ``1.0``), which is the correct AV-compatible conditioning path.
+- Returns **video frames and audio** (the LTX 2.3 model is audio-visual).
 
 Pattern
 -------
@@ -50,11 +41,13 @@ Usage
     download_models(manifest(), models_dir="/path/to/models")
 
     # 2. Run inference.
-    frames = run(
+    result = run(
         models_dir="/path/to/models",
         image="/path/to/first_frame.png",
         prompt="the queen turns her head slowly towards the camera",
     )
+    frames = result["frames"]   # list[PIL.Image.Image]
+    audio  = result["audio"]    # {"waveform": tensor, "sample_rate": int}
 """
 
 from __future__ import annotations
@@ -75,7 +68,9 @@ _HF_REPO = "Lightricks/LTX-Video"
 # Relative destination paths (resolved against models_dir by download_models).
 _UNET_DEST = Path("diffusion_models") / "ltx-2.3-22b-distilled-fp8.safetensors"
 _TEXT_ENCODER_DEST = Path("text_encoders") / "gemma_3_12B_it_fp4_mixed.safetensors"
-_UPSCALER_DEST = Path("upscale_models") / "ltx-2-spatial-upscaler-x2-1.0.safetensors"
+
+# The audio VAE is bundled inside the UNet checkpoint — no separate file.
+_AUDIO_VAE_DEST = _UNET_DEST
 
 
 # ---------------------------------------------------------------------------
@@ -86,9 +81,9 @@ _UPSCALER_DEST = Path("upscale_models") / "ltx-2-spatial-upscaler-x2-1.0.safeten
 def manifest() -> list[ModelEntry]:
     """Return the list of model files required by the LTX-Video 2.3 I2V pipeline.
 
-    Returns the same three entries as :func:`comfy_diffusion.pipelines.ltx3_t2v.manifest`:
-    the 22B distilled UNet checkpoint, the Gemma 3 12B text encoder, and the
-    spatial latent upscaler.
+    Returns the same two entries as :func:`comfy_diffusion.pipelines.video.ltx.ltx3.t2v.manifest`:
+    the 22B distilled UNet checkpoint (which bundles the video VAE and audio
+    VAE) and the Gemma 3 12B text encoder.
 
     Each entry is an :class:`~comfy_diffusion.downloader.HFModelEntry` that
     resolves to a deterministic relative path under ``models_dir``.  Pass the
@@ -107,11 +102,6 @@ def manifest() -> list[ModelEntry]:
             filename="gemma_3_12B_it_fp4_mixed.safetensors",
             dest=_TEXT_ENCODER_DEST,
         ),
-        HFModelEntry(
-            repo_id=_HF_REPO,
-            filename="ltx-2-spatial-upscaler-x2-1.0.safetensors",
-            dest=_UPSCALER_DEST,
-        ),
     ]
 
 
@@ -124,18 +114,18 @@ def run(
     width: int = 768,
     height: int = 512,
     length: int = 97,
-    fps: int = 24,
-    steps: int = 8,
-    cfg: float = 3.0,
+    fps: int = 25,
+    cfg: float = 1.0,
     seed: int = 0,
-    sampler: str = "euler",
-    scheduler: str = "beta",
+    guide_strength: float = 1.0,
     unet_filename: str | None = None,
     vae_filename: str | None = None,
     text_encoder_filename: str | None = None,
-    upscaler_filename: str | None = None,
-) -> list[Any]:
-    """Run the LTX-Video 2.3 (22B distilled) image-to-video pipeline end-to-end.
+) -> dict[str, Any]:
+    """Run the LTX-Video 2.3 (22B distilled) image-to-video-with-audio pipeline.
+
+    Mirrors the ``video_ltx2_3_i2v`` official workflow.  The first conditioning
+    frame is injected via ``LTXVAddGuide`` at ``frame_idx=0``.
 
     Parameters
     ----------
@@ -146,7 +136,7 @@ def run(
         (``str`` or :class:`~pathlib.Path`) or a :class:`~PIL.Image.Image`
         instance.
     prompt : str
-        Positive text prompt describing the desired video content.
+        Positive text prompt.
     negative_prompt : str, optional
         Negative text prompt.
         Default ``"worst quality, inconsistent motion, blurry, jittery, distorted"``.
@@ -155,50 +145,42 @@ def run(
     height : int, optional
         Output frame height in pixels (must be divisible by 32).  Default ``512``.
     length : int, optional
-        Number of video frames to generate (≈ ~4 s at 24 fps).  Default ``97``.
+        Number of video frames to generate.  Default ``97`` (≈ 4 s at 25 fps).
     fps : int, optional
-        Target frame rate of the generated video.  Default ``24``.  Forwarded
-        to :func:`~comfy_diffusion.latent.ltxv_empty_latent_video`; currently
-        reserved for future scheduler use — does not affect the latent tensor
-        shape.
-    steps : int, optional
-        Number of denoising steps.  Default ``8`` (distilled model).
+        Frame rate used for the audio latent and ``LTXVConditioning``.
+        Default ``25``.
     cfg : float, optional
-        Classifier-free guidance scale.  Default ``3.0``.
+        Classifier-free guidance scale.  Default ``1.0`` (distilled model).
     seed : int, optional
         Random seed for reproducibility.  Default ``0``.
-    sampler : str, optional
-        Sampler name passed to :func:`~comfy_diffusion.sampling.sample`.
-        Default ``"euler"``.
-    scheduler : str, optional
-        Noise scheduler name.  Default ``"beta"``.
+    guide_strength : float, optional
+        Conditioning strength for the first-frame guide (``LTXVAddGuide``
+        ``strength`` parameter, range ``[0, 1]``).  Default ``1.0``.
     unet_filename : str | None, optional
-        Override the default UNet filename (relative to ``models_dir`` or
-        absolute).  When ``None`` the path from :func:`manifest` is used.
-        Default ``None``.
+        Override the default UNet filename.  Default ``None``.
     vae_filename : str | None, optional
         Override the VAE filename.  When ``None`` the VAE is loaded from the
-        UNet checkpoint path (the distilled checkpoint bundles both UNet and
-        VAE weights).  Default ``None``.
+        UNet checkpoint (bundles UNet + VAE + audio VAE).  Default ``None``.
     text_encoder_filename : str | None, optional
         Override the default text-encoder filename.  Default ``None``.
-    upscaler_filename : str | None, optional
-        Override the default spatial upscaler filename.  Default ``None``.
 
     Returns
     -------
-    list[PIL.Image.Image]
-        Decoded video frames as PIL images, one per generated frame.
+    dict[str, Any]
+        ``{"frames": list[PIL.Image.Image], "audio": dict[str, Any]}``
+
+        - ``frames`` — decoded video frames as PIL images, one per frame.
+        - ``audio`` — decoded audio as ``{"waveform": tensor, "sample_rate": int}``.
     """
     # Lazy imports — ComfyUI must not be imported at module top level.
-    from comfy_diffusion.conditioning import encode_prompt
+    from comfy_diffusion.audio import ltxv_audio_vae_decode, ltxv_concat_av_latent, ltxv_empty_latent_audio, ltxv_separate_av_latent
+    from comfy_diffusion.conditioning import encode_prompt, ltxv_add_guide, ltxv_conditioning
     from comfy_diffusion.image import image_to_tensor, load_image, ltxv_preprocess
-    from comfy_diffusion.latent import ltxv_empty_latent_video, ltxv_latent_upsample
+    from comfy_diffusion.latent import ltxv_empty_latent_video
     from comfy_diffusion.models import ModelManager
     from comfy_diffusion.runtime import check_runtime
-    from comfy_diffusion.sampling import sample
+    from comfy_diffusion.sampling import cfg_guider, get_sampler, manual_sigmas, random_noise, sample_custom
     from comfy_diffusion.vae import vae_decode_batch_tiled
-    from comfy_diffusion.video import ltxv_img_to_video_inplace
 
     check_result = check_runtime()
     if check_result.get("error"):
@@ -209,59 +191,57 @@ def run(
     models_dir = Path(models_dir)
     mm = ModelManager(models_dir)
 
-    # Resolve model paths (allow caller overrides, fall back to manifest paths).
+    # Resolve model paths.
     unet_path = Path(unet_filename) if unet_filename else models_dir / _UNET_DEST
     te_path = (
         Path(text_encoder_filename)
         if text_encoder_filename
         else models_dir / _TEXT_ENCODER_DEST
     )
-    upscaler_path = (
-        Path(upscaler_filename) if upscaler_filename else models_dir / _UPSCALER_DEST
-    )
-    # The distilled checkpoint bundles VAE weights; default to the same file.
+    # The checkpoint bundles video VAE and audio VAE; default to the same file.
     vae_path = Path(vae_filename) if vae_filename else unet_path
 
     # Load models.
     model = mm.load_unet(unet_path)
     vae = mm.load_vae(vae_path)
+    audio_vae = mm.load_ltxv_audio_vae(vae_path)
     clip = mm.load_ltxav_text_encoder(te_path, unet_path)
-    upscale_model = mm.load_latent_upscale_model(upscaler_path)
 
-    # Load input image and convert to BHWC tensor.
+    # Load and preprocess the input image → BHWC float32 tensor.
     if hasattr(image, "mode"):
         image_tensor = image_to_tensor(image)
     else:
         image_tensor, _ = load_image(image)
-
-    # Preprocess image for LTXV (center resize + compression).
     preprocessed = ltxv_preprocess(image_tensor, width, height)
 
-    # Text conditioning.
+    # Text conditioning + frame-rate metadata.
     positive, negative = encode_prompt(clip, prompt, negative_prompt)
+    positive, negative = ltxv_conditioning(positive, negative, frame_rate=fps)
 
-    # Create empty latent (fps forwarded for future scheduler/metadata use).
-    latent = ltxv_empty_latent_video(width=width, height=height, length=length, fps=fps)
-
-    # Inject the preprocessed image frame into the latent.
-    latent = ltxv_img_to_video_inplace(vae, preprocessed, latent)
-
-    # Sample.
-    samples = sample(
-        model=model,
-        positive=positive,
-        negative=negative,
-        latent_image=latent,
-        steps=steps,
-        cfg=cfg,
-        sampler_name=sampler,
-        scheduler=scheduler,
-        seed=seed,
+    # Create video latent and inject the first-frame guide.
+    video_latent = ltxv_empty_latent_video(width=width, height=height, length=length)
+    positive, negative, video_latent = ltxv_add_guide(
+        positive, negative, vae, video_latent, preprocessed,
+        frame_idx=0, strength=guide_strength,
     )
 
-    # Spatial upscale in latent space before VAE decode.
-    samples = ltxv_latent_upsample(samples, upscale_model=upscale_model, vae=vae)
+    # Create audio latent and concatenate into a single AV latent.
+    audio_latent = ltxv_empty_latent_audio(audio_vae, frames_number=length, frame_rate=fps)
+    av_latent = ltxv_concat_av_latent(video_latent, audio_latent)
 
-    # Decode latent → PIL frames.
-    frames = vae_decode_batch_tiled(vae, samples)
-    return frames
+    # Build the sampling chain.
+    guider = cfg_guider(model, positive, negative, cfg)
+    noise = random_noise(seed)
+    sigmas = manual_sigmas("1., 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421875, 0.0")
+    sampler_obj = get_sampler("euler_ancestral")
+    _, denoised = sample_custom(noise, guider, sampler_obj, sigmas, av_latent)
+
+    # Separate video and audio from the denoised AV latent.
+    video_latent_out, audio_latent_out = ltxv_separate_av_latent(denoised)
+
+    # Decode video → PIL frames; decode audio → waveform dict.
+    frames = vae_decode_batch_tiled(vae, video_latent_out)
+    audio = ltxv_audio_vae_decode(audio_vae, audio_latent_out)
+
+    return {"frames": frames, "audio": audio}
+

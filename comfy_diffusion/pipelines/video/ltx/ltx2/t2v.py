@@ -1,4 +1,4 @@
-"""LTX-Video 2 text-to-video pipeline.
+"""LTX-Video 2 text-to-video pipeline (audio-visual).
 
 Each pipeline module exports ``manifest()`` and ``run()``.
 
@@ -7,7 +7,11 @@ Each pipeline module exports ``manifest()`` and ``run()``.
   weights before the first inference run.
 
 - ``run()`` executes the full inference pipeline end-to-end: model loading,
-  conditioning, sampling, and VAE decoding.
+  LoRA application, conditioning, AV sampling, latent upsampling, and decoding.
+
+This pipeline uses the LTX-Video 2 (19B dev fp8) model with the distilled LoRA
+and the full audio-visual (AV) sampling chain — video and audio are generated
+simultaneously in a single sampling pass.
 
 Pattern
 -------
@@ -33,10 +37,12 @@ Usage
     download_models(manifest(), models_dir="/path/to/models")
 
     # 2. Run inference.
-    frames = run(
+    result = run(
         models_dir="/path/to/models",
         prompt="a golden retriever running through a sunlit park",
     )
+    frames = result["frames"]   # list[PIL.Image.Image]
+    audio  = result["audio"]    # {"waveform": tensor, "sample_rate": int}
 """
 
 from __future__ import annotations
@@ -55,9 +61,10 @@ __all__ = ["manifest", "run"]
 _HF_REPO = "Lightricks/LTX-Video"
 
 # Relative destination paths (resolved against models_dir by download_models).
-_UNET_DEST = Path("diffusion_models") / "ltx-video-2b-v0.9.5.safetensors"
-_VAE_DEST = Path("vae") / "ltx-video-2b-v0.9.5-vae-fp32.safetensors"
-_TEXT_ENCODER_DEST = Path("text_encoders") / "t5xxl_fp16.safetensors"
+_UNET_DEST = Path("diffusion_models") / "ltx-2-19b-dev-fp8.safetensors"
+_TEXT_ENCODER_DEST = Path("text_encoders") / "gemma_3_12B_it_fp4_mixed.safetensors"
+_LORA_DEST = Path("loras") / "ltx-2-19b-distilled-lora-384.safetensors"
+_UPSCALER_DEST = Path("upscale_models") / "ltx-2-spatial-upscaler-x2-1.0.safetensors"
 
 
 # ---------------------------------------------------------------------------
@@ -77,18 +84,23 @@ def manifest() -> list[ModelEntry]:
     return [
         HFModelEntry(
             repo_id=_HF_REPO,
-            filename="ltx-video-2b-v0.9.5.safetensors",
+            filename="ltx-2-19b-dev-fp8.safetensors",
             dest=_UNET_DEST,
         ),
         HFModelEntry(
             repo_id=_HF_REPO,
-            filename="vae/ltx-video-2b-v0.9.5-vae-fp32.safetensors",
-            dest=_VAE_DEST,
+            filename="gemma_3_12B_it_fp4_mixed.safetensors",
+            dest=_TEXT_ENCODER_DEST,
         ),
         HFModelEntry(
-            repo_id="mcmonkey/google_t5-v1_1-xxl_encoderonly",
-            filename="t5xxl_fp16.safetensors",
-            dest=_TEXT_ENCODER_DEST,
+            repo_id=_HF_REPO,
+            filename="ltx-2-19b-distilled-lora-384.safetensors",
+            dest=_LORA_DEST,
+        ),
+        HFModelEntry(
+            repo_id=_HF_REPO,
+            filename="ltx-2-spatial-upscaler-x2-1.0.safetensors",
+            dest=_UPSCALER_DEST,
         ),
     ]
 
@@ -101,16 +113,23 @@ def run(
     width: int = 768,
     height: int = 512,
     length: int = 97,
-    steps: int = 30,
+    fps: int = 24,
+    steps: int = 8,
     cfg: float = 3.0,
     seed: int = 0,
     sampler: str = "euler",
     scheduler: str = "beta",
+    lora_strength: float = 1.0,
     unet_filename: str | None = None,
     vae_filename: str | None = None,
     text_encoder_filename: str | None = None,
-) -> list[Any]:
-    """Run the LTX-Video 2 text-to-video pipeline end-to-end.
+    lora_filename: str | None = None,
+    upscaler_filename: str | None = None,
+) -> dict[str, Any]:
+    """Run the LTX-Video 2 text-to-video-with-audio pipeline end-to-end.
+
+    Uses the 19B dev fp8 model with the distilled LoRA and the full
+    audio-visual (AV) sampling chain.
 
     Parameters
     ----------
@@ -126,38 +145,51 @@ def run(
     height : int, optional
         Output frame height in pixels (must be divisible by 32).  Default ``512``.
     length : int, optional
-        Number of video frames to generate (≈ ~4 s at 24 fps).  Default ``97``.
+        Number of video frames to generate.  Default ``97``.
+    fps : int, optional
+        Frame rate used for the audio latent and ``LTXVConditioning``.
+        Default ``24``.
     steps : int, optional
-        Number of denoising steps.  Default ``30``.
+        Number of denoising steps.  Default ``8``.
     cfg : float, optional
         Classifier-free guidance scale.  Default ``3.0``.
     seed : int, optional
         Random seed for reproducibility.  Default ``0``.
     sampler : str, optional
-        Sampler name passed to :func:`~comfy_diffusion.sampling.sample`.
-        Default ``"euler"``.
+        Sampler name.  Default ``"euler"``.
     scheduler : str, optional
         Noise scheduler name.  Default ``"beta"``.
+    lora_strength : float, optional
+        Strength applied to both model and CLIP components of the LoRA.
+        Default ``1.0``.
     unet_filename : str | None, optional
-        Override the default UNet filename (relative to ``models_dir`` or
-        absolute).  When ``None`` the path from :func:`manifest` is used.
-        Default ``None``.
+        Override the default UNet filename.  Default ``None``.
     vae_filename : str | None, optional
-        Override the default VAE filename.  Default ``None``.
+        Override the VAE filename.  When ``None`` the VAE is loaded from the
+        UNet checkpoint (bundles UNet + VAE + audio VAE).  Default ``None``.
     text_encoder_filename : str | None, optional
         Override the default text-encoder filename.  Default ``None``.
+    lora_filename : str | None, optional
+        Override the default LoRA filename.  Default ``None``.
+    upscaler_filename : str | None, optional
+        Override the default spatial upscaler filename.  Default ``None``.
 
     Returns
     -------
-    list[PIL.Image.Image]
-        Decoded video frames as PIL images, one per generated frame.
+    dict[str, Any]
+        ``{"frames": list[PIL.Image.Image], "audio": dict[str, Any]}``
+
+        - ``frames`` — decoded video frames as PIL images, one per frame.
+        - ``audio`` — decoded audio as ``{"waveform": tensor, "sample_rate": int}``.
     """
     # Lazy imports — ComfyUI must not be imported at module top level.
-    from comfy_diffusion.conditioning import encode_prompt
-    from comfy_diffusion.latent import ltxv_empty_latent_video
+    from comfy_diffusion.audio import ltxv_audio_vae_decode, ltxv_concat_av_latent, ltxv_empty_latent_audio, ltxv_separate_av_latent
+    from comfy_diffusion.conditioning import encode_prompt, ltxv_conditioning
+    from comfy_diffusion.latent import ltxv_empty_latent_video, ltxv_latent_upsample
+    from comfy_diffusion.lora import apply_lora
     from comfy_diffusion.models import ModelManager
     from comfy_diffusion.runtime import check_runtime
-    from comfy_diffusion.sampling import sample
+    from comfy_diffusion.sampling import basic_scheduler, cfg_guider, get_sampler, random_noise, sample_custom
     from comfy_diffusion.vae import vae_decode_batch_tiled
 
     check_result = check_runtime()
@@ -171,33 +203,50 @@ def run(
 
     # Resolve model paths (allow caller overrides, fall back to manifest paths).
     unet_path = Path(unet_filename) if unet_filename else models_dir / _UNET_DEST
-    vae_path = Path(vae_filename) if vae_filename else models_dir / _VAE_DEST
-    te_path = Path(text_encoder_filename) if text_encoder_filename else models_dir / _TEXT_ENCODER_DEST
+    te_path = (
+        Path(text_encoder_filename) if text_encoder_filename else models_dir / _TEXT_ENCODER_DEST
+    )
+    lora_path = Path(lora_filename) if lora_filename else models_dir / _LORA_DEST
+    upscaler_path = (
+        Path(upscaler_filename) if upscaler_filename else models_dir / _UPSCALER_DEST
+    )
+    # The dev fp8 checkpoint bundles video VAE and audio VAE; default to the same file.
+    vae_path = Path(vae_filename) if vae_filename else unet_path
 
     # Load models.
     model = mm.load_unet(unet_path)
     vae = mm.load_vae(vae_path)
-    clip = mm.load_clip(te_path, clip_type="sd3")
+    audio_vae = mm.load_ltxv_audio_vae(vae_path)
+    clip = mm.load_ltxav_text_encoder(te_path, unet_path)
+    upscale_model = mm.load_latent_upscale_model(upscaler_path)
 
-    # Text conditioning.
+    # Apply distilled LoRA.
+    model, clip = apply_lora(model, clip, lora_path, lora_strength, lora_strength)
+
+    # Text conditioning + frame-rate metadata.
     positive, negative = encode_prompt(clip, prompt, negative_prompt)
+    positive, negative = ltxv_conditioning(positive, negative, frame_rate=fps)
 
-    # Create empty latent.
-    latent = ltxv_empty_latent_video(width=width, height=height, length=length)
+    # Create video and audio latents, then concatenate into a single AV latent.
+    video_latent = ltxv_empty_latent_video(width=width, height=height, length=length)
+    audio_latent = ltxv_empty_latent_audio(audio_vae, frames_number=length, frame_rate=fps)
+    av_latent = ltxv_concat_av_latent(video_latent, audio_latent)
 
-    # Sample.
-    samples = sample(
-        model=model,
-        positive=positive,
-        negative=negative,
-        latent_image=latent,
-        steps=steps,
-        cfg=cfg,
-        sampler_name=sampler,
-        scheduler=scheduler,
-        seed=seed,
-    )
+    # Build the sampling chain.
+    guider = cfg_guider(model, positive, negative, cfg)
+    noise = random_noise(seed)
+    sigmas = basic_scheduler(model, scheduler, steps)
+    sampler_obj = get_sampler(sampler)
+    _, denoised = sample_custom(noise, guider, sampler_obj, sigmas, av_latent)
 
-    # Decode latent → PIL frames.
-    frames = vae_decode_batch_tiled(vae, samples)
-    return frames
+    # Separate video and audio from the denoised AV latent.
+    video_latent_out, audio_latent_out = ltxv_separate_av_latent(denoised)
+
+    # Spatial upscale video in latent space before VAE decode.
+    video_latent_up = ltxv_latent_upsample(video_latent_out, upscale_model=upscale_model, vae=vae)
+
+    # Decode video → PIL frames; decode audio → waveform dict.
+    frames = vae_decode_batch_tiled(vae, video_latent_up)
+    audio = ltxv_audio_vae_decode(audio_vae, audio_latent_out)
+
+    return {"frames": frames, "audio": audio}

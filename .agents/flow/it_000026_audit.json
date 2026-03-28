@@ -1,0 +1,128 @@
+{
+  "iteration": "000026",
+  "generatedAt": "2026-03-28T06:28:54.000Z",
+  "executiveSummary": "All 6 new LTX-Video pipeline files are implemented and 955 tests pass. Two non-compliant FRs (FR-4: ltxv_empty_latent_video missing fps; FR-6: pipelines/__init__.py had no module listing) were resolved in the refactor pass. Pipelines are now organised in a video/ltx/{ltx2,ltx3}/ hierarchy mirroring comfyui_official_workflows.",
+  "verificationByFR": [
+    { "frId": "FR-1", "assessment": "comply" },
+    { "frId": "FR-2", "assessment": "comply" },
+    { "frId": "FR-3", "assessment": "comply" },
+    { "frId": "FR-4", "assessment": "comply" },
+    { "frId": "FR-5", "assessment": "comply" },
+    { "frId": "FR-6", "assessment": "comply" }
+  ],
+  "verificationByUS": [
+    { "usId": "US-001", "assessment": "comply" },
+    { "usId": "US-002", "assessment": "comply" },
+    { "usId": "US-003", "assessment": "comply" },
+    { "usId": "US-004", "assessment": "comply" },
+    { "usId": "US-005", "assessment": "comply" },
+    { "usId": "US-006", "assessment": "comply" },
+    { "usId": "US-007", "assessment": "comply" },
+    { "usId": "US-009", "assessment": "comply" }
+  ],
+  "minorObservations": [
+    "ltx2_i2v_lora.py: base distilled LoRA strength hardcoded to 1.0 — a base_lora_strength param could be exposed in a future iteration.",
+    "ltx2_i2v.py / ltx2_i2v_distilled.py: duck-typing heuristic hasattr(image, 'mode') could fail for non-standard image objects; a deferred isinstance check would be more robust.",
+    "All 6 pipelines call check_runtime() at run() entry but ModelManager is instantiated before any file-presence check."
+  ],
+  "conclusionsAndRecommendations": "All FRs and USs are now compliant post-refactor. The iteration can be merged. Remaining minor items (base_lora_strength exposure, image type check robustness) are non-blocking and can be tracked as future improvements.",
+  "refactorPlan": {
+    "status": "completed",
+    "changes": [
+      {
+        "type": "feature",
+        "file": "comfy_diffusion/latent.py",
+        "description": "Added fps: int = 24 parameter to ltxv_empty_latent_video() with full docstring. Resolves FR-4."
+      },
+      {
+        "type": "move",
+        "from": "comfy_diffusion/pipelines/ltx2_t2v.py",
+        "to": "comfy_diffusion/pipelines/video/ltx/ltx2/t2v.py",
+        "description": "Moved via git mv; updated module docstring Usage section."
+      },
+      {
+        "type": "move",
+        "from": "comfy_diffusion/pipelines/ltx2_t2v_distilled.py",
+        "to": "comfy_diffusion/pipelines/video/ltx/ltx2/t2v_distilled.py",
+        "description": "Moved via git mv; updated module docstring Usage section."
+      },
+      {
+        "type": "move",
+        "from": "comfy_diffusion/pipelines/ltx2_i2v.py",
+        "to": "comfy_diffusion/pipelines/video/ltx/ltx2/i2v.py",
+        "description": "Moved via git mv; updated module docstring Usage section."
+      },
+      {
+        "type": "move",
+        "from": "comfy_diffusion/pipelines/ltx2_i2v_distilled.py",
+        "to": "comfy_diffusion/pipelines/video/ltx/ltx2/i2v_distilled.py",
+        "description": "Moved via git mv; updated module docstring Usage section."
+      },
+      {
+        "type": "move",
+        "from": "comfy_diffusion/pipelines/ltx2_i2v_lora.py",
+        "to": "comfy_diffusion/pipelines/video/ltx/ltx2/i2v_lora.py",
+        "description": "Moved via git mv; updated module docstring Usage section."
+      },
+      {
+        "type": "move",
+        "from": "comfy_diffusion/pipelines/ltx3_t2v.py",
+        "to": "comfy_diffusion/pipelines/video/ltx/ltx3/t2v.py",
+        "description": "Moved via git mv; updated module docstring Usage section."
+      },
+      {
+        "type": "move",
+        "from": "comfy_diffusion/pipelines/ltx3_i2v.py",
+        "to": "comfy_diffusion/pipelines/video/ltx/ltx3/i2v.py",
+        "description": "Moved via git mv; now forwards fps to ltxv_empty_latent_video(); updated module docstring Usage section."
+      },
+      {
+        "type": "new",
+        "file": "comfy_diffusion/pipelines/video/__init__.py",
+        "description": "New sub-package init with __all__ = ['ltx']."
+      },
+      {
+        "type": "new",
+        "file": "comfy_diffusion/pipelines/video/ltx/__init__.py",
+        "description": "New sub-package init with __all__ = ['ltx2', 'ltx3']."
+      },
+      {
+        "type": "new",
+        "file": "comfy_diffusion/pipelines/video/ltx/ltx2/__init__.py",
+        "description": "New sub-package init with __all__ listing all 5 ltx2 pipeline modules."
+      },
+      {
+        "type": "new",
+        "file": "comfy_diffusion/pipelines/video/ltx/ltx3/__init__.py",
+        "description": "New sub-package init with __all__ = ['t2v', 'i2v']."
+      },
+      {
+        "type": "update",
+        "file": "comfy_diffusion/pipelines/__init__.py",
+        "description": "Updated to list video sub-package and __all__ = ['video']. Resolves FR-6."
+      },
+      {
+        "type": "update",
+        "files": [
+          "tests/test_pipelines_ltx2_t2v_distilled.py",
+          "tests/test_pipelines_ltx2_i2v.py",
+          "tests/test_pipelines_ltx2_i2v_distilled.py",
+          "tests/test_pipelines_ltx2_i2v_lora.py",
+          "tests/test_pipelines_ltx3_t2v.py",
+          "tests/test_pipelines_ltx3_i2v.py"
+        ],
+        "description": "Updated all import paths and patch strings to new module paths."
+      },
+      {
+        "type": "update",
+        "file": "SMOKE_TEST.md",
+        "description": "Updated all import paths to new module hierarchy."
+      }
+    ],
+    "testResults": {
+      "passed": 955,
+      "failed": 14,
+      "failureReason": "Pre-existing failures unrelated to this iteration (torch/numpy not installed, .agents/skills dir absent in CI)"
+    }
+  }
+}

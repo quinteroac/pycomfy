@@ -1,11 +1,11 @@
-"""Tests for US-003 — comfy_diffusion/pipelines/ltx2_i2v_distilled.py pipeline.
+"""Tests for US-003 — comfy_diffusion/pipelines/ltx2_i2v_distilled.py pipeline (AV chain).
 
 Covers:
   AC01: manifest() returns 3 HFModelEntry items with correct dest paths
   AC02: run() mirrors ltx2_i2v.run() signature but uses distilled checkpoint
   AC03: default steps=8
   AC04: no apply_lora() call in the pipeline
-  AC05: CPU test passes with mocked inputs
+  AC05: CPU test passes with mocked inputs; AV chain executed in correct order
   AC06: typecheck / lint — file parses without syntax errors; no top-level comfy imports
 """
 
@@ -191,6 +191,14 @@ def test_run_uses_distilled_checkpoint_not_dev_fp8() -> None:
     assert "ltx-2-19b-dev-fp8" not in source
 
 
+def test_run_has_fps_param_with_default_24() -> None:
+    from comfy_diffusion.pipelines.video.ltx.ltx2.i2v_distilled import run
+
+    sig = inspect.signature(run)
+    assert "fps" in sig.parameters
+    assert sig.parameters["fps"].default == 24
+
+
 # ---------------------------------------------------------------------------
 # AC03 — default steps=8
 # ---------------------------------------------------------------------------
@@ -228,6 +236,7 @@ def _build_mock_mm() -> MagicMock:
     mm = MagicMock()
     mm.load_unet.return_value = MagicMock(name="model")
     mm.load_vae.return_value = MagicMock(name="vae")
+    mm.load_ltxv_audio_vae.return_value = MagicMock(name="audio_vae")
     mm.load_ltxav_text_encoder.return_value = MagicMock(name="clip")
     mm.load_latent_upscale_model.return_value = MagicMock(name="upscale_model")
     return mm
@@ -236,14 +245,24 @@ def _build_mock_mm() -> MagicMock:
 _RUNTIME_PATCH = "comfy_diffusion.runtime.check_runtime"
 _MM_PATCH = "comfy_diffusion.models.ModelManager"
 _ENCODE_PATCH = "comfy_diffusion.conditioning.encode_prompt"
+_LTXV_COND_PATCH = "comfy_diffusion.conditioning.ltxv_conditioning"
+_CROP_GUIDES_PATCH = "comfy_diffusion.conditioning.ltxv_crop_guides"
 _EMPTY_LATENT_PATCH = "comfy_diffusion.latent.ltxv_empty_latent_video"
 _UPSAMPLE_PATCH = "comfy_diffusion.latent.ltxv_latent_upsample"
-_SAMPLE_PATCH = "comfy_diffusion.sampling.sample"
+_SAMPLE_CUSTOM_PATCH = "comfy_diffusion.sampling.sample_custom"
+_CFG_GUIDER_PATCH = "comfy_diffusion.sampling.cfg_guider"
+_MANUAL_SIGMAS_PATCH = "comfy_diffusion.sampling.manual_sigmas"
+_GET_SAMPLER_PATCH = "comfy_diffusion.sampling.get_sampler"
+_RANDOM_NOISE_PATCH = "comfy_diffusion.sampling.random_noise"
 _VAE_DECODE_PATCH = "comfy_diffusion.vae.vae_decode_batch_tiled"
 _IMG_TO_TENSOR_PATCH = "comfy_diffusion.image.image_to_tensor"
 _LOAD_IMAGE_PATCH = "comfy_diffusion.image.load_image"
 _LTXV_PREPROCESS_PATCH = "comfy_diffusion.image.ltxv_preprocess"
 _IMG_TO_VIDEO_PATCH = "comfy_diffusion.video.ltxv_img_to_video_inplace"
+_EMPTY_AUDIO_PATCH = "comfy_diffusion.audio.ltxv_empty_latent_audio"
+_CONCAT_AV_PATCH = "comfy_diffusion.audio.ltxv_concat_av_latent"
+_SEPARATE_AV_PATCH = "comfy_diffusion.audio.ltxv_separate_av_latent"
+_AUDIO_DECODE_PATCH = "comfy_diffusion.audio.ltxv_audio_vae_decode"
 
 
 def _make_fake_image() -> MagicMock:
@@ -253,78 +272,122 @@ def _make_fake_image() -> MagicMock:
     return img
 
 
-def test_run_end_to_end_with_mocks(tmp_path: Path) -> None:
-    """AC05: full pipeline runs on CPU with all heavy dependencies mocked."""
+def _run_with_mocks(
+    tmp_path: Path,
+    image: Any,
+    *,
+    call_order: list[str] | None = None,
+    fake_frames: list[Any] | None = None,
+    fake_audio: Any = None,
+) -> dict[str, Any]:
+    """Execute pipeline.run() with all heavy dependencies mocked."""
     from comfy_diffusion.pipelines.video.ltx.ltx2 import i2v_distilled as pipeline_mod
 
-    fake_frames = [MagicMock(name="frame")]
+    if fake_frames is None:
+        fake_frames = [MagicMock(name="frame")]
+    if fake_audio is None:
+        fake_audio = MagicMock(name="audio")
+
+    fake_video_out = MagicMock(name="video_out")
+    fake_audio_out = MagicMock(name="audio_out")
+    fake_video_up = MagicMock(name="video_up")
+    fake_av_latent = MagicMock(name="av_latent")
     mm = _build_mock_mm()
+
+    def _track(name: str, rv: Any) -> Any:
+        if call_order is not None:
+            call_order.append(name)
+        return rv
 
     with (
         patch(_RUNTIME_PATCH, return_value={"python_version": "3.12.0"}),
         patch(_MM_PATCH, return_value=mm),
         patch(_ENCODE_PATCH, return_value=(MagicMock(), MagicMock())),
+        patch(_LTXV_COND_PATCH, side_effect=lambda p, n, **kw: (
+            _track("ltxv_conditioning", (p, n))
+        )),
         patch(_EMPTY_LATENT_PATCH, return_value={"samples": MagicMock()}),
-        patch(_UPSAMPLE_PATCH, return_value={"samples": MagicMock()}),
-        patch(_SAMPLE_PATCH, return_value={"samples": MagicMock()}),
-        patch(_VAE_DECODE_PATCH, return_value=fake_frames),
         patch(_IMG_TO_TENSOR_PATCH, return_value=MagicMock()),
         patch(_LTXV_PREPROCESS_PATCH, return_value=MagicMock()),
-        patch(_IMG_TO_VIDEO_PATCH, return_value={"samples": MagicMock()}),
+        patch(_IMG_TO_VIDEO_PATCH, side_effect=lambda vae, img, lat, **kw: (
+            _track("ltxv_img_to_video_inplace", {"samples": MagicMock()})
+        )),
+        patch(_CROP_GUIDES_PATCH, side_effect=lambda p, n, lat: (
+            _track("ltxv_crop_guides", (p, n, lat))
+        )),
+        patch(_EMPTY_AUDIO_PATCH, side_effect=lambda av, **kw: (
+            _track("ltxv_empty_latent_audio", MagicMock())
+        )),
+        patch(_CONCAT_AV_PATCH, side_effect=lambda vl, al: (
+            _track("ltxv_concat_av_latent", fake_av_latent)
+        )),
+        patch(_CFG_GUIDER_PATCH, return_value=MagicMock()),
+        patch(_RANDOM_NOISE_PATCH, return_value=MagicMock()),
+        patch(_MANUAL_SIGMAS_PATCH, return_value=MagicMock()),
+        patch(_GET_SAMPLER_PATCH, return_value=MagicMock()),
+        patch(_SAMPLE_CUSTOM_PATCH, side_effect=lambda n, g, s, sig, lat: (
+            _track("sample_custom", (MagicMock(), MagicMock()))
+        )),
+        patch(_SEPARATE_AV_PATCH, side_effect=lambda d: (
+            _track("ltxv_separate_av_latent", (fake_video_out, fake_audio_out))
+        )),
+        patch(_UPSAMPLE_PATCH, side_effect=lambda s, **kw: (
+            _track("ltxv_latent_upsample", fake_video_up)
+        )),
+        patch(_VAE_DECODE_PATCH, side_effect=lambda v, s: (
+            _track("vae_decode_batch_tiled", fake_frames)
+        )),
+        patch(_AUDIO_DECODE_PATCH, return_value=fake_audio),
     ):
-        result = pipeline_mod.run(
+        return pipeline_mod.run(
             models_dir=tmp_path,
-            image=_make_fake_image(),
+            image=image,
             prompt="a cat jumps over a fence",
         )
 
-    assert result is fake_frames
+
+def test_run_end_to_end_with_mocks(tmp_path: Path) -> None:
+    """AC05: full pipeline runs on CPU with all heavy dependencies mocked."""
+    fake_frames = [MagicMock(name="frame")]
+    fake_audio = MagicMock(name="audio")
+    result = _run_with_mocks(tmp_path, _make_fake_image(),
+                             fake_frames=fake_frames, fake_audio=fake_audio)
+
+    assert isinstance(result, dict)
+    assert result["frames"] is fake_frames
+    assert result["audio"] is fake_audio
 
 
 def test_run_calls_pipeline_steps_in_order(tmp_path: Path) -> None:
-    """Pipeline executes: encode → empty_latent → img_to_video → sample → upsample → vae_decode."""
-    from comfy_diffusion.pipelines.video.ltx.ltx2 import i2v_distilled as pipeline_mod
-
+    """Pipeline executes AV chain in the correct order."""
     call_order: list[str] = []
-    fake_samples = {"samples": MagicMock(name="sampled")}
-    fake_upsampled = {"samples": MagicMock(name="upsampled")}
-    fake_frames = [MagicMock()]
-    mm = _build_mock_mm()
+    result = _run_with_mocks(tmp_path, _make_fake_image(), call_order=call_order)
 
-    def fake_sample(**kwargs: Any) -> dict[str, Any]:
-        call_order.append("sample")
-        return fake_samples
-
-    def fake_upsample(samples: Any, *, upscale_model: Any, vae: Any) -> dict[str, Any]:
-        call_order.append("ltxv_latent_upsample")
-        return fake_upsampled
-
-    def fake_vae_decode(vae: Any, samples: Any) -> list[Any]:
-        call_order.append("vae_decode_batch_tiled")
-        return fake_frames
-
-    with (
-        patch(_RUNTIME_PATCH, return_value={"python_version": "3.12.0"}),
-        patch(_MM_PATCH, return_value=mm),
-        patch(_ENCODE_PATCH, return_value=(MagicMock(), MagicMock())),
-        patch(_EMPTY_LATENT_PATCH, return_value={"samples": MagicMock()}),
-        patch(_SAMPLE_PATCH, fake_sample),
-        patch(_UPSAMPLE_PATCH, fake_upsample),
-        patch(_VAE_DECODE_PATCH, fake_vae_decode),
-        patch(_IMG_TO_TENSOR_PATCH, return_value=MagicMock()),
-        patch(_LTXV_PREPROCESS_PATCH, return_value=MagicMock()),
-        patch(_IMG_TO_VIDEO_PATCH, return_value={"samples": MagicMock()}),
-    ):
-        result = pipeline_mod.run(
-            models_dir=tmp_path,
-            image=_make_fake_image(),
-            prompt="waves crashing on a beach",
-        )
-
-    assert result is fake_frames
-    assert call_order == ["sample", "ltxv_latent_upsample", "vae_decode_batch_tiled"], (
-        f"Expected sample → ltxv_latent_upsample → vae_decode_batch_tiled, got: {call_order}"
+    expected = [
+        "ltxv_conditioning",
+        "ltxv_img_to_video_inplace",
+        "ltxv_crop_guides",
+        "ltxv_empty_latent_audio",
+        "ltxv_concat_av_latent",
+        "sample_custom",
+        "ltxv_separate_av_latent",
+        "ltxv_latent_upsample",
+        "vae_decode_batch_tiled",
+    ]
+    assert call_order == expected, (
+        f"Expected {expected}, got {call_order}"
     )
+    assert isinstance(result, dict)
+
+
+def test_run_returns_dict_with_frames_and_audio(tmp_path: Path) -> None:
+    fake_frames = [MagicMock(name="frame")]
+    fake_audio = MagicMock(name="audio")
+    result = _run_with_mocks(tmp_path, _make_fake_image(),
+                             fake_frames=fake_frames, fake_audio=fake_audio)
+    assert isinstance(result, dict)
+    assert result["frames"] is fake_frames
+    assert result["audio"] is fake_audio
 
 
 def test_run_uses_load_ltxav_text_encoder_not_load_clip(tmp_path: Path) -> None:
@@ -337,18 +400,61 @@ def test_run_uses_load_ltxav_text_encoder_not_load_clip(tmp_path: Path) -> None:
         patch(_RUNTIME_PATCH, return_value={"python_version": "3.12.0"}),
         patch(_MM_PATCH, return_value=mm),
         patch(_ENCODE_PATCH, return_value=(MagicMock(), MagicMock())),
+        patch(_LTXV_COND_PATCH, side_effect=lambda p, n, **kw: (p, n)),
         patch(_EMPTY_LATENT_PATCH, return_value={"samples": MagicMock()}),
-        patch(_SAMPLE_PATCH, return_value={"samples": MagicMock()}),
-        patch(_UPSAMPLE_PATCH, return_value={"samples": MagicMock()}),
-        patch(_VAE_DECODE_PATCH, return_value=[]),
         patch(_IMG_TO_TENSOR_PATCH, return_value=MagicMock()),
         patch(_LTXV_PREPROCESS_PATCH, return_value=MagicMock()),
         patch(_IMG_TO_VIDEO_PATCH, return_value={"samples": MagicMock()}),
+        patch(_CROP_GUIDES_PATCH, side_effect=lambda p, n, lat: (p, n, lat)),
+        patch(_EMPTY_AUDIO_PATCH, return_value=MagicMock()),
+        patch(_CONCAT_AV_PATCH, return_value=MagicMock()),
+        patch(_CFG_GUIDER_PATCH, return_value=MagicMock()),
+        patch(_RANDOM_NOISE_PATCH, return_value=MagicMock()),
+        patch(_MANUAL_SIGMAS_PATCH, return_value=MagicMock()),
+        patch(_GET_SAMPLER_PATCH, return_value=MagicMock()),
+        patch(_SAMPLE_CUSTOM_PATCH, return_value=(MagicMock(), MagicMock())),
+        patch(_SEPARATE_AV_PATCH, return_value=(MagicMock(), MagicMock())),
+        patch(_UPSAMPLE_PATCH, return_value=MagicMock()),
+        patch(_VAE_DECODE_PATCH, return_value=[]),
+        patch(_AUDIO_DECODE_PATCH, return_value=MagicMock()),
     ):
         pipeline_mod.run(models_dir=tmp_path, image=_make_fake_image(), prompt="test")
 
     mm.load_ltxav_text_encoder.assert_called_once()
     mm.load_clip.assert_not_called()
+
+
+def test_run_uses_load_latent_upscale_model(tmp_path: Path) -> None:
+    """Upscale model must be loaded via load_latent_upscale_model."""
+    from comfy_diffusion.pipelines.video.ltx.ltx2 import i2v_distilled as pipeline_mod
+
+    mm = _build_mock_mm()
+
+    with (
+        patch(_RUNTIME_PATCH, return_value={"python_version": "3.12.0"}),
+        patch(_MM_PATCH, return_value=mm),
+        patch(_ENCODE_PATCH, return_value=(MagicMock(), MagicMock())),
+        patch(_LTXV_COND_PATCH, side_effect=lambda p, n, **kw: (p, n)),
+        patch(_EMPTY_LATENT_PATCH, return_value={"samples": MagicMock()}),
+        patch(_IMG_TO_TENSOR_PATCH, return_value=MagicMock()),
+        patch(_LTXV_PREPROCESS_PATCH, return_value=MagicMock()),
+        patch(_IMG_TO_VIDEO_PATCH, return_value={"samples": MagicMock()}),
+        patch(_CROP_GUIDES_PATCH, side_effect=lambda p, n, lat: (p, n, lat)),
+        patch(_EMPTY_AUDIO_PATCH, return_value=MagicMock()),
+        patch(_CONCAT_AV_PATCH, return_value=MagicMock()),
+        patch(_CFG_GUIDER_PATCH, return_value=MagicMock()),
+        patch(_RANDOM_NOISE_PATCH, return_value=MagicMock()),
+        patch(_MANUAL_SIGMAS_PATCH, return_value=MagicMock()),
+        patch(_GET_SAMPLER_PATCH, return_value=MagicMock()),
+        patch(_SAMPLE_CUSTOM_PATCH, return_value=(MagicMock(), MagicMock())),
+        patch(_SEPARATE_AV_PATCH, return_value=(MagicMock(), MagicMock())),
+        patch(_UPSAMPLE_PATCH, return_value=MagicMock()),
+        patch(_VAE_DECODE_PATCH, return_value=[]),
+        patch(_AUDIO_DECODE_PATCH, return_value=MagicMock()),
+    ):
+        pipeline_mod.run(models_dir=tmp_path, image=_make_fake_image(), prompt="test")
+
+    mm.load_latent_upscale_model.assert_called_once()
 
 
 def test_run_does_not_call_apply_lora(tmp_path: Path) -> None:
@@ -361,13 +467,23 @@ def test_run_does_not_call_apply_lora(tmp_path: Path) -> None:
         patch(_RUNTIME_PATCH, return_value={"python_version": "3.12.0"}),
         patch(_MM_PATCH, return_value=mm),
         patch(_ENCODE_PATCH, return_value=(MagicMock(), MagicMock())),
+        patch(_LTXV_COND_PATCH, side_effect=lambda p, n, **kw: (p, n)),
         patch(_EMPTY_LATENT_PATCH, return_value={"samples": MagicMock()}),
-        patch(_SAMPLE_PATCH, return_value={"samples": MagicMock()}),
-        patch(_UPSAMPLE_PATCH, return_value={"samples": MagicMock()}),
-        patch(_VAE_DECODE_PATCH, return_value=[]),
         patch(_IMG_TO_TENSOR_PATCH, return_value=MagicMock()),
         patch(_LTXV_PREPROCESS_PATCH, return_value=MagicMock()),
         patch(_IMG_TO_VIDEO_PATCH, return_value={"samples": MagicMock()}),
+        patch(_CROP_GUIDES_PATCH, side_effect=lambda p, n, lat: (p, n, lat)),
+        patch(_EMPTY_AUDIO_PATCH, return_value=MagicMock()),
+        patch(_CONCAT_AV_PATCH, return_value=MagicMock()),
+        patch(_CFG_GUIDER_PATCH, return_value=MagicMock()),
+        patch(_RANDOM_NOISE_PATCH, return_value=MagicMock()),
+        patch(_MANUAL_SIGMAS_PATCH, return_value=MagicMock()),
+        patch(_GET_SAMPLER_PATCH, return_value=MagicMock()),
+        patch(_SAMPLE_CUSTOM_PATCH, return_value=(MagicMock(), MagicMock())),
+        patch(_SEPARATE_AV_PATCH, return_value=(MagicMock(), MagicMock())),
+        patch(_UPSAMPLE_PATCH, return_value=MagicMock()),
+        patch(_VAE_DECODE_PATCH, return_value=[]),
+        patch(_AUDIO_DECODE_PATCH, return_value=MagicMock()),
         patch("comfy_diffusion.lora.apply_lora") as mock_apply_lora,
     ):
         pipeline_mod.run(models_dir=tmp_path, image=_make_fake_image(), prompt="test")
@@ -402,13 +518,23 @@ def test_run_accepts_path_image_via_load_image(tmp_path: Path) -> None:
         patch(_RUNTIME_PATCH, return_value={"python_version": "3.12.0"}),
         patch(_MM_PATCH, return_value=mm),
         patch(_ENCODE_PATCH, return_value=(MagicMock(), MagicMock())),
+        patch(_LTXV_COND_PATCH, side_effect=lambda p, n, **kw: (p, n)),
         patch(_EMPTY_LATENT_PATCH, return_value={"samples": MagicMock()}),
-        patch(_SAMPLE_PATCH, return_value={"samples": MagicMock()}),
-        patch(_UPSAMPLE_PATCH, return_value={"samples": MagicMock()}),
-        patch(_VAE_DECODE_PATCH, return_value=[]),
         patch(_LOAD_IMAGE_PATCH, return_value=(fake_tensor, None)) as mock_load_image,
         patch(_LTXV_PREPROCESS_PATCH, return_value=MagicMock()),
         patch(_IMG_TO_VIDEO_PATCH, return_value={"samples": MagicMock()}),
+        patch(_CROP_GUIDES_PATCH, side_effect=lambda p, n, lat: (p, n, lat)),
+        patch(_EMPTY_AUDIO_PATCH, return_value=MagicMock()),
+        patch(_CONCAT_AV_PATCH, return_value=MagicMock()),
+        patch(_CFG_GUIDER_PATCH, return_value=MagicMock()),
+        patch(_RANDOM_NOISE_PATCH, return_value=MagicMock()),
+        patch(_MANUAL_SIGMAS_PATCH, return_value=MagicMock()),
+        patch(_GET_SAMPLER_PATCH, return_value=MagicMock()),
+        patch(_SAMPLE_CUSTOM_PATCH, return_value=(MagicMock(), MagicMock())),
+        patch(_SEPARATE_AV_PATCH, return_value=(MagicMock(), MagicMock())),
+        patch(_UPSAMPLE_PATCH, return_value=MagicMock()),
+        patch(_VAE_DECODE_PATCH, return_value=[]),
+        patch(_AUDIO_DECODE_PATCH, return_value=MagicMock()),
     ):
         pipeline_mod.run(
             models_dir=tmp_path,
@@ -417,6 +543,56 @@ def test_run_accepts_path_image_via_load_image(tmp_path: Path) -> None:
         )
 
     mock_load_image.assert_called_once_with("/some/image.png")
+
+
+def test_run_calls_ltxv_conditioning(tmp_path: Path) -> None:
+    call_order: list[str] = []
+    _run_with_mocks(tmp_path, _make_fake_image(), call_order=call_order)
+    assert "ltxv_conditioning" in call_order
+
+
+def test_run_calls_ltxv_crop_guides(tmp_path: Path) -> None:
+    call_order: list[str] = []
+    _run_with_mocks(tmp_path, _make_fake_image(), call_order=call_order)
+    assert "ltxv_crop_guides" in call_order
+
+
+def test_run_calls_ltxv_separate_av_latent(tmp_path: Path) -> None:
+    call_order: list[str] = []
+    _run_with_mocks(tmp_path, _make_fake_image(), call_order=call_order)
+    assert "ltxv_separate_av_latent" in call_order
+
+
+def test_run_uses_load_ltxv_audio_vae(tmp_path: Path) -> None:
+    from comfy_diffusion.pipelines.video.ltx.ltx2 import i2v_distilled as pipeline_mod
+
+    mm = _build_mock_mm()
+
+    with (
+        patch(_RUNTIME_PATCH, return_value={"python_version": "3.12.0"}),
+        patch(_MM_PATCH, return_value=mm),
+        patch(_ENCODE_PATCH, return_value=(MagicMock(), MagicMock())),
+        patch(_LTXV_COND_PATCH, side_effect=lambda p, n, **kw: (p, n)),
+        patch(_EMPTY_LATENT_PATCH, return_value={"samples": MagicMock()}),
+        patch(_IMG_TO_TENSOR_PATCH, return_value=MagicMock()),
+        patch(_LTXV_PREPROCESS_PATCH, return_value=MagicMock()),
+        patch(_IMG_TO_VIDEO_PATCH, return_value={"samples": MagicMock()}),
+        patch(_CROP_GUIDES_PATCH, side_effect=lambda p, n, lat: (p, n, lat)),
+        patch(_EMPTY_AUDIO_PATCH, return_value=MagicMock()),
+        patch(_CONCAT_AV_PATCH, return_value=MagicMock()),
+        patch(_CFG_GUIDER_PATCH, return_value=MagicMock()),
+        patch(_RANDOM_NOISE_PATCH, return_value=MagicMock()),
+        patch(_MANUAL_SIGMAS_PATCH, return_value=MagicMock()),
+        patch(_GET_SAMPLER_PATCH, return_value=MagicMock()),
+        patch(_SAMPLE_CUSTOM_PATCH, return_value=(MagicMock(), MagicMock())),
+        patch(_SEPARATE_AV_PATCH, return_value=(MagicMock(), MagicMock())),
+        patch(_UPSAMPLE_PATCH, return_value=MagicMock()),
+        patch(_VAE_DECODE_PATCH, return_value=[]),
+        patch(_AUDIO_DECODE_PATCH, return_value=MagicMock()),
+    ):
+        pipeline_mod.run(models_dir=tmp_path, image=_make_fake_image(), prompt="test")
+
+    mm.load_ltxv_audio_vae.assert_called_once()
 
 
 def test_download_models_idempotent_all_present(tmp_path: Path) -> None:
