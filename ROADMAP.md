@@ -49,7 +49,7 @@ Implement an automatic model download module (`comfy_diffusion/downloader.py`) t
 
 ---
 
-### Phase 2 — Expose LTX Core Nodes
+### Phase 2 — Expose LTX Core Nodes [DONE]
 
 Expose the three nodes that block all ltx2 and ltx3 pipelines.
 
@@ -63,14 +63,14 @@ Expose the three nodes that block all ltx2 and ltx3 pipelines.
 
 ### Phase 3 — LTX2 / LTX3 Base Pipelines
 
-- `ltx2/video_ltx2_t2v` — Text to Video (LTX 2.0)
+- `ltx2/video_ltx2_t2v` — Text to Video (LTX 2.0) ✅ it_000024
 - `ltx2/video_ltx2_t2v_distilled` — Text to Video distilled
 - `ltx2/video_ltx2_i2v` — Image to Video
 - `ltx2/video_ltx2_i2v_distilled` — Image to Video distilled
 - `ltx2/video_ltx2_i2v_lora` — Image to Video with LoRA
 - `ltx3/video_ltx2_3_t2v` — Text to Video (LTX 2.3)
 - `ltx3/video_ltx2_3_i2v` — Image to Video (LTX 2.3)
-- `ltx3/video_ltx2_3_flf2v` — First-Last-Frame to Video
+- `ltx3/video_ltx2_3_flf2v` — First-Last-Frame to Video ⚠️ deferred: requires Phase 4 nodes (LTXVAddGuide, LTXVCropGuides, LTXVConditioning, LTXVConcatAVLatent)
 
 ---
 

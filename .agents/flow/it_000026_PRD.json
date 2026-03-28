@@ -1,0 +1,245 @@
+{
+  "goals": [
+    "Implement 7 remaining Phase 3 pipeline files (one file per workflow)",
+    "Each exposes `manifest()` and `run()` following the `ltx2_t2v.py` pattern",
+    "`manifest()` is the single source of truth for model file paths used in `run()`",
+    "CPU tests pass in CI (mocked weights); GPU smoke test documented as a manual step",
+    "Pipelines replicate their corresponding workflow JSONs in"
+  ],
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "`ltx2_t2v_distilled` pipeline",
+      "description": "As a Python developer, I want to call `ltx2_t2v_distilled.run(models_dir, prompt)` so that I generate a video using the LTX-Video 2 distilled model with the Gemma 3 text encoder and spatial upscaler, matching `video_ltx2_t2v_distilled.json`. Reference workflow: `comfyui_official_workflows/video/ltx/ltx2/video_ltx2_t2v_distilled.json` Models required: - `diffusion_models/ltx-2-19b-distilled.safetensors` (HF: `Lightricks/LTX-Video`) - `text_encoders/gemma_3_12B_it_fp4_mixed.safetensors` (HF: `Lightricks/LTX-Video`) - `upscale_models/ltx-2-spatial-upscaler-x2-1.0.safetensors` (HF: `Lightricks/LTX-Video`) Key differences from `ltx2_t2v`: - UNet loaded via `mm.load_unet()` with the distilled checkpoint - Text encoder loaded via `mm.load_ltxav_text_encoder()` (Gemma 3 instead of T5) - Spatial upscale step via `ltxv_latent_upsample()` after sampling, before VAE decode - Default `steps=8` (distilled model requires fewer steps)",
+      "acceptanceCriteria": [
+        {
+          "id": "US-001-AC01",
+          "text": "`manifest()` returns 3 `HFModelEntry` items with correct `dest` paths"
+        },
+        {
+          "id": "US-001-AC02",
+          "text": "`run()` accepts `models_dir`, `prompt`, `negative_prompt`, `width`, `height`,"
+        },
+        {
+          "id": "US-001-AC03",
+          "text": "Pipeline calls `ltxv_latent_upsample()` after sampling and before `vae_decode_batch_tiled()`"
+        },
+        {
+          "id": "US-001-AC04",
+          "text": "CPU test passes with mocked `ModelManager` and no GPU"
+        },
+        {
+          "id": "US-001-AC05",
+          "text": "Typecheck / lint passes"
+        }
+      ]
+    },
+    {
+      "id": "US-002",
+      "title": "`ltx2_i2v` pipeline",
+      "description": "As a Python developer, I want to call `ltx2_i2v.run(models_dir, image, prompt)` so that I generate a video from an input image using the LTX-Video 2 dev model, matching `video_ltx2_i2v.json`. Reference workflow: `comfyui_official_workflows/video/ltx/ltx2/video_ltx2_i2v.json` Models required: - `diffusion_models/ltx-2-19b-dev-fp8.safetensors` (HF: `Lightricks/LTX-Video`) - `text_encoders/gemma_3_12B_it_fp4_mixed.safetensors` (HF: `Lightricks/LTX-Video`) - `loras/ltx-2-19b-distilled-lora-384.safetensors` (HF: `Lightricks/LTX-Video`) - `upscale_models/ltx-2-spatial-upscaler-x2-1.0.safetensors` (HF: `Lightricks/LTX-Video`) Key differences from `ltx2_t2v`: - `run()` accepts an `image` parameter (`str | Path | PIL.Image`) - Image is preprocessed via `ltxv_preprocess()` before being injected - `ltxv_img_to_video_inplace(vae, image_tensor, latent)` injects the frame into the latent - LoRA applied via `apply_lora()` after model load - Spatial upscale step via `ltxv_latent_upsample()` after sampling",
+      "acceptanceCriteria": [
+        {
+          "id": "US-002-AC01",
+          "text": "`manifest()` returns 4 `HFModelEntry` items"
+        },
+        {
+          "id": "US-002-AC02",
+          "text": "`run()` accepts `image` (path or PIL) in addition to all t2v parameters"
+        },
+        {
+          "id": "US-002-AC03",
+          "text": "Image is preprocessed with `ltxv_preprocess()` before `ltxv_img_to_video_inplace()`"
+        },
+        {
+          "id": "US-002-AC04",
+          "text": "LoRA (`ltx-2-19b-distilled-lora-384`) is applied via `apply_lora()`"
+        },
+        {
+          "id": "US-002-AC05",
+          "text": "CPU test passes with mocked inputs"
+        },
+        {
+          "id": "US-002-AC06",
+          "text": "Typecheck / lint passes"
+        }
+      ]
+    },
+    {
+      "id": "US-003",
+      "title": "`ltx2_i2v_distilled` pipeline",
+      "description": "As a Python developer, I want to call `ltx2_i2v_distilled.run(models_dir, image, prompt)` so that I generate a video from an input image using the distilled LTX-Video 2 model, matching `video_ltx2_i2v_distilled.json`. Reference workflow: `comfyui_official_workflows/video/ltx/ltx2/video_ltx2_i2v_distilled.json` Models required: - `diffusion_models/ltx-2-19b-distilled.safetensors` (HF: `Lightricks/LTX-Video`) - `text_encoders/gemma_3_12B_it_fp4_mixed.safetensors` (HF: `Lightricks/LTX-Video`) - `upscale_models/ltx-2-spatial-upscaler-x2-1.0.safetensors` (HF: `Lightricks/LTX-Video`) Key differences from `ltx2_i2v`: Uses distilled checkpoint; no LoRA in base workflow.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-003-AC01",
+          "text": "`manifest()` returns 3 `HFModelEntry` items"
+        },
+        {
+          "id": "US-003-AC02",
+          "text": "`run()` mirrors `ltx2_i2v.run()` signature (same parameters) but uses distilled checkpoint"
+        },
+        {
+          "id": "US-003-AC03",
+          "text": "Default `steps=8`"
+        },
+        {
+          "id": "US-003-AC04",
+          "text": "No `apply_lora()` call (no LoRA in this workflow)"
+        },
+        {
+          "id": "US-003-AC05",
+          "text": "CPU test passes with mocked inputs"
+        },
+        {
+          "id": "US-003-AC06",
+          "text": "Typecheck / lint passes"
+        }
+      ]
+    },
+    {
+      "id": "US-004",
+      "title": "`ltx2_i2v_lora` pipeline",
+      "description": "As a Python developer, I want to call `ltx2_i2v_lora.run(models_dir, image, prompt, lora_path)` so that I generate a video from an image with an additional style LoRA applied, matching `video_ltx2_i2v_lora.json`. Reference workflow: `comfyui_official_workflows/video/ltx/ltx2/video_ltx2_i2v_lora.json` Models required (base): - `diffusion_models/ltx-2-19b-dev.safetensors` (HF: `Lightricks/LTX-Video`) - `text_encoders/gemma_3_12B_it_fp4_mixed.safetensors` (HF: `Lightricks/LTX-Video`) - `loras/ltx-2-19b-distilled-lora-384.safetensors` (HF: `Lightricks/LTX-Video`) - `upscale_models/ltx-2-spatial-upscaler-x2-1.0.safetensors` (HF: `Lightricks/LTX-Video`) - Style LoRA: caller-supplied path (not in `manifest()` — user provides their own) Key differences from `ltx2_i2v`: - No `ResizeImageMaskNode` in workflow; image loaded directly without resize preprocessing - Two LoRAs stacked: base distilled LoRA + caller-supplied style LoRA - `run()` accepts `lora_path` (path to style LoRA) and `lora_strength` (default `1.0`) - Default resolution is square (1280×1280) per reference workflow",
+      "acceptanceCriteria": [
+        {
+          "id": "US-004-AC01",
+          "text": "`manifest()` returns 4 `HFModelEntry` items (base models only; style LoRA excluded)"
+        },
+        {
+          "id": "US-004-AC02",
+          "text": "`run()` accepts `lora_path: str | Path` and `lora_strength: float = 1.0`"
+        },
+        {
+          "id": "US-004-AC03",
+          "text": "Both LoRAs are applied via `apply_lora()` (stacked, base LoRA first)"
+        },
+        {
+          "id": "US-004-AC04",
+          "text": "Default `width=1280`, `height=1280` (square)"
+        },
+        {
+          "id": "US-004-AC05",
+          "text": "CPU test passes with mocked inputs"
+        },
+        {
+          "id": "US-004-AC06",
+          "text": "Typecheck / lint passes"
+        }
+      ]
+    },
+    {
+      "id": "US-005",
+      "title": "`ltx3_t2v` pipeline",
+      "description": "As a Python developer, I want to call `ltx3_t2v.run(models_dir, prompt)` so that I generate a video using the LTX-Video 2.3 model (22B distilled), matching `video_ltx2_3_t2v.json`. Reference workflow: `comfyui_official_workflows/video/ltx/ltx3/video_ltx2_3_t2v.json` Models required: - `diffusion_models/ltx-2.3-22b-distilled-fp8.safetensors` (HF: `Lightricks/LTX-Video`) - `text_encoders/gemma_3_12B_it_fp4_mixed.safetensors` (HF: `Lightricks/LTX-Video`) - `upscale_models/ltx-2-spatial-upscaler-x2-1.0.safetensors` (HF: `Lightricks/LTX-Video`) Key differences from `ltx2_t2v`: - Uses 22B distilled LTX 2.3 checkpoint - Gemma 3 text encoder via `load_ltxav_text_encoder()` - Spatial upscale step after sampling via `ltxv_latent_upsample()` - Default `steps=8` (distilled)",
+      "acceptanceCriteria": [
+        {
+          "id": "US-005-AC01",
+          "text": "`manifest()` returns 3 `HFModelEntry` items"
+        },
+        {
+          "id": "US-005-AC02",
+          "text": "`run()` matches same parameter signature as `ltx2_t2v_distilled.run()`"
+        },
+        {
+          "id": "US-005-AC03",
+          "text": "CPU test passes with mocked inputs"
+        },
+        {
+          "id": "US-005-AC04",
+          "text": "Typecheck / lint passes"
+        }
+      ]
+    },
+    {
+      "id": "US-006",
+      "title": "`ltx3_i2v` pipeline",
+      "description": "As a Python developer, I want to call `ltx3_i2v.run(models_dir, image, prompt)` so that I generate a video from an image using the LTX-Video 2.3 model, matching `video_ltx2_3_i2v.json`. Reference workflow: `comfyui_official_workflows/video/ltx/ltx3/video_ltx2_3_i2v.json` Models required: Same 3 models as `ltx3_t2v`. Key differences from `ltx3_t2v`: - Accepts `image` parameter - Accepts `fps: int = 24` (explicit frame-rate parameter exposed by this workflow) - Image injected via `ltxv_img_to_video_inplace()`",
+      "acceptanceCriteria": [
+        {
+          "id": "US-006-AC01",
+          "text": "`manifest()` returns same 3 entries as `ltx3_t2v`"
+        },
+        {
+          "id": "US-006-AC02",
+          "text": "`run()` adds `image` and `fps` parameters vs `ltx3_t2v.run()`"
+        },
+        {
+          "id": "US-006-AC03",
+          "text": "`fps` is passed to `ltxv_empty_latent_video()` if supported, else documented as reserved"
+        },
+        {
+          "id": "US-006-AC04",
+          "text": "CPU test passes with mocked inputs"
+        },
+        {
+          "id": "US-006-AC05",
+          "text": "Typecheck / lint passes"
+        }
+      ]
+    },
+    {
+      "id": "US-007",
+      "title": "CPU tests for all pipelines",
+      "description": "As a CI system, I want all 6 new pipeline files to have CPU-only pytest tests so that the test suite passes without a GPU on every commit.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-007-AC01",
+          "text": "Each pipeline has at least one test in `tests/` that:"
+        },
+        {
+          "id": "US-007-AC02",
+          "text": "`uv run pytest` passes on CI (CPU-only)"
+        },
+        {
+          "id": "US-007-AC03",
+          "text": "Typecheck / lint passes"
+        }
+      ]
+    },
+    {
+      "id": "US-009",
+      "title": "GPU smoke test documentation",
+      "description": "As a developer, I want each pipeline's docstring to include a manual GPU smoke test snippet so that I can verify real inference before merging.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-009-AC01",
+          "text": "Each pipeline's module docstring contains a \"Usage\" section with a runnable"
+        },
+        {
+          "id": "US-009-AC02",
+          "text": "The `run()` docstring lists all parameters with types and default values"
+        },
+        {
+          "id": "US-009-AC03",
+          "text": "A `SMOKE_TEST.md` (or section in existing docs) enumerates one GPU invocation"
+        }
+      ]
+    }
+  ],
+  "functionalRequirements": [
+    {
+      "id": "FR-1",
+      "description": "All pipeline files live under `comfy_diffusion/pipelines/` with snake_case names"
+    },
+    {
+      "id": "FR-2",
+      "description": "`manifest()` must be the single source of truth — `run()` derives all default"
+    },
+    {
+      "id": "FR-3",
+      "description": "All imports of `torch`, `comfy.*`, and `comfy_diffusion.*` heavy symbols inside"
+    },
+    {
+      "id": "FR-4",
+      "description": "`ltxv_empty_latent_video()` in `latent.py` must be extended to accept an optional"
+    },
+    {
+      "id": "FR-5",
+      "description": "`path` type annotations must use `str | Path` (not `str | os.PathLike`)."
+    },
+    {
+      "id": "FR-6",
+      "description": "All new pipeline files must be listed in `comfy_diffusion/pipelines/__init__.py`"
+    }
+  ]
+}
