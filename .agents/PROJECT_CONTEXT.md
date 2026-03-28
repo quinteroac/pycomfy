@@ -110,3 +110,11 @@
 - Idempotent: skips download if `vendor/ComfyUI` is already populated
 - Returns error dict (with `python_version`) on bootstrap failure; never raises
 - README documents `check_runtime()` as first call before any model loading
+
+### it_000024 — Manifest-Based Downloader & Reference Pipeline
+- `comfy_diffusion/downloader.py`: typed entry dataclasses (`HFModelEntry`, `CivitAIModelEntry`, `URLModelEntry`) + `download_models(manifest, *, models_dir, quiet)`
+- SHA256 integrity verification via stdlib `hashlib`; idempotent (skips existing files, re-downloads on hash mismatch)
+- `tqdm` progress for URL/CivitAI downloads; `huggingface_hub` native progress for HF downloads; all suppressed with `quiet=True`
+- **CivitAI design decision**: `civitai-py` library is NOT used. It targets the Generator API (cloud inference), not model file downloads. CivitAI downloads use the CivitAI REST API directly via `urllib.request` with `Authorization: Bearer {CIVITAI_API_KEY}`. This is the same mechanism the library uses internally, avoids an extra dependency, and allows tqdm progress.
+- `comfy_diffusion/pipelines/ltx2_t2v.py`: canonical pipeline pattern — exports `manifest() -> list[ModelEntry]` and `run(...) -> list[PIL.Image]`
+- `[downloader]` optional extra: `huggingface_hub>=0.20`, `tqdm>=4.67` (install with `pip install comfy-diffusion[downloader]`)

@@ -157,7 +157,11 @@ def run(
     from comfy_diffusion.sampling import sample
     from comfy_diffusion.vae import vae_decode_batch_tiled
 
-    check_runtime()
+    check_result = check_runtime()
+    if check_result.get("error"):
+        raise RuntimeError(
+            f"ComfyUI runtime not available: {check_result['error']}"
+        )
 
     models_dir = Path(models_dir)
     mm = ModelManager(models_dir)
