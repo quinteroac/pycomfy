@@ -16,6 +16,7 @@ filename is appended automatically.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
@@ -154,6 +155,37 @@ def download_models(
 # ---------------------------------------------------------------------------
 
 
+def _compute_sha256(path: Path) -> str:
+    """Return the lowercase hex SHA-256 digest of the file at *path*."""
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _verify_hash(path: Path, expected: str, *, fresh: bool) -> bool:
+    """Verify *path* against *expected* SHA-256 hex digest.
+
+    Returns ``True`` when the digest matches.  When the digest does not match:
+
+    - *fresh* ``True``  (just downloaded): deletes the file and raises
+      :class:`ValueError`.
+    - *fresh* ``False`` (already present): deletes the file and returns
+      ``False`` so the caller can re-download.
+    """
+    actual = _compute_sha256(path)
+    if actual == expected.lower():
+        return True
+    path.unlink(missing_ok=True)
+    if fresh:
+        raise ValueError(
+            f"SHA-256 mismatch for freshly downloaded {path.name}: "
+            f"expected {expected.lower()}, got {actual}"
+        )
+    return False
+
+
 def _resolve_dest(dest: str | Path, models_dir: Path | None, fallback_name: str) -> Path:
     """Return the absolute destination *file* path for an entry.
 
@@ -233,7 +265,9 @@ def _download_hf_entry(
     dest_path = _resolve_dest(entry.dest, models_dir, fallback_name)
 
     if dest_path.exists():
-        return  # idempotent — already present
+        if entry.sha256 is None or _verify_hash(dest_path, entry.sha256, fresh=False):
+            return  # present and hash matches (or no hash required)
+        # hash mismatch — file was deleted; fall through to re-download
 
     dest_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -276,6 +310,9 @@ def _download_hf_entry(
             huggingface_hub.enable_progress_bars()
 
     shutil.copy2(cached, dest_path)
+
+    if entry.sha256 is not None:
+        _verify_hash(dest_path, entry.sha256, fresh=True)
 
 
 def _download_civitai_entry(
@@ -346,7 +383,9 @@ def _download_civitai_entry(
     dest_path = _resolve_dest(entry.dest, models_dir, fallback_name)
 
     if dest_path.exists():
-        return  # idempotent — already present
+        if entry.sha256 is None or _verify_hash(dest_path, entry.sha256, fresh=False):
+            return  # present and hash matches (or no hash required)
+        # hash mismatch — file was deleted; fall through to re-download
 
     dest_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -364,6 +403,9 @@ def _download_civitai_entry(
             f"version_id={version_id}: {exc}"
         ) from exc
 
+    if entry.sha256 is not None:
+        _verify_hash(dest_path, entry.sha256, fresh=True)
+
 
 def _download_url_entry(
     entry: URLModelEntry,
@@ -377,7 +419,9 @@ def _download_url_entry(
     dest_path = _resolve_dest(entry.dest, models_dir, fallback_name)
 
     if dest_path.exists():
-        return  # idempotent — already present
+        if entry.sha256 is None or _verify_hash(dest_path, entry.sha256, fresh=False):
+            return  # present and hash matches (or no hash required)
+        # hash mismatch — file was deleted; fall through to re-download
 
     dest_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -390,3 +434,6 @@ def _download_url_entry(
             _stream_to_file(resp, dest_path, progress_label=dest_path.name, quiet=quiet)
     except urllib.error.URLError as exc:
         raise RuntimeError(f"Failed to download {entry.url}: {exc}") from exc
+
+    if entry.sha256 is not None:
+        _verify_hash(dest_path, entry.sha256, fresh=True)
