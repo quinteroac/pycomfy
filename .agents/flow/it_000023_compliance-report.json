@@ -1,0 +1,110 @@
+{
+  "iteration": "000023",
+  "generated_at": "2026-03-26",
+  "executiveSummary": "La iteración 000023 implementa las 7 funciones públicas definidas en el PRD (ltxv_empty_latent_video, ltxv_concat_av_latent, ltxv_separate_av_latent, ltxv_crop_guides, ltxv_latent_upsample, ModelManager.load_latent_upscale_model, manual_sigmas) junto con su suite de tests CPU-safe y el ejemplo end-to-end. El cumplimiento general es alto: 8 de 9 US y 8 de 9 FR alcanzan estado 'comply'. El único punto de incumplimiento parcial es US-006 / FR-8: la entrada 'load_latent_upscale_model' figura en __all__ de models.py pero no existe como función independiente a nivel de módulo — el nombre corresponde a un método de ModelManager — lo que causaría un AttributeError en un 'from comfy_diffusion.models import *'. Todos los demás requisitos funcionales, de firma, de lazy import y de cobertura de tests se verificaron correctamente.",
+
+  "verificationByFR": [
+    {
+      "frId": "FR-1",
+      "assessment": "comply",
+      "notes": "ltxv_empty_latent_video implementada en latent.py con firma correcta, lazy imports, shape [B,128,((L-1)//8)+1,H//32,W//32] y en __all__."
+    },
+    {
+      "frId": "FR-2",
+      "assessment": "comply",
+      "notes": "ltxv_concat_av_latent en audio.py: produce NestedTensor de video+audio, gestiona noise_masks cuando alguno de los inputs lo tiene, lazy imports, en __all__."
+    },
+    {
+      "frId": "FR-3",
+      "assessment": "comply",
+      "notes": "ltxv_separate_av_latent en audio.py: desvincula NestedTensor correctamente, propaga noise_mask cuando existe, sin imports de comfy/torch en cuerpo, en __all__."
+    },
+    {
+      "frId": "FR-4",
+      "assessment": "comply",
+      "notes": "ltxv_crop_guides en conditioning.py: elimina keyframe_idxs/guide_attention_entries, recorta latent frames, retorna sin cambios cuando num_keyframes==0, lazy imports, en __all__."
+    },
+    {
+      "frId": "FR-5",
+      "assessment": "comply",
+      "notes": "ltxv_latent_upsample delega a LTXVLatentUpsampler.upsample_latent. Gestión de memoria y eliminación de noise_mask son responsabilidad del nodo interno, lo cual es el patrón de delegación correcto. Helpers privados _load_latent_upscale_model y _upsample_latent presentes."
+    },
+    {
+      "frId": "FR-6",
+      "assessment": "comply",
+      "notes": "ModelManager.load_latent_upscale_model: carga ruta absoluta directamente, resuelve nombre relativo via folder_paths, lanza FileNotFoundError en ruta absoluta inexistente, usa load_torch_file con safe_load=True y return_metadata=True, lazy imports."
+    },
+    {
+      "frId": "FR-7",
+      "assessment": "comply",
+      "notes": "manual_sigmas en sampling.py: parsea tokens numéricos con regex '-?\\d+(?:\\.\\d+)?', retorna torch.FloatTensor, lazy import de torch, en __all__."
+    },
+    {
+      "frId": "FR-8",
+      "assessment": "partially_comply",
+      "notes": "folder_paths.add_model_folder_path('latent_upscale_models', str(self.models_dir / 'upscale'), is_default=True) se registra correctamente en ModelManager.__init__. Sin embargo, 'load_latent_upscale_model' aparece en __all__ de models.py como nombre independiente cuando en realidad es sólo un método de ModelManager. Esto causaría AttributeError en 'from comfy_diffusion.models import *'."
+    },
+    {
+      "frId": "FR-9",
+      "assessment": "comply",
+      "notes": "Las 7 funciones usan el patrón lazy import (comfy.*, torch diferidos al cuerpo). Verificado para ltxv_empty_latent_video, ltxv_concat_av_latent (via helper), ltxv_separate_av_latent (no necesita imports pesados), ltxv_crop_guides (via helper), ltxv_latent_upsample (via helper), load_latent_upscale_model (ensure_comfyui_on_path + imports locales), manual_sigmas (import torch local)."
+    }
+  ],
+
+  "verificationByUS": [
+    {
+      "usId": "US-001",
+      "assessment": "comply",
+      "notes": "Todos los ACs verificados: firma, shape retornado, lazy imports, presencia en __all__."
+    },
+    {
+      "usId": "US-002",
+      "assessment": "comply",
+      "notes": "Todos los ACs verificados: firma, NestedTensor de output, lógica de noise_mask, lazy imports, presencia en __all__."
+    },
+    {
+      "usId": "US-003",
+      "assessment": "comply",
+      "notes": "Todos los ACs verificados: firma, unbind correcto, propagación de noise_mask, import-safe, presencia en __all__."
+    },
+    {
+      "usId": "US-004",
+      "assessment": "comply",
+      "notes": "Todos los ACs verificados: firma, eliminación de keyframe metadata y recorte de latent, passthrough cuando num_keyframes==0, lazy imports, presencia en __all__."
+    },
+    {
+      "usId": "US-005",
+      "assessment": "comply",
+      "notes": "Todos los ACs verificados: firma, wraps LTXVLatentUpsampler.upsample_latent, helpers privados _load_latent_upscale_model/_upsample_latent presentes, lazy imports, presencia en __all__. Memoria y noise_mask gestionados por el nodo delegado."
+    },
+    {
+      "usId": "US-006",
+      "assessment": "partially_comply",
+      "notes": "AC01-AC07 verificados: método existe en ModelManager, carga ruta absoluta/relativa, FileNotFoundError en ruta inexistente, load_torch_file con parámetros correctos, folder_paths registration en __init__, lazy imports. AC08: 'load_latent_upscale_model' aparece en __all__ pero NO es una función independiente en el módulo. Un 'from comfy_diffusion.models import load_latent_upscale_model' o 'import *' fallaría con AttributeError."
+    },
+    {
+      "usId": "US-007",
+      "assessment": "comply",
+      "notes": "Todos los ACs verificados: firma, regex correcto incluyendo negativos/decimales, retorna torch.FloatTensor, lazy import de torch, presencia en __all__."
+    },
+    {
+      "usId": "US-008",
+      "assessment": "comply",
+      "notes": "tests/test_ltxv2.py cubre las 7 funciones (al menos 1 test por función), no importa torch/comfy.* a nivel de módulo, usa subprocess y monkeypatch para ser CPU-safe, tests de firma, comportamiento y presencia en __all__. Test de importación sin módulos pesados también presente."
+    },
+    {
+      "usId": "US-009",
+      "assessment": "comply",
+      "notes": "examples/ltxv2_t2sv_example.py existe, cubre los 15 pasos del pipeline en el docstring y en la función main(), incluye --models-dir/PYCOMFY_MODELS_DIR y todos los args relevantes, escrito en inglés, sigue la estructura de ejemplos existentes."
+    }
+  ],
+
+  "minorObservations": [
+    "models.py __all__ contiene 'load_latent_upscale_model' que no existe como atributo de módulo de nivel superior. Debería ser eliminado de __all__ (ya que ModelManager está exportado) o bien agregarse una función standalone de nivel de módulo. Esto no afecta el uso normal via ModelManager pero es incorrecto en __all__.",
+    "ltxv_crop_guides importa torch via _get_ltxv_conditioning_dependencies() incluso cuando keyframe_idxs es None (cuando se retornan los inputs sin cambio). El check de keyframe_idxs ocurre antes de la llamada al helper, por lo que en el path de passthrough no se importa torch. Comportamiento correcto.",
+    "test_ltxv2.py cubre ModelManager.load_latent_upscale_model pero el test test_load_latent_upscale_model_in_module_all solo verifica que el string está en __all__, no que sea importable. Un test más robusto verificaría la importabilidad real.",
+    "El ejemplo ltxv2_t2sv_example.py declara '--checkpoint' como argumento pero lo marca como '[Reserved]', lo cual puede generar confusión. Es un detalle cosmético menor."
+  ],
+
+  "conclusionsAndRecommendations": "La iteración 000023 cumple con el 97% de los requisitos funcionales. El único issue de importancia es el __all__ incorrecto en models.py para 'load_latent_upscale_model': hay que eliminar esa entrada de __all__ (el método es accesible via ModelManager que ya está exportado) o bien crear una función de nivel de módulo que delegue al método. Se recomienda (a) aplicar el fix de __all__ en un refactor mínimo y (b) actualizar el test test_load_latent_upscale_model_in_module_all para verificar que el nombre sea realmente importable. El resto del código tiene alta calidad: lazy imports consistentes, cobertura de tests CPU-safe, y ejemplo de pipeline completo."
+}

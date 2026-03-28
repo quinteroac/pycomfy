@@ -31,6 +31,7 @@ from comfy_diffusion.latent import (
     repeat_latent_batch,
     replace_video_latent_frames,
     set_latent_noise_mask,
+    trim_video_latent,
 )
 from comfy_diffusion.sampling import sample
 
@@ -72,6 +73,7 @@ def test_latent_module_exports_empty_latent_image() -> None:
         "set_latent_noise_mask",
         "inpaint_model_conditioning",
         "ltxv_latent_upsample",
+        "trim_video_latent",
     ]
 
 
@@ -1171,3 +1173,40 @@ def test_ltxv_latent_upsample_lazy_imports() -> None:
         "print('ok')"
     )
     assert result.stdout.strip() == "ok"
+
+
+def test_trim_video_latent_signature_matches_contract() -> None:
+    assert (
+        str(inspect.signature(trim_video_latent))
+        == "(latent: 'dict[str, Any]', n_latent_frames: 'int') -> 'dict[str, Any]'"
+    )
+
+
+def test_trim_video_latent_trims_time_dimension() -> None:
+    import torch
+
+    samples = torch.zeros(1, 16, 10, 8, 8)
+    latent = {"samples": samples}
+    result = trim_video_latent(latent, 3)
+    assert result["samples"].shape == (1, 16, 7, 8, 8)
+    assert "noise_mask" not in result
+
+
+def test_trim_video_latent_also_trims_noise_mask() -> None:
+    import torch
+
+    samples = torch.zeros(1, 16, 10, 8, 8)
+    mask = torch.ones(1, 1, 10, 8, 8)
+    latent = {"samples": samples, "noise_mask": mask}
+    result = trim_video_latent(latent, 2)
+    assert result["samples"].shape == (1, 16, 8, 8, 8)
+    assert result["noise_mask"].shape == (1, 1, 8, 8, 8)
+
+
+def test_trim_video_latent_zero_trim_returns_full_latent() -> None:
+    import torch
+
+    samples = torch.zeros(1, 16, 5, 8, 8)
+    latent = {"samples": samples}
+    result = trim_video_latent(latent, 0)
+    assert result["samples"].shape == (1, 16, 5, 8, 8)

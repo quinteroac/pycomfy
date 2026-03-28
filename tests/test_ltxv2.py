@@ -314,10 +314,11 @@ def test_load_latent_upscale_model_raises_on_missing_absolute_path(
         ModelManager(models_dir=tmp_path).load_latent_upscale_model(missing)
 
 
-def test_load_latent_upscale_model_in_module_all() -> None:
-    import comfy_diffusion.models as models_module
+def test_load_latent_upscale_model_accessible_via_model_manager() -> None:
+    from comfy_diffusion.models import ModelManager
 
-    assert "load_latent_upscale_model" in models_module.__all__
+    assert callable(getattr(ModelManager, "load_latent_upscale_model", None))
+    assert "ModelManager" in __import__("comfy_diffusion.models", fromlist=["ModelManager"]).__all__
 
 
 # ---------------------------------------------------------------------------

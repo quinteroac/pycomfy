@@ -1,0 +1,18 @@
+{
+  "iteration": "000023",
+  "status": "refactor_applied",
+  "refactorItems": [
+    {
+      "id": "R-001",
+      "file": "comfy_diffusion/models.py",
+      "change": "Remove 'load_latent_upscale_model' from __all__ — it is a method of ModelManager, not a standalone module-level function. The orphan entry would cause AttributeError on 'from comfy_diffusion.models import *'.",
+      "status": "done"
+    },
+    {
+      "id": "R-002",
+      "file": "tests/test_ltxv2.py",
+      "change": "Replace test_load_latent_upscale_model_in_module_all (only checked string presence in __all__) with test_load_latent_upscale_model_accessible_via_model_manager (verifies method callable on ModelManager and that ModelManager is in __all__).",
+      "status": "done"
+    }
+  ]
+}
