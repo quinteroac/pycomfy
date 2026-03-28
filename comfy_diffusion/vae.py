@@ -227,6 +227,10 @@ def vae_decode_batch_tiled(
     if samples.shape[0] == 0:
         raise ValueError("latent samples must not be empty")
 
+    if sample_dims == 5:
+        samples = samples.reshape(-1, samples.shape[-3], samples.shape[-2], samples.shape[-1])
+        sample_dims = 4
+
     result: list[Image.Image] = []
     for index in range(samples.shape[0]):
         frame_samples = samples[index : index + 1]
