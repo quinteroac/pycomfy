@@ -114,35 +114,38 @@ def run(
 
     Parameters
     ----------
-    models_dir:
+    models_dir : str | Path
         Root directory where model weights are stored.
-    prompt:
+    prompt : str
         Positive text prompt describing the desired video content.
-    negative_prompt:
-        Negative text prompt.  Defaults to a standard quality-rejection string.
-    width:
-        Output frame width in pixels (must be divisible by 32).
-    height:
-        Output frame height in pixels (must be divisible by 32).
-    length:
-        Number of video frames to generate (default 97 ≈ ~4 s at 24 fps).
-    steps:
-        Number of denoising steps.
-    cfg:
-        Classifier-free guidance scale.
-    seed:
-        Random seed for reproducibility.
-    sampler:
+    negative_prompt : str, optional
+        Negative text prompt.
+        Default ``"worst quality, inconsistent motion, blurry, jittery, distorted"``.
+    width : int, optional
+        Output frame width in pixels (must be divisible by 32).  Default ``768``.
+    height : int, optional
+        Output frame height in pixels (must be divisible by 32).  Default ``512``.
+    length : int, optional
+        Number of video frames to generate (≈ ~4 s at 24 fps).  Default ``97``.
+    steps : int, optional
+        Number of denoising steps.  Default ``30``.
+    cfg : float, optional
+        Classifier-free guidance scale.  Default ``3.0``.
+    seed : int, optional
+        Random seed for reproducibility.  Default ``0``.
+    sampler : str, optional
         Sampler name passed to :func:`~comfy_diffusion.sampling.sample`.
-    scheduler:
-        Noise scheduler name.
-    unet_filename:
+        Default ``"euler"``.
+    scheduler : str, optional
+        Noise scheduler name.  Default ``"beta"``.
+    unet_filename : str | None, optional
         Override the default UNet filename (relative to ``models_dir`` or
         absolute).  When ``None`` the path from :func:`manifest` is used.
-    vae_filename:
-        Override the default VAE filename.
-    text_encoder_filename:
-        Override the default text-encoder filename.
+        Default ``None``.
+    vae_filename : str | None, optional
+        Override the default VAE filename.  Default ``None``.
+    text_encoder_filename : str | None, optional
+        Override the default text-encoder filename.  Default ``None``.
 
     Returns
     -------
