@@ -43,7 +43,7 @@ Covers all local 3D generation workflows under `comfyui_official_workflows/3d/`.
 
 ## Development Phases
 
-### Phase 1 — Model Downloader Module
+### Phase 1 — Model Downloader Module [DONE]
 
 Implement an automatic model download module (`comfy_diffusion/downloader.py`) that resolves and fetches all models required by a given pipeline before execution. This removes the manual step of pre-downloading checkpoints, VAEs, LoRAs, and other weights, and is a prerequisite for reliable pipeline execution across environments.
 
