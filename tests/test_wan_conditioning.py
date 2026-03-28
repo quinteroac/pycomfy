@@ -13,8 +13,22 @@ from typing import Any
 import comfy_diffusion.conditioning as conditioning_module
 from comfy_diffusion.conditioning import (
     encode_clip_vision,
+    wan_animate_to_video,
+    wan_camera_embedding,
+    wan_camera_image_to_video,
     wan_first_last_frame_to_video,
+    wan_fun_control_to_video,
+    wan_fun_inpaint_to_video,
+    wan_humo_image_to_video,
     wan_image_to_video,
+    wan_infinite_talk_to_video,
+    wan_phantom_subject_to_video,
+    wan_scail_to_video,
+    wan_sound_image_to_video,
+    wan_sound_image_to_video_extend,
+    wan_track_to_video,
+    wan22_fun_control_to_video,
+    wan22_image_to_video_latent,
 )
 
 
@@ -65,8 +79,39 @@ class _FakeTensor:
     def transpose(self, _: int, __: int) -> _FakeTensor:
         return self
 
-    def __mul__(self, _: float) -> _FakeTensor:
+    def __mul__(self, _: Any) -> _FakeTensor:
         return self
+
+    def __rmul__(self, _: Any) -> _FakeTensor:
+        return self
+
+    def __add__(self, _: Any) -> _FakeTensor:
+        return self
+
+    def __radd__(self, _: Any) -> _FakeTensor:
+        return self
+
+    def __sub__(self, _: Any) -> _FakeTensor:
+        return self
+
+    def __rsub__(self, _: Any) -> _FakeTensor:
+        return self
+
+    def repeat(self, *_: Any) -> _FakeTensor:
+        return self
+
+    def unsqueeze(self, _: int) -> _FakeTensor:
+        return self
+
+    def expand(self, *_: Any) -> _FakeTensor:
+        return self
+
+    def __len__(self) -> int:
+        return self.shape[0] if self.shape else 0
+
+    @property
+    def ndim(self) -> int:
+        return len(self.shape)
 
 
 class _FakeTorch:
@@ -352,3 +397,476 @@ def test_wan_functions_import_without_torch_or_comfy_side_effects() -> None:
         if module.startswith(("torch", "comfy.")) or module == "comfy"
     ]
     assert heavy == [], f"Unexpected heavy modules loaded on import: {heavy}"
+
+
+# ── Shared fakes for vace-based functions ────────────────────────────────────
+
+
+class _FakeTorchVace(_FakeTorch):
+    """Extended fake torch that also tracks zeros_like and cat calls."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.zeros_like_calls: list[Any] = []
+        self.cat_batches: list[Any] = []
+
+    def zeros_like(self, tensor: Any) -> _FakeTensor:
+        self.zeros_like_calls.append(tensor)
+        return _FakeTensor(tensor.shape, device="fake-device")
+
+    def cat(self, tensors: Any, dim: int = 0) -> _FakeTensor:  # type: ignore[override]
+        self.cat_batches.append((tensors, dim))
+        return _FakeTensor((1, 16, 5, 60, 104), device="cat-device")
+
+    def ones(  # type: ignore[override]
+        self,
+        shape: Any,
+        *,
+        device: str | None = None,
+        dtype: str | None = None,
+    ) -> _FakeTensor:
+        return _FakeTensor(tuple(shape) if not isinstance(shape, tuple) else shape, device=device or "fake-device")
+
+    def zeros(self, shape: Any, *, device: str | None = None, dtype: Any = None) -> _FakeTensor:  # type: ignore[override]
+        self.zeros_calls.append((list(shape) if not isinstance(shape, list) else shape, device))
+        return _FakeTensor(tuple(shape) if not isinstance(shape, tuple) else shape, device=device or "fake-device")
+
+
+class _FakeComfyUtilsGeneric:
+    @staticmethod
+    def common_upscale(
+        image: Any, width: int, height: int, upscale_method: str, crop_mode: str
+    ) -> Any:
+        return image
+
+
+class _FakeNodeHelpersExtended:
+    @staticmethod
+    def conditioning_set_values(
+        conditioning: Any, values: dict[str, Any], *, append: bool = False
+    ) -> list[Any]:
+        updated: list[Any] = []
+        for token, metadata in conditioning:
+            copied = metadata.copy()
+            if append:
+                for k, v in values.items():
+                    existing = copied.get(k, [])
+                    copied[k] = list(existing) + list(v) if isinstance(existing, list) else v
+            else:
+                copied.update(values)
+            updated.append([token, copied])
+        return updated
+
+    @staticmethod
+    def conditioning_set_values_with_timestep_range(
+        conditioning: Any, values: dict[str, Any], start: float, end: float
+    ) -> list[Any]:
+        updated: list[Any] = []
+        for token, metadata in conditioning:
+            copied = metadata.copy()
+            copied.update(values)
+            updated.append([token, copied])
+        return updated
+
+
+class _FakeLatentFormats:
+    class _FakeFormat:
+        def process_out(self, tensor: Any) -> Any:
+            return tensor
+
+    class Wan21(_FakeFormat):
+        pass
+
+    class Wan22(_FakeFormat):
+        pass
+
+
+class _FakeVaeVace:
+    latent_channels = 16
+
+    def __init__(self) -> None:
+        self.encode_calls: list[Any] = []
+
+    def spacial_compression_encode(self) -> int:
+        return 8
+
+    def encode(self, image: Any) -> _FakeTensor:
+        self.encode_calls.append(image)
+        return _FakeTensor((1, 16, 5, 60, 104), device="latent-device")
+
+
+def _make_vace_deps(fake_torch: _FakeTorchVace | None = None) -> Any:
+    t = fake_torch or _FakeTorchVace()
+    return lambda: (t, _FakeModelManagement, _FakeComfyUtilsGeneric, _FakeNodeHelpersExtended, _FakeLatentFormats)
+
+
+# ── wan_fun_control_to_video ──────────────────────────────────────────────────
+
+
+def test_wan_fun_control_to_video_signature_matches_contract() -> None:
+    assert (
+        str(inspect.signature(wan_fun_control_to_video))
+        == "(positive: 'Any', negative: 'Any', vae: '_VaeEncoder', width: 'int' = 832, "
+        "height: 'int' = 480, length: 'int' = 81, batch_size: 'int' = 1, *, "
+        "clip_vision_output: 'Any | None' = None, start_image: 'Any | None' = None, "
+        "control_video: 'Any | None' = None) -> 'tuple[Any, Any, dict[str, Any]]'"
+    )
+
+
+def test_wan_fun_control_to_video_returns_latent_with_correct_shape(
+    monkeypatch: Any,
+) -> None:
+    monkeypatch.setattr(conditioning_module, "_get_wan_vace_dependencies", _make_vace_deps())
+    positive = [["p", {}]]
+    negative = [["n", {}]]
+    _, _, latent = wan_fun_control_to_video(positive=positive, negative=negative, vae=_FakeVaeVace())
+    assert "samples" in latent
+    assert latent["samples"].shape == (1, 16, 21, 60, 104)
+
+
+def test_wan_fun_control_to_video_sets_concat_latent_image_on_conditioning(
+    monkeypatch: Any,
+) -> None:
+    monkeypatch.setattr(conditioning_module, "_get_wan_vace_dependencies", _make_vace_deps())
+    positive = [["p", {}]]
+    negative = [["n", {}]]
+    out_pos, out_neg, _ = wan_fun_control_to_video(positive=positive, negative=negative, vae=_FakeVaeVace())
+    assert "concat_latent_image" in out_pos[0][1]
+    assert "concat_latent_image" in out_neg[0][1]
+
+
+# ── wan22_fun_control_to_video ────────────────────────────────────────────────
+
+
+def test_wan22_fun_control_to_video_signature_matches_contract() -> None:
+    assert (
+        str(inspect.signature(wan22_fun_control_to_video))
+        == "(positive: 'Any', negative: 'Any', vae: '_VaeEncoder', width: 'int' = 832, "
+        "height: 'int' = 480, length: 'int' = 81, batch_size: 'int' = 1, *, "
+        "ref_image: 'Any | None' = None, "
+        "control_video: 'Any | None' = None) -> 'tuple[Any, Any, dict[str, Any]]'"
+    )
+
+
+def test_wan22_fun_control_to_video_returns_latent_with_samples(
+    monkeypatch: Any,
+) -> None:
+    monkeypatch.setattr(conditioning_module, "_get_wan_vace_dependencies", _make_vace_deps())
+    positive = [["p", {}]]
+    negative = [["n", {}]]
+    _, _, latent = wan22_fun_control_to_video(positive=positive, negative=negative, vae=_FakeVaeVace())
+    assert "samples" in latent
+
+
+# ── wan_fun_inpaint_to_video ──────────────────────────────────────────────────
+
+
+def test_wan_fun_inpaint_to_video_signature_matches_contract() -> None:
+    assert (
+        str(inspect.signature(wan_fun_inpaint_to_video))
+        == "(positive: 'Any', negative: 'Any', vae: '_VaeEncoder', width: 'int' = 832, "
+        "height: 'int' = 480, length: 'int' = 81, batch_size: 'int' = 1, *, "
+        "clip_vision_output: 'Any | None' = None, start_image: 'Any | None' = None, "
+        "end_image: 'Any | None' = None) -> 'tuple[Any, Any, dict[str, Any]]'"
+    )
+
+
+def test_wan_fun_inpaint_to_video_delegates_to_first_last_frame(
+    monkeypatch: Any,
+) -> None:
+    calls: list[dict[str, Any]] = []
+
+    def _fake_first_last(**kwargs: Any) -> tuple[Any, Any, dict[str, Any]]:
+        calls.append(kwargs)
+        return kwargs["positive"], kwargs["negative"], {"samples": object()}
+
+    monkeypatch.setattr(conditioning_module, "wan_first_last_frame_to_video", _fake_first_last)
+    positive = [["p", {}]]
+    negative = [["n", {}]]
+    wan_fun_inpaint_to_video(positive=positive, negative=negative, vae=_FakeVaeVace())
+    assert len(calls) == 1
+    assert calls[0]["positive"] is positive
+    assert calls[0]["negative"] is negative
+
+
+# ── wan_camera_embedding ──────────────────────────────────────────────────────
+
+
+def test_wan_camera_embedding_signature_matches_contract() -> None:
+    assert (
+        str(inspect.signature(wan_camera_embedding))
+        == "(camera_pose: 'str', width: 'int' = 832, height: 'int' = 480, "
+        "length: 'int' = 81, *, speed: 'float' = 1.0, fx: 'float' = 0.5, "
+        "fy: 'float' = 0.5, cx: 'float' = 0.5, cy: 'float' = 0.5) "
+        "-> 'tuple[Any, int, int, int]'"
+    )
+
+
+# ── wan_camera_image_to_video ─────────────────────────────────────────────────
+
+
+def test_wan_camera_image_to_video_signature_matches_contract() -> None:
+    assert (
+        str(inspect.signature(wan_camera_image_to_video))
+        == "(positive: 'Any', negative: 'Any', vae: '_VaeEncoder', width: 'int' = 832, "
+        "height: 'int' = 480, length: 'int' = 81, batch_size: 'int' = 1, *, "
+        "clip_vision_output: 'Any | None' = None, start_image: 'Any | None' = None, "
+        "camera_conditions: 'Any | None' = None) -> 'tuple[Any, Any, dict[str, Any]]'"
+    )
+
+
+def test_wan_camera_image_to_video_returns_tuple_and_passes_camera_conditions(
+    monkeypatch: Any,
+) -> None:
+    monkeypatch.setattr(conditioning_module, "_get_wan_vace_dependencies", _make_vace_deps())
+    positive = [["p", {}]]
+    negative = [["n", {}]]
+    cam_cond = object()
+    out_pos, out_neg, latent = wan_camera_image_to_video(
+        positive=positive, negative=negative, vae=_FakeVaeVace(), camera_conditions=cam_cond
+    )
+    assert "samples" in latent
+    assert out_pos[0][1]["camera_conditions"] is cam_cond
+    assert out_neg[0][1]["camera_conditions"] is cam_cond
+
+
+# ── wan_phantom_subject_to_video ──────────────────────────────────────────────
+
+
+def test_wan_phantom_subject_to_video_signature_matches_contract() -> None:
+    assert (
+        str(inspect.signature(wan_phantom_subject_to_video))
+        == "(positive: 'Any', negative: 'Any', vae: '_VaeEncoder', width: 'int' = 832, "
+        "height: 'int' = 480, length: 'int' = 81, batch_size: 'int' = 1, *, "
+        "images: 'Any | None' = None) -> 'tuple[Any, Any, Any, dict[str, Any]]'"
+    )
+
+
+def test_wan_phantom_subject_to_video_returns_four_tuple(
+    monkeypatch: Any,
+) -> None:
+    monkeypatch.setattr(conditioning_module, "_get_wan_vace_dependencies", _make_vace_deps())
+    positive = [["p", {}]]
+    negative = [["n", {}]]
+    result = wan_phantom_subject_to_video(positive=positive, negative=negative, vae=_FakeVaeVace())
+    assert len(result) == 4
+    assert "samples" in result[3]
+
+
+# ── wan_track_to_video ────────────────────────────────────────────────────────
+
+
+def test_wan_track_to_video_signature_matches_contract() -> None:
+    assert (
+        str(inspect.signature(wan_track_to_video))
+        == "(positive: 'Any', negative: 'Any', vae: '_VaeEncoder', tracks: 'str', "
+        "width: 'int' = 832, height: 'int' = 480, length: 'int' = 81, "
+        "batch_size: 'int' = 1, *, temperature: 'float' = 220.0, topk: 'int' = 2, "
+        "start_image: 'Any | None' = None, "
+        "clip_vision_output: 'Any | None' = None) -> 'tuple[Any, Any, dict[str, Any]]'"
+    )
+
+
+def test_wan_track_to_video_falls_back_to_image_to_video_when_tracks_empty(
+    monkeypatch: Any,
+) -> None:
+    """With empty/invalid tracks JSON, wan_track_to_video delegates to wan_image_to_video."""
+    calls: list[dict[str, Any]] = []
+
+    def _fake_i2v(**kwargs: Any) -> tuple[Any, Any, dict[str, Any]]:
+        calls.append(kwargs)
+        return kwargs["positive"], kwargs["negative"], {"samples": object()}
+
+    monkeypatch.setattr(conditioning_module, "_get_wan_vace_dependencies", _make_vace_deps())
+    monkeypatch.setattr(conditioning_module, "wan_image_to_video", _fake_i2v)
+    positive = [["p", {}]]
+    negative = [["n", {}]]
+    wan_track_to_video(positive=positive, negative=negative, vae=_FakeVaeVace(), tracks="")
+    assert len(calls) == 1
+
+
+# ── wan_sound_image_to_video ──────────────────────────────────────────────────
+
+
+def test_wan_sound_image_to_video_signature_matches_contract() -> None:
+    assert (
+        str(inspect.signature(wan_sound_image_to_video))
+        == "(positive: 'Any', negative: 'Any', vae: '_VaeEncoder', width: 'int' = 832, "
+        "height: 'int' = 480, length: 'int' = 77, batch_size: 'int' = 1, *, "
+        "audio_encoder_output: 'Any | None' = None, ref_image: 'Any | None' = None, "
+        "control_video: 'Any | None' = None, "
+        "ref_motion: 'Any | None' = None) -> 'tuple[Any, Any, dict[str, Any]]'"
+    )
+
+
+# ── wan_sound_image_to_video_extend ──────────────────────────────────────────
+
+
+def test_wan_sound_image_to_video_extend_signature_matches_contract() -> None:
+    assert (
+        str(inspect.signature(wan_sound_image_to_video_extend))
+        == "(positive: 'Any', negative: 'Any', vae: '_VaeEncoder', length: 'int', "
+        "video_latent: 'dict[str, Any]', *, "
+        "audio_encoder_output: 'Any | None' = None, ref_image: 'Any | None' = None, "
+        "control_video: 'Any | None' = None) -> 'tuple[Any, Any, dict[str, Any]]'"
+    )
+
+
+# ── wan_humo_image_to_video ───────────────────────────────────────────────────
+
+
+def test_wan_humo_image_to_video_signature_matches_contract() -> None:
+    assert (
+        str(inspect.signature(wan_humo_image_to_video))
+        == "(positive: 'Any', negative: 'Any', vae: '_VaeEncoder', width: 'int' = 832, "
+        "height: 'int' = 480, length: 'int' = 97, batch_size: 'int' = 1, *, "
+        "audio_encoder_output: 'Any | None' = None, "
+        "ref_image: 'Any | None' = None) -> 'tuple[Any, Any, dict[str, Any]]'"
+    )
+
+
+def test_wan_humo_image_to_video_returns_latent_and_sets_audio_embed(
+    monkeypatch: Any,
+) -> None:
+    monkeypatch.setattr(conditioning_module, "_get_wan_vace_dependencies", _make_vace_deps())
+    positive = [["p", {}]]
+    negative = [["n", {}]]
+    out_pos, out_neg, latent = wan_humo_image_to_video(
+        positive=positive, negative=negative, vae=_FakeVaeVace()
+    )
+    assert "samples" in latent
+    assert "audio_embed" in out_pos[0][1]
+    assert "audio_embed" in out_neg[0][1]
+
+
+# ── wan_animate_to_video ──────────────────────────────────────────────────────
+
+
+def test_wan_animate_to_video_signature_matches_contract() -> None:
+    assert (
+        str(inspect.signature(wan_animate_to_video))
+        == "(positive: 'Any', negative: 'Any', vae: '_VaeEncoder', width: 'int' = 832, "
+        "height: 'int' = 480, length: 'int' = 77, batch_size: 'int' = 1, "
+        "continue_motion_max_frames: 'int' = 5, video_frame_offset: 'int' = 0, *, "
+        "clip_vision_output: 'Any | None' = None, "
+        "reference_image: 'Any | None' = None, "
+        "face_video: 'Any | None' = None, pose_video: 'Any | None' = None, "
+        "continue_motion: 'Any | None' = None, "
+        "background_video: 'Any | None' = None, "
+        "character_mask: 'Any | None' = None) "
+        "-> 'tuple[Any, Any, dict[str, Any], int, int, int]'"
+    )
+
+
+def test_wan_animate_to_video_returns_six_tuple(
+    monkeypatch: Any,
+) -> None:
+    monkeypatch.setattr(conditioning_module, "_get_wan_vace_dependencies", _make_vace_deps())
+    positive = [["p", {}]]
+    negative = [["n", {}]]
+    result = wan_animate_to_video(positive=positive, negative=negative, vae=_FakeVaeVace())
+    assert len(result) == 6
+    assert "samples" in result[2]
+
+
+# ── wan_infinite_talk_to_video ────────────────────────────────────────────────
+
+
+def test_wan_infinite_talk_to_video_signature_matches_contract() -> None:
+    assert (
+        str(inspect.signature(wan_infinite_talk_to_video))
+        == "(model: 'Any', model_patch: 'Any', positive: 'Any', negative: 'Any', "
+        "vae: '_VaeEncoder', width: 'int', height: 'int', length: 'int', "
+        "audio_encoder_output_1: 'Any', *, mode: 'str' = 'single_speaker', "
+        "start_image: 'Any | None' = None, "
+        "clip_vision_output: 'Any | None' = None, "
+        "audio_encoder_output_2: 'Any | None' = None, "
+        "mask_1: 'Any | None' = None, mask_2: 'Any | None' = None, "
+        "motion_frame_count: 'int' = 9, audio_scale: 'float' = 1.0, "
+        "previous_frames: 'Any | None' = None) "
+        "-> 'tuple[Any, Any, Any, dict[str, Any], int]'"
+    )
+
+
+# ── wan_scail_to_video ────────────────────────────────────────────────────────
+
+
+def test_wan_scail_to_video_signature_matches_contract() -> None:
+    assert (
+        str(inspect.signature(wan_scail_to_video))
+        == "(positive: 'Any', negative: 'Any', vae: '_VaeEncoder', width: 'int' = 512, "
+        "height: 'int' = 896, length: 'int' = 81, batch_size: 'int' = 1, "
+        "pose_strength: 'float' = 1.0, pose_start: 'float' = 0.0, "
+        "pose_end: 'float' = 1.0, *, "
+        "clip_vision_output: 'Any | None' = None, "
+        "reference_image: 'Any | None' = None, "
+        "pose_video: 'Any | None' = None) -> 'tuple[Any, Any, dict[str, Any]]'"
+    )
+
+
+def test_wan_scail_to_video_returns_latent_dict(
+    monkeypatch: Any,
+) -> None:
+    monkeypatch.setattr(conditioning_module, "_get_wan_vace_dependencies", _make_vace_deps())
+    positive = [["p", {}]]
+    negative = [["n", {}]]
+    _, _, latent = wan_scail_to_video(positive=positive, negative=negative, vae=_FakeVaeVace())
+    assert "samples" in latent
+
+
+# ── wan22_image_to_video_latent ───────────────────────────────────────────────
+
+
+def test_wan22_image_to_video_latent_signature_matches_contract() -> None:
+    assert (
+        str(inspect.signature(wan22_image_to_video_latent))
+        == "(vae: '_VaeEncoder', width: 'int' = 1280, height: 'int' = 704, "
+        "length: 'int' = 49, batch_size: 'int' = 1, *, "
+        "start_image: 'Any | None' = None) -> 'dict[str, Any]'"
+    )
+
+
+def test_wan22_image_to_video_latent_returns_samples_without_start_image(
+    monkeypatch: Any,
+) -> None:
+    monkeypatch.setattr(conditioning_module, "_get_wan_vace_dependencies", _make_vace_deps())
+    result = wan22_image_to_video_latent(vae=_FakeVaeVace())
+    assert "samples" in result
+    assert "noise_mask" not in result
+
+
+def test_wan22_image_to_video_latent_returns_noise_mask_with_start_image(
+    monkeypatch: Any,
+) -> None:
+    fake_torch = _FakeTorchVace()
+    monkeypatch.setattr(conditioning_module, "_get_wan_vace_dependencies", _make_vace_deps(fake_torch))
+    start_image = _FakeTensor((1, 704, 1280, 3))
+    result = wan22_image_to_video_latent(vae=_FakeVaeVace(), start_image=start_image)
+    assert "samples" in result
+    assert "noise_mask" in result
+
+
+# ── __all__ completeness ──────────────────────────────────────────────────────
+
+
+def test_all_new_wan_functions_exported_in_dunder_all() -> None:
+    import comfy_diffusion.conditioning as m
+
+    new_fns = [
+        "wan_fun_control_to_video",
+        "wan22_fun_control_to_video",
+        "wan_fun_inpaint_to_video",
+        "wan_camera_embedding",
+        "wan_camera_image_to_video",
+        "wan_phantom_subject_to_video",
+        "wan_track_to_video",
+        "wan_sound_image_to_video",
+        "wan_sound_image_to_video_extend",
+        "wan_humo_image_to_video",
+        "wan_animate_to_video",
+        "wan_infinite_talk_to_video",
+        "wan_scail_to_video",
+        "wan22_image_to_video_latent",
+    ]
+    for fn in new_fns:
+        assert fn in m.__all__, f"{fn!r} missing from conditioning.__all__"

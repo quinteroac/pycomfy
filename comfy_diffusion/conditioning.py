@@ -565,12 +565,1169 @@ def wan_vace_to_video(
     return positive, negative, {"samples": latent}, trim_latent
 
 
+# ── WAN Fun Control ──────────────────────────────────────────────────────────
+
+
+def wan_fun_control_to_video(
+    positive: Any,
+    negative: Any,
+    vae: _VaeEncoder,
+    width: int = 832,
+    height: int = 480,
+    length: int = 81,
+    batch_size: int = 1,
+    *,
+    clip_vision_output: Any | None = None,
+    start_image: Any | None = None,
+    control_video: Any | None = None,
+) -> tuple[Any, Any, dict[str, Any]]:
+    """Build WAN Fun Control conditioning and empty latent samples."""
+    torch, model_management, comfy_utils, node_helpers, comfy_latent_formats = _get_wan_vace_dependencies()
+
+    latent = torch.zeros(
+        [batch_size, 16, ((length - 1) // 4) + 1, height // 8, width // 8],
+        device=model_management.intermediate_device(),
+    )
+    concat_latent = torch.zeros(
+        [batch_size, 16, ((length - 1) // 4) + 1, height // 8, width // 8],
+        device=model_management.intermediate_device(),
+    )
+    concat_latent = comfy_latent_formats.Wan21().process_out(concat_latent)
+    concat_latent = concat_latent.repeat(1, 2, 1, 1, 1)
+
+    if start_image is not None:
+        start_image = comfy_utils.common_upscale(
+            start_image[:length].movedim(-1, 1), width, height, "bilinear", "center"
+        ).movedim(1, -1)
+        concat_latent_image = vae.encode(start_image[:, :, :, :3])
+        concat_latent[:, 16:, : concat_latent_image.shape[2]] = concat_latent_image[:, :, : concat_latent.shape[2]]
+
+    if control_video is not None:
+        control_video = comfy_utils.common_upscale(
+            control_video[:length].movedim(-1, 1), width, height, "bilinear", "center"
+        ).movedim(1, -1)
+        concat_latent_image = vae.encode(control_video[:, :, :, :3])
+        concat_latent[:, :16, : concat_latent_image.shape[2]] = concat_latent_image[:, :, : concat_latent.shape[2]]
+
+    values: dict[str, Any] = {"concat_latent_image": concat_latent}
+    positive = node_helpers.conditioning_set_values(positive, values)
+    negative = node_helpers.conditioning_set_values(negative, values)
+
+    if clip_vision_output is not None:
+        cv_values: dict[str, Any] = {"clip_vision_output": clip_vision_output}
+        positive = node_helpers.conditioning_set_values(positive, cv_values)
+        negative = node_helpers.conditioning_set_values(negative, cv_values)
+
+    return positive, negative, {"samples": latent}
+
+
+def wan22_fun_control_to_video(
+    positive: Any,
+    negative: Any,
+    vae: _VaeEncoder,
+    width: int = 832,
+    height: int = 480,
+    length: int = 81,
+    batch_size: int = 1,
+    *,
+    ref_image: Any | None = None,
+    control_video: Any | None = None,
+) -> tuple[Any, Any, dict[str, Any]]:
+    """Build WAN 2.2 Fun Control conditioning and empty latent samples."""
+    torch, model_management, comfy_utils, node_helpers, comfy_latent_formats = _get_wan_vace_dependencies()
+
+    spacial_scale = vae.spacial_compression_encode()
+    latent_channels = vae.latent_channels
+    latent = torch.zeros(
+        [batch_size, latent_channels, ((length - 1) // 4) + 1, height // spacial_scale, width // spacial_scale],
+        device=model_management.intermediate_device(),
+    )
+    concat_latent = torch.zeros(
+        [batch_size, latent_channels, ((length - 1) // 4) + 1, height // spacial_scale, width // spacial_scale],
+        device=model_management.intermediate_device(),
+    )
+    if latent_channels == 48:
+        concat_latent = comfy_latent_formats.Wan22().process_out(concat_latent)
+    else:
+        concat_latent = comfy_latent_formats.Wan21().process_out(concat_latent)
+    concat_latent = concat_latent.repeat(1, 2, 1, 1, 1)
+    mask = torch.ones((1, 1, latent.shape[2] * 4, latent.shape[-2], latent.shape[-1]))
+
+    ref_latent = None
+    if ref_image is not None:
+        ref_image = comfy_utils.common_upscale(
+            ref_image[:1].movedim(-1, 1), width, height, "bilinear", "center"
+        ).movedim(1, -1)
+        ref_latent = vae.encode(ref_image[:, :, :, :3])
+
+    if control_video is not None:
+        control_video = comfy_utils.common_upscale(
+            control_video[:length].movedim(-1, 1), width, height, "bilinear", "center"
+        ).movedim(1, -1)
+        concat_latent_image = vae.encode(control_video[:, :, :, :3])
+        concat_latent[:, :latent_channels, : concat_latent_image.shape[2]] = concat_latent_image[:, :, : concat_latent.shape[2]]
+
+    mask = mask.view(1, mask.shape[2] // 4, 4, mask.shape[3], mask.shape[4]).transpose(1, 2)
+    values22: dict[str, Any] = {"concat_latent_image": concat_latent, "concat_mask": mask, "concat_mask_index": latent_channels}
+    positive = node_helpers.conditioning_set_values(positive, values22)
+    negative = node_helpers.conditioning_set_values(negative, values22)
+
+    if ref_latent is not None:
+        positive = node_helpers.conditioning_set_values(positive, {"reference_latents": [ref_latent]}, append=True)
+        negative = node_helpers.conditioning_set_values(negative, {"reference_latents": [ref_latent]}, append=True)
+
+    return positive, negative, {"samples": latent}
+
+
+# ── WAN Fun Inpaint ──────────────────────────────────────────────────────────
+
+
+def wan_fun_inpaint_to_video(
+    positive: Any,
+    negative: Any,
+    vae: _VaeEncoder,
+    width: int = 832,
+    height: int = 480,
+    length: int = 81,
+    batch_size: int = 1,
+    *,
+    clip_vision_output: Any | None = None,
+    start_image: Any | None = None,
+    end_image: Any | None = None,
+) -> tuple[Any, Any, dict[str, Any]]:
+    """Build WAN Fun Inpaint conditioning (thin wrapper over first/last frame)."""
+    return wan_first_last_frame_to_video(
+        positive=positive,
+        negative=negative,
+        vae=vae,
+        width=width,
+        height=height,
+        length=length,
+        batch_size=batch_size,
+        start_image=start_image,
+        end_image=end_image,
+        clip_vision_start_image=clip_vision_output,
+    )
+
+
+# ── WAN Camera ───────────────────────────────────────────────────────────────
+
+_WAN_CAMERA_POSES: tuple[str, ...] = (
+    "Static", "Pan Up", "Pan Down", "Pan Left", "Pan Right",
+    "Zoom In", "Zoom Out", "Anti Clockwise (ACW)", "ClockWise (CW)",
+)
+
+
+def _get_wan_camera_dependencies() -> tuple[Any, Any, Any, Any, Any, Any]:
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    import comfy.model_management
+    import numpy as np
+    import torch
+    from comfy_extras.nodes_camera_trajectory import (
+        CAMERA_DICT,
+        get_camera_motion,
+        process_pose_params,
+    )
+
+    return torch, np, comfy.model_management, CAMERA_DICT, get_camera_motion, process_pose_params
+
+
+def wan_camera_embedding(
+    camera_pose: str,
+    width: int = 832,
+    height: int = 480,
+    length: int = 81,
+    *,
+    speed: float = 1.0,
+    fx: float = 0.5,
+    fy: float = 0.5,
+    cx: float = 0.5,
+    cy: float = 0.5,
+) -> tuple[Any, int, int, int]:
+    """Build a WAN camera trajectory embedding.
+
+    ``camera_pose`` must be one of ``_WAN_CAMERA_POSES``.
+    Returns ``(camera_embedding, width, height, length)``.
+    """
+    torch, np, model_management, CAMERA_DICT, get_camera_motion, process_pose_params = _get_wan_camera_dependencies()
+
+    angle = np.array(CAMERA_DICT[camera_pose]["angle"])
+    T = np.array(CAMERA_DICT[camera_pose]["T"])
+    RT = get_camera_motion(angle, T, speed, length)
+
+    trajs = []
+    for cp in RT.tolist():
+        traj = [fx, fy, cx, cy, 0, 0]
+        traj.extend(cp[0])
+        traj.extend(cp[1])
+        traj.extend(cp[2])
+        traj.extend([0, 0, 0, 1])
+        trajs.append(traj)
+
+    cam_params = np.array([[float(x) for x in pose] for pose in trajs])
+    cam_params = np.concatenate([np.zeros_like(cam_params[:, :1]), cam_params], 1)
+    control_camera_video = process_pose_params(cam_params, width=width, height=height)
+    control_camera_video = (
+        control_camera_video.permute([3, 0, 1, 2])
+        .unsqueeze(0)
+        .to(device=model_management.intermediate_device())
+    )
+    control_camera_video = torch.concat(
+        [
+            torch.repeat_interleave(control_camera_video[:, :, 0:1], repeats=4, dim=2),
+            control_camera_video[:, :, 1:],
+        ],
+        dim=2,
+    ).transpose(1, 2)
+    b, f, c, h, w = control_camera_video.shape
+    control_camera_video = (
+        control_camera_video.contiguous().view(b, f // 4, 4, c, h, w).transpose(2, 3)
+    )
+    control_camera_video = control_camera_video.contiguous().view(b, f // 4, c * 4, h, w).transpose(1, 2)
+    return control_camera_video, width, height, length
+
+
+def wan_camera_image_to_video(
+    positive: Any,
+    negative: Any,
+    vae: _VaeEncoder,
+    width: int = 832,
+    height: int = 480,
+    length: int = 81,
+    batch_size: int = 1,
+    *,
+    clip_vision_output: Any | None = None,
+    start_image: Any | None = None,
+    camera_conditions: Any | None = None,
+) -> tuple[Any, Any, dict[str, Any]]:
+    """Build WAN camera-guided image-to-video conditioning and empty latent samples."""
+    torch, model_management, comfy_utils, node_helpers, comfy_latent_formats = _get_wan_vace_dependencies()
+
+    latent = torch.zeros(
+        [batch_size, 16, ((length - 1) // 4) + 1, height // 8, width // 8],
+        device=model_management.intermediate_device(),
+    )
+    concat_latent = torch.zeros(
+        [batch_size, 16, ((length - 1) // 4) + 1, height // 8, width // 8],
+        device=model_management.intermediate_device(),
+    )
+    concat_latent = comfy_latent_formats.Wan21().process_out(concat_latent)
+
+    if start_image is not None:
+        start_image = comfy_utils.common_upscale(
+            start_image[:length].movedim(-1, 1), width, height, "bilinear", "center"
+        ).movedim(1, -1)
+        concat_latent_image = vae.encode(start_image[:, :, :, :3])
+        concat_latent[:, :, : concat_latent_image.shape[2]] = concat_latent_image[:, :, : concat_latent.shape[2]]
+        mask = torch.ones((1, 1, latent.shape[2] * 4, latent.shape[-2], latent.shape[-1]))
+        mask[:, :, : start_image.shape[0] + 3] = 0.0
+        mask = mask.view(1, mask.shape[2] // 4, 4, mask.shape[3], mask.shape[4]).transpose(1, 2)
+        positive = node_helpers.conditioning_set_values(positive, {"concat_latent_image": concat_latent, "concat_mask": mask})
+        negative = node_helpers.conditioning_set_values(negative, {"concat_latent_image": concat_latent, "concat_mask": mask})
+
+    if camera_conditions is not None:
+        positive = node_helpers.conditioning_set_values(positive, {"camera_conditions": camera_conditions})
+        negative = node_helpers.conditioning_set_values(negative, {"camera_conditions": camera_conditions})
+
+    if clip_vision_output is not None:
+        positive = node_helpers.conditioning_set_values(positive, {"clip_vision_output": clip_vision_output})
+        negative = node_helpers.conditioning_set_values(negative, {"clip_vision_output": clip_vision_output})
+
+    return positive, negative, {"samples": latent}
+
+
+# ── WAN Phantom Subject ──────────────────────────────────────────────────────
+
+
+def wan_phantom_subject_to_video(
+    positive: Any,
+    negative: Any,
+    vae: _VaeEncoder,
+    width: int = 832,
+    height: int = 480,
+    length: int = 81,
+    batch_size: int = 1,
+    *,
+    images: Any | None = None,
+) -> tuple[Any, Any, Any, dict[str, Any]]:
+    """Build WAN Phantom subject conditioning.
+
+    Returns ``(positive, negative_text, negative_img_text, latent)``.
+    ``negative_text`` carries subject image conditioning;
+    ``negative_img_text`` carries zeroed-out conditioning for CFG.
+    """
+    torch, model_management, comfy_utils, node_helpers, comfy_latent_formats = _get_wan_vace_dependencies()
+
+    latent = torch.zeros(
+        [batch_size, 16, ((length - 1) // 4) + 1, height // 8, width // 8],
+        device=model_management.intermediate_device(),
+    )
+    negative_text = negative
+    if images is not None:
+        images = comfy_utils.common_upscale(
+            images[:length].movedim(-1, 1), width, height, "bilinear", "center"
+        ).movedim(1, -1)
+        latent_images = [vae.encode(images[i].unsqueeze(0)[:, :, :, :3]) for i in range(images.shape[0])]
+        concat_latent_image = torch.cat(latent_images, dim=2)
+
+        positive = node_helpers.conditioning_set_values(positive, {"time_dim_concat": concat_latent_image})
+        negative_text = node_helpers.conditioning_set_values(negative, {"time_dim_concat": concat_latent_image})
+        negative = node_helpers.conditioning_set_values(
+            negative,
+            {"time_dim_concat": comfy_latent_formats.Wan21().process_out(torch.zeros_like(concat_latent_image))},
+        )
+
+    return positive, negative_text, negative, {"samples": latent}
+
+
+# ── WAN Track to Video ───────────────────────────────────────────────────────
+
+
+def _wan_track_parse_json_tracks(tracks: str) -> list[Any]:
+    import json
+
+    tracks_data: list[Any] = []
+    try:
+        if isinstance(tracks, str):
+            parsed = json.loads(tracks.replace("'", '"'))
+            tracks_data.extend(parsed)
+        else:
+            for track_str in tracks:
+                parsed = json.loads(track_str.replace("'", '"'))
+                tracks_data.append(parsed)
+        if tracks_data and isinstance(tracks_data[0], dict) and "x" in tracks_data[0]:
+            tracks_data = [tracks_data]
+    except json.JSONDecodeError:
+        tracks_data = []
+    return tracks_data
+
+
+def _wan_track_pad_pts(tr: list[Any]) -> Any:
+    import numpy as np
+
+    FIXED_LENGTH = 121
+    pts = np.array([[p["x"], p["y"], 1] for p in tr], dtype=np.float32)
+    n = pts.shape[0]
+    if n < FIXED_LENGTH:
+        pts = np.vstack((pts, np.zeros((FIXED_LENGTH - n, 3), dtype=np.float32)))
+    else:
+        pts = pts[:FIXED_LENGTH]
+    return pts.reshape(FIXED_LENGTH, 1, 3)
+
+
+def _wan_track_process_tracks(tracks_np: Any, frame_size: tuple[int, int], num_frames: int) -> Any:
+    import math
+
+    import torch
+
+    tracks = torch.from_numpy(tracks_np).float()
+    if tracks.shape[1] == 121:
+        tracks = torch.permute(tracks, (1, 0, 2, 3))
+    tracks, visibles = tracks[..., :2], tracks[..., 2:3]
+    short_edge = min(*frame_size)
+    frame_center = torch.tensor([*frame_size]).type_as(tracks) / 2
+    tracks = (tracks - frame_center) / short_edge * 2
+    visibles = visibles * 2 - 1
+    trange = torch.linspace(-1, 1, tracks.shape[0]).view(-1, 1, 1, 1).expand(*visibles.shape)
+    out_ = torch.cat([trange, tracks, visibles], dim=-1).view(121, -1, 4)
+    out_0 = out_[:1]
+    out_l = out_[1:]
+    a = 120 // math.gcd(120, num_frames)
+    b_val = num_frames // math.gcd(120, num_frames)
+    out_l = torch.repeat_interleave(out_l, b_val, dim=0)[1::a]
+    return torch.cat([out_0, out_l], dim=0)
+
+
+def _wan_track_ind_sel(target: Any, ind: Any, dim: int = 1) -> Any:
+    import torch
+
+    assert len(ind.shape) > dim
+    target = target.expand(
+        *([ind.shape[k] if target.shape[k] == 1 else -1 for k in range(dim)] + [-1] * (len(target.shape) - dim))
+    )
+    ind_pad = ind
+    if len(target.shape) > dim + 1:
+        for _ in range(len(target.shape) - (dim + 1)):
+            ind_pad = ind_pad.unsqueeze(-1)
+        ind_pad = ind_pad.expand(*(-1,) * (dim + 1), *target.shape[(dim + 1):])
+    return torch.gather(target, dim=dim, index=ind_pad)
+
+
+def _wan_track_merge_final(vert_attr: Any, weight: Any, vert_assign: Any) -> Any:
+    import torch
+
+    target_dim = len(vert_assign.shape) - 1
+    if len(vert_attr.shape) == 2:
+        tensor = vert_attr.reshape([1] * target_dim + list(vert_attr.shape))
+    else:
+        tensor = vert_attr.reshape([vert_attr.shape[0]] + [1] * (target_dim - 1) + list(vert_attr.shape[1:]))
+    sel_attr = _wan_track_ind_sel(tensor, vert_assign.type(torch.long), dim=target_dim)
+    return torch.sum(sel_attr * weight.unsqueeze(-1), dim=-2)
+
+
+def _wan_track_patch_motion_single(
+    tracks: Any, vid: Any, temperature: float, vae_divide: tuple[int, int], topk: int
+) -> tuple[Any, Any]:
+    import torch
+
+    _, T, H, W = vid.shape
+    N = tracks.shape[2]
+    _, tracks_xy, visible = torch.split(tracks, [1, 2, 1], dim=-1)
+    tracks_n = (tracks_xy / torch.tensor([W / min(H, W), H / min(H, W)], device=tracks_xy.device)).clamp(-1, 1)
+    visible = visible.clamp(0, 1)
+    xx = torch.linspace(-W / min(H, W), W / min(H, W), W)
+    yy = torch.linspace(-H / min(H, W), H / min(H, W), H)
+    grid = torch.stack(torch.meshgrid(yy, xx, indexing="ij")[::-1], dim=-1).to(tracks_xy.device)
+    tracks_pad = tracks_xy[:, 1:]
+    visible_pad = visible[:, 1:]
+    visible_align = visible_pad.view(T - 1, 4, *visible_pad.shape[2:]).sum(1)
+    tracks_align = (tracks_pad * visible_pad).view(T - 1, 4, *tracks_pad.shape[2:]).sum(1) / (visible_align + 1e-5)
+    dist_ = (tracks_align[:, None, None] - grid[None, :, :, None]).pow(2).sum(-1)
+    weight = torch.exp(-dist_ * temperature) * visible_align.clamp(0, 1).view(T - 1, 1, 1, N)
+    vert_weight, vert_index = torch.topk(weight, k=min(topk, weight.shape[-1]), dim=-1)
+    point_feature = torch.nn.functional.grid_sample(
+        vid.permute(1, 0, 2, 3)[:1], tracks_n[:, :1].type(vid.dtype),
+        mode="bilinear", padding_mode="zeros", align_corners=False,
+    ).squeeze(0).squeeze(1).permute(1, 0)
+    out_feature = _wan_track_merge_final(point_feature, vert_weight, vert_index).permute(3, 0, 1, 2)
+    mix_feature = out_feature + vid[:, 1:] * (1 - vert_weight.sum(-1).clamp(0, 1))
+    out_feature_full = torch.cat([vid[:, :1], mix_feature], dim=1)
+    out_mask_full = torch.cat([torch.ones_like(vert_weight.sum(-1)[:1]), vert_weight.sum(-1)], dim=0)
+    return out_mask_full[None].expand(vae_divide[0], -1, -1, -1), out_feature_full
+
+
+def _wan_track_patch_motion(
+    tracks: Any, vid: Any, temperature: float = 220.0, vae_divide: tuple[int, int] = (4, 16), topk: int = 2
+) -> tuple[Any, Any]:
+    import torch
+
+    out_masks, out_features = [], []
+    for b in range(len(tracks)):
+        mask, feature = _wan_track_patch_motion_single(tracks[b], vid[b], temperature, vae_divide, topk)
+        out_masks.append(mask)
+        out_features.append(feature)
+    return torch.stack(out_masks, dim=0), torch.stack(out_features, dim=0)
+
+
+def wan_track_to_video(
+    positive: Any,
+    negative: Any,
+    vae: _VaeEncoder,
+    tracks: str,
+    width: int = 832,
+    height: int = 480,
+    length: int = 81,
+    batch_size: int = 1,
+    *,
+    temperature: float = 220.0,
+    topk: int = 2,
+    start_image: Any | None = None,
+    clip_vision_output: Any | None = None,
+) -> tuple[Any, Any, dict[str, Any]]:
+    """Build WAN motion-track conditioning from JSON point-track data.
+
+    Falls back to ``wan_image_to_video`` when ``tracks`` is empty or invalid JSON.
+    """
+    import numpy as np
+
+    torch, model_management, comfy_utils, node_helpers, comfy_latent_formats = _get_wan_vace_dependencies()
+
+    tracks_data = _wan_track_parse_json_tracks(tracks)
+
+    if not tracks_data:
+        return wan_image_to_video(
+            positive=positive, negative=negative, vae=vae,
+            width=width, height=height, length=length, batch_size=batch_size,
+            start_image=start_image, clip_vision_output=clip_vision_output,
+        )
+
+    latent = torch.zeros(
+        [batch_size, 16, ((length - 1) // 4) + 1, height // 8, width // 8],
+        device=model_management.intermediate_device(),
+    )
+
+    if isinstance(tracks_data[0][0], dict):
+        tracks_data = [tracks_data]
+
+    processed_tracks = []
+    for batch in tracks_data:
+        arrs = [_wan_track_pad_pts(track) for track in batch]
+        tracks_np = np.stack(arrs, axis=0)
+        processed_tracks.append(_wan_track_process_tracks(tracks_np, (width, height), length - 1).unsqueeze(0))
+
+    if start_image is not None:
+        start_image = comfy_utils.common_upscale(
+            start_image[:batch_size].movedim(-1, 1), width, height, "bilinear", "center"
+        ).movedim(1, -1)
+        videos = torch.ones(
+            (start_image.shape[0], length, height, width, start_image.shape[-1]),
+            device=start_image.device, dtype=start_image.dtype,
+        ) * 0.5
+        for i in range(start_image.shape[0]):
+            videos[i, 0] = start_image[i]
+        videos = comfy_utils.resize_to_batch_size(videos, batch_size)
+        latent_videos = [vae.encode(videos[i, :, :, :, :3]) for i in range(batch_size)]
+        y = comfy_latent_formats.Wan21().process_in(torch.cat(latent_videos, dim=0))
+        processed_tracks = comfy_utils.resize_list_to_batch_size(processed_tracks, batch_size)
+        mask, concat_latent_image = _wan_track_patch_motion(
+            processed_tracks, y, temperature=temperature, topk=topk, vae_divide=(4, 16)
+        )
+        concat_latent_image = comfy_latent_formats.Wan21().process_out(concat_latent_image)
+        mask = -mask + 1.0
+        positive = node_helpers.conditioning_set_values(positive, {"concat_mask": mask, "concat_latent_image": concat_latent_image})
+        negative = node_helpers.conditioning_set_values(negative, {"concat_mask": mask, "concat_latent_image": concat_latent_image})
+
+    if clip_vision_output is not None:
+        positive = node_helpers.conditioning_set_values(positive, {"clip_vision_output": clip_vision_output})
+        negative = node_helpers.conditioning_set_values(negative, {"clip_vision_output": clip_vision_output})
+
+    return positive, negative, {"samples": latent}
+
+
+# ── WAN Sound nodes ──────────────────────────────────────────────────────────
+
+
+def _wan_sound_linear_interpolation(features: Any, input_fps: float, output_fps: float, output_len: int | None = None) -> Any:
+    import torch
+
+    features = features.transpose(1, 2)
+    seq_len = features.shape[2] / float(input_fps)
+    if output_len is None:
+        output_len = int(seq_len * output_fps)
+    output_features = torch.nn.functional.interpolate(features, size=output_len, align_corners=True, mode="linear")
+    return output_features.transpose(1, 2)
+
+
+def _wan_sound_get_sample_indices(
+    original_fps: float, total_frames: int, target_fps: float, num_sample: int, fixed_start: int | None = None
+) -> Any:
+    import math
+
+    import numpy as np
+
+    required_duration = num_sample / target_fps
+    required_origin_frames = int(math.ceil(required_duration * original_fps))
+    if required_duration > total_frames / original_fps:
+        raise ValueError("required_duration must be less than video length")
+    if fixed_start is not None and fixed_start >= 0:
+        start_frame = fixed_start
+    else:
+        max_start = total_frames - required_origin_frames
+        if max_start < 0:
+            raise ValueError("video length is too short")
+        start_frame = int(np.random.randint(0, max_start + 1))
+    start_time = start_frame / original_fps
+    end_time = start_time + required_duration
+    time_points = np.linspace(start_time, end_time, num_sample, endpoint=False)
+    return np.clip(np.round(np.array(time_points) * original_fps).astype(int), 0, total_frames - 1)
+
+
+def _wan_sound_get_audio_embed_bucket_fps(
+    audio_embed: Any, fps: float = 16, batch_frames: int = 81, m: int = 0, video_rate: float = 30
+) -> tuple[Any, int]:
+    import math
+
+    import torch
+
+    num_layers, audio_frame_num, audio_dim = audio_embed.shape
+    return_all_layers = num_layers > 1
+    scale = video_rate / fps
+    min_batch_num = int(audio_frame_num / (batch_frames * scale)) + 1
+    bucket_num = min_batch_num * batch_frames
+    padd_audio_num = math.ceil(min_batch_num * batch_frames / fps * video_rate) - audio_frame_num
+    batch_idx = _wan_sound_get_sample_indices(
+        original_fps=video_rate, total_frames=audio_frame_num + padd_audio_num,
+        target_fps=fps, num_sample=bucket_num, fixed_start=0,
+    )
+    audio_sample_stride = int(video_rate / fps)
+    batch_audio_eb = []
+    for bi in batch_idx:
+        if bi < audio_frame_num:
+            chosen_idx = list(range(bi - m * audio_sample_stride, bi + (m + 1) * audio_sample_stride, audio_sample_stride))
+            chosen_idx = [max(0, min(c, audio_frame_num - 1)) for c in chosen_idx]
+            frame_audio_embed = (
+                audio_embed[:, chosen_idx].flatten(start_dim=-2, end_dim=-1)
+                if return_all_layers
+                else audio_embed[0][chosen_idx].flatten()
+            )
+        else:
+            frame_audio_embed = (
+                torch.zeros([num_layers, audio_dim * (2 * m + 1)], device=audio_embed.device)
+                if return_all_layers
+                else torch.zeros([audio_dim * (2 * m + 1)], device=audio_embed.device)
+            )
+        batch_audio_eb.append(frame_audio_embed)
+    return torch.cat([c.unsqueeze(0) for c in batch_audio_eb], dim=0), min_batch_num
+
+
+def _wan_sound_to_video(
+    positive: Any,
+    negative: Any,
+    vae: Any,
+    width: int,
+    height: int,
+    length: int,
+    batch_size: int,
+    *,
+    frame_offset: int = 0,
+    ref_image: Any | None = None,
+    audio_encoder_output: Any | None = None,
+    control_video: Any | None = None,
+    ref_motion: Any | None = None,
+    ref_motion_latent: Any | None = None,
+) -> tuple[Any, Any, dict[str, Any], int]:
+    import torch
+
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    import comfy.latent_formats
+    import comfy.model_management
+    import comfy.utils
+    import node_helpers
+
+    latent_t = ((length - 1) // 4) + 1
+
+    if audio_encoder_output is not None:
+        feat = torch.cat(audio_encoder_output["encoded_audio_all_layers"])
+        feat = _wan_sound_linear_interpolation(feat, input_fps=50, output_fps=30)
+        batch_frames = latent_t * 4
+        audio_embed_bucket, _ = _wan_sound_get_audio_embed_bucket_fps(feat, fps=16, batch_frames=batch_frames, m=0, video_rate=30)
+        audio_embed_bucket = audio_embed_bucket.unsqueeze(0)
+        if len(audio_embed_bucket.shape) == 3:
+            audio_embed_bucket = audio_embed_bucket.permute(0, 2, 1)
+        elif len(audio_embed_bucket.shape) == 4:
+            audio_embed_bucket = audio_embed_bucket.permute(0, 2, 3, 1)
+        audio_embed_bucket = audio_embed_bucket[:, :, :, frame_offset: frame_offset + batch_frames]
+        if audio_embed_bucket.shape[3] > 0:
+            positive = node_helpers.conditioning_set_values(positive, {"audio_embed": audio_embed_bucket})
+            negative = node_helpers.conditioning_set_values(negative, {"audio_embed": audio_embed_bucket * 0.0})
+            frame_offset += batch_frames
+
+    if ref_image is not None:
+        ref_image = comfy.utils.common_upscale(
+            ref_image[:1].movedim(-1, 1), width, height, "bilinear", "center"
+        ).movedim(1, -1)
+        ref_latent = vae.encode(ref_image[:, :, :, :3])
+        positive = node_helpers.conditioning_set_values(positive, {"reference_latents": [ref_latent]}, append=True)
+        negative = node_helpers.conditioning_set_values(negative, {"reference_latents": [ref_latent]}, append=True)
+
+    if ref_motion is not None:
+        if ref_motion.shape[0] > 73:
+            ref_motion = ref_motion[-73:]
+        ref_motion = comfy.utils.common_upscale(ref_motion.movedim(-1, 1), width, height, "bilinear", "center").movedim(1, -1)
+        if ref_motion.shape[0] < 73:
+            r = torch.ones([73, height, width, 3]) * 0.5
+            r[-ref_motion.shape[0]:] = ref_motion
+            ref_motion = r
+        ref_motion_latent = vae.encode(ref_motion[:, :, :, :3])
+
+    if ref_motion_latent is not None:
+        ref_motion_latent = ref_motion_latent[:, :, -19:]
+        positive = node_helpers.conditioning_set_values(positive, {"reference_motion": ref_motion_latent})
+        negative = node_helpers.conditioning_set_values(negative, {"reference_motion": ref_motion_latent})
+
+    latent = torch.zeros([batch_size, 16, latent_t, height // 8, width // 8], device=comfy.model_management.intermediate_device())
+    control_video_out = comfy.latent_formats.Wan21().process_out(torch.zeros_like(latent))
+    if control_video is not None:
+        control_video = comfy.utils.common_upscale(
+            control_video[:length].movedim(-1, 1), width, height, "bilinear", "center"
+        ).movedim(1, -1)
+        cv_latent = vae.encode(control_video[:, :, :, :3])
+        control_video_out[:, :, : cv_latent.shape[2]] = cv_latent
+
+    positive = node_helpers.conditioning_set_values(positive, {"control_video": control_video_out})
+    negative = node_helpers.conditioning_set_values(negative, {"control_video": control_video_out})
+    return positive, negative, {"samples": latent}, frame_offset
+
+
+def wan_sound_image_to_video(
+    positive: Any,
+    negative: Any,
+    vae: _VaeEncoder,
+    width: int = 832,
+    height: int = 480,
+    length: int = 77,
+    batch_size: int = 1,
+    *,
+    audio_encoder_output: Any | None = None,
+    ref_image: Any | None = None,
+    control_video: Any | None = None,
+    ref_motion: Any | None = None,
+) -> tuple[Any, Any, dict[str, Any]]:
+    """Build WAN sound-driven image-to-video conditioning."""
+    positive, negative, out_latent, _ = _wan_sound_to_video(
+        positive=positive, negative=negative, vae=vae,
+        width=width, height=height, length=length, batch_size=batch_size,
+        ref_image=ref_image, audio_encoder_output=audio_encoder_output,
+        control_video=control_video, ref_motion=ref_motion,
+    )
+    return positive, negative, out_latent
+
+
+def wan_sound_image_to_video_extend(
+    positive: Any,
+    negative: Any,
+    vae: _VaeEncoder,
+    length: int,
+    video_latent: dict[str, Any],
+    *,
+    audio_encoder_output: Any | None = None,
+    ref_image: Any | None = None,
+    control_video: Any | None = None,
+) -> tuple[Any, Any, dict[str, Any]]:
+    """Extend a WAN sound-driven video by processing the next audio segment."""
+    video_samples = video_latent["samples"]
+    width = video_samples.shape[-1] * 8
+    height = video_samples.shape[-2] * 8
+    batch_size = video_samples.shape[0]
+    frame_offset = video_samples.shape[-3] * 4
+    positive, negative, out_latent, _ = _wan_sound_to_video(
+        positive=positive, negative=negative, vae=vae,
+        width=width, height=height, length=length, batch_size=batch_size,
+        frame_offset=frame_offset, ref_image=ref_image,
+        audio_encoder_output=audio_encoder_output, control_video=control_video,
+        ref_motion_latent=video_samples,
+    )
+    return positive, negative, out_latent
+
+
+def _wan_humo_get_audio_emb_window(audio_emb: Any, frame_num: int, frame0_idx: int, audio_shift: int = 2) -> tuple[Any, int]:
+    import torch
+
+    zero_audio = torch.zeros((audio_emb.shape[1], audio_emb.shape[2]), dtype=audio_emb.dtype, device=audio_emb.device)
+    zero_audio_3 = torch.zeros((3, audio_emb.shape[1], audio_emb.shape[2]), dtype=audio_emb.dtype, device=audio_emb.device)
+    iter_ = 1 + (frame_num - 1) // 4
+    audio_emb_wind = []
+    ed = 0
+    for lt_i in range(iter_):
+        if lt_i == 0:
+            st = frame0_idx + lt_i - 2
+            ed = frame0_idx + lt_i + 3
+            wind_feat = torch.stack(
+                [audio_emb[i] if 0 <= i < audio_emb.shape[0] else zero_audio for i in range(st, ed)], dim=0
+            )
+            wind_feat = torch.cat((zero_audio_3, wind_feat), dim=0)
+        else:
+            st = frame0_idx + 1 + 4 * (lt_i - 1) - audio_shift
+            ed = frame0_idx + 1 + 4 * lt_i + audio_shift
+            wind_feat = torch.stack(
+                [audio_emb[i] if 0 <= i < audio_emb.shape[0] else zero_audio for i in range(st, ed)], dim=0
+            )
+        audio_emb_wind.append(wind_feat)
+    return torch.stack(audio_emb_wind, dim=0), ed - audio_shift
+
+
+def wan_humo_image_to_video(
+    positive: Any,
+    negative: Any,
+    vae: _VaeEncoder,
+    width: int = 832,
+    height: int = 480,
+    length: int = 97,
+    batch_size: int = 1,
+    *,
+    audio_encoder_output: Any | None = None,
+    ref_image: Any | None = None,
+) -> tuple[Any, Any, dict[str, Any]]:
+    """Build WAN Human Motion (HuMo) audio-driven conditioning."""
+    torch, model_management, comfy_utils, node_helpers, _ = _get_wan_vace_dependencies()
+
+    latent_t = ((length - 1) // 4) + 1
+    latent = torch.zeros([batch_size, 16, latent_t, height // 8, width // 8], device=model_management.intermediate_device())
+
+    if ref_image is not None:
+        ref_image = comfy_utils.common_upscale(ref_image[:1].movedim(-1, 1), width, height, "bilinear", "center").movedim(1, -1)
+        ref_latent = vae.encode(ref_image[:, :, :, :3])
+        positive = node_helpers.conditioning_set_values(positive, {"reference_latents": [ref_latent]}, append=True)
+        negative = node_helpers.conditioning_set_values(negative, {"reference_latents": [torch.zeros_like(ref_latent)]}, append=True)
+    else:
+        zero_latent = torch.zeros([batch_size, 16, 1, height // 8, width // 8], device=model_management.intermediate_device())
+        positive = node_helpers.conditioning_set_values(positive, {"reference_latents": [zero_latent]}, append=True)
+        negative = node_helpers.conditioning_set_values(negative, {"reference_latents": [zero_latent]}, append=True)
+
+    if audio_encoder_output is not None:
+        audio_emb = torch.stack(audio_encoder_output["encoded_audio_all_layers"], dim=2)
+        audio_len = audio_encoder_output["audio_samples"] // 640
+        audio_emb = audio_emb[:, : audio_len * 2]
+        feat0 = _wan_sound_linear_interpolation(audio_emb[:, :, 0:8].mean(dim=2), 50, 25)
+        feat1 = _wan_sound_linear_interpolation(audio_emb[:, :, 8:16].mean(dim=2), 50, 25)
+        feat2 = _wan_sound_linear_interpolation(audio_emb[:, :, 16:24].mean(dim=2), 50, 25)
+        feat3 = _wan_sound_linear_interpolation(audio_emb[:, :, 24:32].mean(dim=2), 50, 25)
+        feat4 = _wan_sound_linear_interpolation(audio_emb[:, :, 32], 50, 25)
+        audio_emb = torch.stack([feat0, feat1, feat2, feat3, feat4], dim=2)[0]
+        audio_emb, _ = _wan_humo_get_audio_emb_window(audio_emb, length, frame0_idx=0)
+        audio_emb = audio_emb.unsqueeze(0)
+        positive = node_helpers.conditioning_set_values(positive, {"audio_embed": audio_emb})
+        negative = node_helpers.conditioning_set_values(negative, {"audio_embed": torch.zeros_like(audio_emb)})
+    else:
+        zero_audio = torch.zeros([batch_size, latent_t + 1, 8, 5, 1280], device=model_management.intermediate_device())
+        positive = node_helpers.conditioning_set_values(positive, {"audio_embed": zero_audio})
+        negative = node_helpers.conditioning_set_values(negative, {"audio_embed": zero_audio})
+
+    return positive, negative, {"samples": latent}
+
+
+# ── WAN Animate to Video ─────────────────────────────────────────────────────
+
+
+def wan_animate_to_video(
+    positive: Any,
+    negative: Any,
+    vae: _VaeEncoder,
+    width: int = 832,
+    height: int = 480,
+    length: int = 77,
+    batch_size: int = 1,
+    continue_motion_max_frames: int = 5,
+    video_frame_offset: int = 0,
+    *,
+    clip_vision_output: Any | None = None,
+    reference_image: Any | None = None,
+    face_video: Any | None = None,
+    pose_video: Any | None = None,
+    continue_motion: Any | None = None,
+    background_video: Any | None = None,
+    character_mask: Any | None = None,
+) -> tuple[Any, Any, dict[str, Any], int, int, int]:
+    """Build WAN Animate conditioning (experimental).
+
+    Returns ``(positive, negative, latent, trim_latent, trim_image, video_frame_offset_new)``.
+    """
+    torch, model_management, comfy_utils, node_helpers, _ = _get_wan_vace_dependencies()
+
+    trim_to_pose_video = False
+    latent_length = ((length - 1) // 4) + 1
+    latent_width = width // 8
+    latent_height = height // 8
+    trim_latent = 0
+
+    if reference_image is None:
+        reference_image = torch.zeros((1, height, width, 3))
+
+    image = comfy_utils.common_upscale(reference_image[:length].movedim(-1, 1), width, height, "area", "center").movedim(1, -1)
+    concat_latent_image = vae.encode(image[:, :, :, :3])
+    mask = torch.zeros(
+        (1, 4, concat_latent_image.shape[-3], concat_latent_image.shape[-2], concat_latent_image.shape[-1]),
+        device=concat_latent_image.device, dtype=concat_latent_image.dtype,
+    )
+    trim_latent += concat_latent_image.shape[2]
+    ref_motion_latent_length = 0
+
+    if continue_motion is None:
+        image = torch.ones((length, height, width, 3)) * 0.5
+    else:
+        continue_motion = continue_motion[-continue_motion_max_frames:]
+        video_frame_offset = max(0, video_frame_offset - continue_motion.shape[0])
+        continue_motion = comfy_utils.common_upscale(continue_motion[-length:].movedim(-1, 1), width, height, "area", "center").movedim(1, -1)
+        image = torch.ones((length, height, width, continue_motion.shape[-1]), device=continue_motion.device, dtype=continue_motion.dtype) * 0.5
+        image[: continue_motion.shape[0]] = continue_motion
+        ref_motion_latent_length += ((continue_motion.shape[0] - 1) // 4) + 1
+
+    if clip_vision_output is not None:
+        positive = node_helpers.conditioning_set_values(positive, {"clip_vision_output": clip_vision_output})
+        negative = node_helpers.conditioning_set_values(negative, {"clip_vision_output": clip_vision_output})
+
+    if pose_video is not None:
+        if pose_video.shape[0] <= video_frame_offset:
+            pose_video = None
+        else:
+            pose_video = pose_video[video_frame_offset:]
+
+    if pose_video is not None:
+        pose_video = comfy_utils.common_upscale(pose_video[:length].movedim(-1, 1), width, height, "area", "center").movedim(1, -1)
+        if not trim_to_pose_video and pose_video.shape[0] < length:
+            pose_video = torch.cat((pose_video,) + (pose_video[-1:],) * (length - pose_video.shape[0]), dim=0)
+        pose_video_latent = vae.encode(pose_video[:, :, :, :3])
+        positive = node_helpers.conditioning_set_values(positive, {"pose_video_latent": pose_video_latent})
+        negative = node_helpers.conditioning_set_values(negative, {"pose_video_latent": pose_video_latent})
+        if trim_to_pose_video:
+            latent_length = pose_video_latent.shape[2]
+            length = latent_length * 4 - 3
+            image = image[:length]
+
+    if face_video is not None:
+        if face_video.shape[0] <= video_frame_offset:
+            face_video = None
+        else:
+            face_video = face_video[video_frame_offset:]
+
+    if face_video is not None:
+        face_video = (comfy_utils.common_upscale(face_video[:length].movedim(-1, 1), 512, 512, "area", "center") * 2.0 - 1.0).movedim(0, 1).unsqueeze(0)
+        positive = node_helpers.conditioning_set_values(positive, {"face_video_pixels": face_video})
+        negative = node_helpers.conditioning_set_values(negative, {"face_video_pixels": face_video * 0.0 - 1.0})
+
+    ref_images_num = max(0, ref_motion_latent_length * 4 - 3)
+    if background_video is not None and background_video.shape[0] > video_frame_offset:
+        background_video = comfy_utils.common_upscale(
+            background_video[video_frame_offset:][:length].movedim(-1, 1), width, height, "area", "center"
+        ).movedim(1, -1)
+        if background_video.shape[0] > ref_images_num:
+            image[ref_images_num: background_video.shape[0]] = background_video[ref_images_num:]
+
+    mask_refmotion = torch.ones(
+        (1, 1, latent_length * 4, concat_latent_image.shape[-2], concat_latent_image.shape[-1]),
+        device=mask.device, dtype=mask.dtype,
+    )
+    if continue_motion is not None:
+        mask_refmotion[:, :, : ref_motion_latent_length * 4] = 0.0
+
+    if character_mask is not None:
+        if character_mask.shape[0] > video_frame_offset or character_mask.shape[0] == 1:
+            if character_mask.shape[0] == 1:
+                character_mask = character_mask.repeat((length,) + (1,) * (character_mask.ndim - 1))
+            else:
+                character_mask = character_mask[video_frame_offset:]
+            if character_mask.ndim == 3:
+                character_mask = character_mask.unsqueeze(1).movedim(0, 1)
+            if character_mask.ndim == 4:
+                character_mask = character_mask.unsqueeze(1)
+            character_mask = comfy_utils.common_upscale(character_mask[:, :, :length], concat_latent_image.shape[-1], concat_latent_image.shape[-2], "nearest-exact", "center")
+            if character_mask.shape[2] > ref_images_num:
+                mask_refmotion[:, :, ref_images_num: character_mask.shape[2]] = character_mask[:, :, ref_images_num:]
+
+    concat_latent_image = torch.cat((concat_latent_image, vae.encode(image[:, :, :, :3])), dim=2)
+    mask_refmotion = mask_refmotion.view(1, mask_refmotion.shape[2] // 4, 4, mask_refmotion.shape[3], mask_refmotion.shape[4]).transpose(1, 2)
+    mask = torch.cat((mask, mask_refmotion), dim=2)
+    positive = node_helpers.conditioning_set_values(positive, {"concat_latent_image": concat_latent_image, "concat_mask": mask})
+    negative = node_helpers.conditioning_set_values(negative, {"concat_latent_image": concat_latent_image, "concat_mask": mask})
+
+    latent = torch.zeros([batch_size, 16, latent_length + trim_latent, latent_height, latent_width], device=model_management.intermediate_device())
+    return positive, negative, {"samples": latent}, trim_latent, max(0, ref_motion_latent_length * 4 - 3), video_frame_offset + length
+
+
+# ── WAN Infinite Talk to Video ───────────────────────────────────────────────
+
+
+def wan_infinite_talk_to_video(
+    model: Any,
+    model_patch: Any,
+    positive: Any,
+    negative: Any,
+    vae: _VaeEncoder,
+    width: int,
+    height: int,
+    length: int,
+    audio_encoder_output_1: Any,
+    *,
+    mode: str = "single_speaker",
+    start_image: Any | None = None,
+    clip_vision_output: Any | None = None,
+    audio_encoder_output_2: Any | None = None,
+    mask_1: Any | None = None,
+    mask_2: Any | None = None,
+    motion_frame_count: int = 9,
+    audio_scale: float = 1.0,
+    previous_frames: Any | None = None,
+) -> tuple[Any, Any, Any, dict[str, Any], int]:
+    """Build WAN Infinite Talk conditioning with model patching.
+
+    Returns ``(model_patched, positive, negative, latent, trim_image)``.
+    ``mode`` is ``"single_speaker"`` or ``"two_speakers"``.
+    """
+    import logging
+
+    import torch
+
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    import comfy.model_management
+    import comfy.patcher_extension
+    import comfy.utils
+    import node_helpers
+    from comfy.ldm.wan.model_multitalk import (
+        InfiniteTalkOuterSampleWrapper,
+        MultiTalkCrossAttnPatch,
+        MultiTalkGetAttnMapPatch,
+        project_audio_features,
+    )
+
+    if previous_frames is not None and previous_frames.shape[0] < motion_frame_count:
+        raise ValueError("Not enough previous frames provided.")
+    if mode == "two_speakers" and (audio_encoder_output_2 is None or mask_1 is None or mask_2 is None):
+        raise ValueError("audio_encoder_output_2, mask_1, and mask_2 are required in two_speakers mode.")
+    if audio_encoder_output_2 is not None and (mask_1 is None or mask_2 is None):
+        raise ValueError("Both mask_1 and mask_2 must be provided when using two audio encoder outputs.")
+
+    ref_masks = None
+    if mask_1 is not None and mask_2 is not None:
+        if audio_encoder_output_2 is None:
+            raise ValueError("Second audio encoder output must be provided if two masks are used.")
+        ref_masks = torch.cat([mask_1, mask_2])
+
+    latent = torch.zeros([1, 16, ((length - 1) // 4) + 1, height // 8, width // 8], device=comfy.model_management.intermediate_device())
+    concat_latent_image = None
+    if start_image is not None:
+        start_image = comfy.utils.common_upscale(start_image[:length].movedim(-1, 1), width, height, "bilinear", "center").movedim(1, -1)
+        image = torch.ones((length, height, width, start_image.shape[-1]), device=start_image.device, dtype=start_image.dtype) * 0.5
+        image[: start_image.shape[0]] = start_image
+        concat_latent_image = vae.encode(image[:, :, :, :3])
+        concat_mask = torch.ones((1, 1, latent.shape[2], concat_latent_image.shape[-2], concat_latent_image.shape[-1]), device=start_image.device, dtype=start_image.dtype)
+        concat_mask[:, :, : ((start_image.shape[0] - 1) // 4) + 1] = 0.0
+        positive = node_helpers.conditioning_set_values(positive, {"concat_latent_image": concat_latent_image, "concat_mask": concat_mask})
+        negative = node_helpers.conditioning_set_values(negative, {"concat_latent_image": concat_latent_image, "concat_mask": concat_mask})
+
+    if clip_vision_output is not None:
+        positive = node_helpers.conditioning_set_values(positive, {"clip_vision_output": clip_vision_output})
+        negative = node_helpers.conditioning_set_values(negative, {"clip_vision_output": clip_vision_output})
+
+    model_patched = model.clone()
+    encoded_audio_list = []
+    seq_lengths = []
+    for aeo in [audio_encoder_output_1, audio_encoder_output_2]:
+        if aeo is None:
+            continue
+        encoded_audio = torch.stack(aeo["encoded_audio_all_layers"], dim=0).squeeze(1)[1:]
+        encoded_audio = _wan_sound_linear_interpolation(encoded_audio, input_fps=50, output_fps=25).movedim(0, 1)
+        encoded_audio_list.append(encoded_audio)
+        seq_lengths.append(encoded_audio.shape[0])
+
+    if len(encoded_audio_list) > 1:
+        total_len = sum(seq_lengths)
+        full_list = []
+        offset = 0
+        for emb, seq_len in zip(encoded_audio_list, seq_lengths):
+            full = torch.zeros(total_len, *emb.shape[1:], dtype=emb.dtype)
+            full[offset: offset + seq_len] = emb
+            full_list.append(full)
+            offset += seq_len
+        encoded_audio_list = full_list
+
+    token_ref_target_masks = None
+    if ref_masks is not None:
+        token_ref_target_masks = torch.nn.functional.interpolate(
+            ref_masks.unsqueeze(0), size=(latent.shape[-2] // 2, latent.shape[-1] // 2), mode="nearest"
+        )[0]
+        token_ref_target_masks = (token_ref_target_masks > 0).view(token_ref_target_masks.shape[0], -1)
+
+    if previous_frames is not None:
+        motion_frames = comfy.utils.common_upscale(previous_frames[-motion_frame_count:].movedim(-1, 1), width, height, "bilinear", "center").movedim(1, -1)
+        frame_offset = previous_frames.shape[0] - motion_frame_count
+        audio_start, audio_end = frame_offset, frame_offset + length
+        logging.info("InfiniteTalk: Processing audio frames %d - %d", audio_start, audio_end)
+        motion_frames_latent = vae.encode(motion_frames[:, :, :, :3])
+        trim_image = motion_frame_count
+    else:
+        audio_start, audio_end, trim_image = 0, length, 0
+        motion_frames_latent = concat_latent_image[:, :, :1] if concat_latent_image is not None else torch.zeros([1, 16, 1, height // 8, width // 8])
+
+    audio_embed = project_audio_features(model_patch.model.audio_proj, encoded_audio_list, audio_start, audio_end).to(model_patched.model_dtype())
+    model_patched.model_options["transformer_options"]["audio_embeds"] = audio_embed
+    model_patched.add_wrapper_with_key(
+        comfy.patcher_extension.WrappersMP.OUTER_SAMPLE,
+        "infinite_talk_outer_sample",
+        InfiniteTalkOuterSampleWrapper(motion_frames_latent, model_patch, is_extend=previous_frames is not None),
+    )
+    model_patched.set_model_patch(MultiTalkCrossAttnPatch(model_patch, audio_scale), "attn2_patch")
+    if token_ref_target_masks is not None:
+        model_patched.set_model_patch(MultiTalkGetAttnMapPatch(token_ref_target_masks), "attn1_patch")
+
+    return model_patched, positive, negative, {"samples": latent}, trim_image
+
+
+# ── WAN SCAIL to Video ───────────────────────────────────────────────────────
+
+
+def wan_scail_to_video(
+    positive: Any,
+    negative: Any,
+    vae: _VaeEncoder,
+    width: int = 512,
+    height: int = 896,
+    length: int = 81,
+    batch_size: int = 1,
+    pose_strength: float = 1.0,
+    pose_start: float = 0.0,
+    pose_end: float = 1.0,
+    *,
+    clip_vision_output: Any | None = None,
+    reference_image: Any | None = None,
+    pose_video: Any | None = None,
+) -> tuple[Any, Any, dict[str, Any]]:
+    """Build WAN SCAIL pose-driven conditioning (experimental)."""
+    torch, model_management, comfy_utils, node_helpers, _ = _get_wan_vace_dependencies()
+
+    latent = torch.zeros([batch_size, 16, ((length - 1) // 4) + 1, height // 8, width // 8], device=model_management.intermediate_device())
+
+    ref_latent = None
+    if reference_image is not None:
+        reference_image = comfy_utils.common_upscale(reference_image[:1].movedim(-1, 1), width, height, "bilinear", "center").movedim(1, -1)
+        ref_latent = vae.encode(reference_image[:, :, :, :3])
+
+    if ref_latent is not None:
+        positive = node_helpers.conditioning_set_values(positive, {"reference_latents": [ref_latent]}, append=True)
+        negative = node_helpers.conditioning_set_values(negative, {"reference_latents": [torch.zeros_like(ref_latent)]}, append=True)
+
+    if clip_vision_output is not None:
+        positive = node_helpers.conditioning_set_values(positive, {"clip_vision_output": clip_vision_output})
+        negative = node_helpers.conditioning_set_values(negative, {"clip_vision_output": clip_vision_output})
+
+    if pose_video is not None:
+        pose_video = comfy_utils.common_upscale(pose_video[:length].movedim(-1, 1), width // 2, height // 2, "area", "center").movedim(1, -1)
+        pose_video_latent = vae.encode(pose_video[:, :, :, :3]) * pose_strength
+        positive = node_helpers.conditioning_set_values_with_timestep_range(positive, {"pose_video_latent": pose_video_latent}, pose_start, pose_end)
+        negative = node_helpers.conditioning_set_values_with_timestep_range(negative, {"pose_video_latent": pose_video_latent}, pose_start, pose_end)
+
+    return positive, negative, {"samples": latent}
+
+
+# ── WAN 2.2 Image-to-Video Latent ────────────────────────────────────────────
+
+
+def wan22_image_to_video_latent(
+    vae: _VaeEncoder,
+    width: int = 1280,
+    height: int = 704,
+    length: int = 49,
+    batch_size: int = 1,
+    *,
+    start_image: Any | None = None,
+) -> dict[str, Any]:
+    """Create WAN 2.2 image-to-video latent with optional start-image encoding."""
+    torch, model_management, comfy_utils, _, comfy_latent_formats = _get_wan_vace_dependencies()
+
+    latent = torch.zeros([1, 48, ((length - 1) // 4) + 1, height // 16, width // 16], device=model_management.intermediate_device())
+
+    if start_image is None:
+        return {"samples": latent}
+
+    mask = torch.ones([latent.shape[0], 1, ((length - 1) // 4) + 1, latent.shape[-2], latent.shape[-1]], device=model_management.intermediate_device())
+    start_image = comfy_utils.common_upscale(start_image[:length].movedim(-1, 1), width, height, "bilinear", "center").movedim(1, -1)
+    latent_temp = vae.encode(start_image)
+    latent[:, :, : latent_temp.shape[-3]] = latent_temp
+    mask[:, :, : latent_temp.shape[-3]] *= 0.0
+    latent_fmt = comfy_latent_formats.Wan22()
+    latent = latent_fmt.process_out(latent) * mask + latent * (1.0 - mask)
+    return {
+        "samples": latent.repeat((batch_size,) + (1,) * (latent.ndim - 1)),
+        "noise_mask": mask.repeat((batch_size,) + (1,) * (mask.ndim - 1)),
+    }
+
+
 __all__ = [
     "encode_prompt",
     "encode_prompt_flux",
     "encode_clip_vision",
     "wan_image_to_video",
     "wan_first_last_frame_to_video",
+    "wan_vace_to_video",
+    "wan_fun_control_to_video",
+    "wan22_fun_control_to_video",
+    "wan_fun_inpaint_to_video",
+    "wan_camera_embedding",
+    "wan_camera_image_to_video",
+    "wan_phantom_subject_to_video",
+    "wan_track_to_video",
+    "wan_sound_image_to_video",
+    "wan_sound_image_to_video_extend",
+    "wan_humo_image_to_video",
+    "wan_animate_to_video",
+    "wan_infinite_talk_to_video",
+    "wan_scail_to_video",
+    "wan22_image_to_video_latent",
     "ltxv_img_to_video",
     "ltxv_conditioning",
     "ltxv_crop_guides",
