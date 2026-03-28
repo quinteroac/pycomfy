@@ -76,6 +76,79 @@ def _install_fake_ltxav_text_encoder_loader_modules(
     return calls
 
 
+def _install_fake_modules_with_model_options(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    embeddings_paths: list[str],
+    clip_object: Any,
+    resolved_text_encoder_path: str,
+    resolved_checkpoint_path: str,
+) -> dict[str, list[Any]]:
+    """Like the helper above but load_clip captures model_options too."""
+    calls: dict[str, list[Any]] = {
+        "add_model_folder_path": [],
+        "get_full_path_or_raise": [],
+        "get_folder_paths": [],
+        "load_clip": [],
+    }
+
+    folder_paths_module = ModuleType("folder_paths")
+
+    def add_model_folder_path(
+        folder_name: str, full_folder_path: str, is_default: bool = False
+    ) -> None:
+        calls["add_model_folder_path"].append((folder_name, full_folder_path, is_default))
+
+    def get_full_path_or_raise(folder_name: str, filename: str) -> str:
+        calls["get_full_path_or_raise"].append((folder_name, filename))
+        if folder_name == "text_encoders":
+            return resolved_text_encoder_path
+        if folder_name == "checkpoints":
+            return resolved_checkpoint_path
+        raise AssertionError(f"unexpected folder name: {folder_name}")
+
+    def get_folder_paths(folder_name: str) -> list[str]:
+        calls["get_folder_paths"].append(folder_name)
+        if folder_name != "embeddings":
+            raise AssertionError(f"unexpected folder name: {folder_name}")
+        return embeddings_paths
+
+    setattr(folder_paths_module, "add_model_folder_path", add_model_folder_path)
+    setattr(folder_paths_module, "get_full_path_or_raise", get_full_path_or_raise)
+    setattr(folder_paths_module, "get_folder_paths", get_folder_paths)
+
+    comfy_sd_module = ModuleType("comfy.sd")
+    setattr(comfy_sd_module, "CLIPType", _FakeCLIPType)
+
+    def load_clip(
+        *,
+        ckpt_paths: list[str],
+        embedding_directory: list[str],
+        clip_type: Any,
+        model_options: dict[str, Any] | None = None,
+    ) -> Any:
+        calls["load_clip"].append(
+            {
+                "ckpt_paths": ckpt_paths,
+                "embedding_directory": embedding_directory,
+                "clip_type": clip_type,
+                "model_options": model_options,
+            }
+        )
+        return clip_object
+
+    setattr(comfy_sd_module, "load_clip", load_clip)
+
+    comfy_module = ModuleType("comfy")
+    setattr(comfy_module, "sd", comfy_sd_module)
+
+    monkeypatch.setitem(sys.modules, "folder_paths", folder_paths_module)
+    monkeypatch.setitem(sys.modules, "comfy", comfy_module)
+    monkeypatch.setitem(sys.modules, "comfy.sd", comfy_sd_module)
+
+    return calls
+
+
 def test_load_ltxav_text_encoder_calls_loader_and_returns_raw_object(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -241,3 +314,137 @@ def test_load_ltxav_text_encoder_raises_file_not_found_for_missing_checkpoint(
     assert calls["get_full_path_or_raise"] == []
     assert calls["get_folder_paths"] == []
     assert calls["load_clip"] == []
+
+
+# ---------------------------------------------------------------------------
+# US-004: device parameter tests
+# ---------------------------------------------------------------------------
+
+
+def test_load_ltxav_text_encoder_device_cpu_passes_model_options(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """AC-02 / AC-05: device='cpu' passes model_options with cpu devices."""
+    models_dir = tmp_path / "models"
+    (models_dir / "checkpoints").mkdir(parents=True)
+    (models_dir / "embeddings").mkdir(parents=True)
+
+    text_encoder_file = tmp_path / "text_encoders" / "ltxav_te.safetensors"
+    text_encoder_file.parent.mkdir(parents=True)
+    text_encoder_file.write_text("stub")
+
+    checkpoint_file = tmp_path / "weights" / "ltxav_ckpt.safetensors"
+    checkpoint_file.parent.mkdir(parents=True)
+    checkpoint_file.write_text("stub")
+
+    # Stub torch.device so the test runs without a real torch installation.
+    fake_cpu_device = object()
+    torch_module = ModuleType("torch")
+
+    def fake_device(name: str) -> object:
+        assert name == "cpu"
+        return fake_cpu_device
+
+    setattr(torch_module, "device", fake_device)
+    monkeypatch.setitem(sys.modules, "torch", torch_module)
+
+    embeddings_paths = [str(models_dir / "embeddings")]
+    fake_clip = object()
+    calls = _install_fake_modules_with_model_options(
+        monkeypatch,
+        embeddings_paths=embeddings_paths,
+        clip_object=fake_clip,
+        resolved_text_encoder_path="/unused/te.safetensors",
+        resolved_checkpoint_path="/unused/ckpt.safetensors",
+    )
+
+    result = ModelManager(models_dir=models_dir).load_ltxav_text_encoder(
+        text_encoder_file,
+        checkpoint_file,
+        device="cpu",
+    )
+
+    assert result is fake_clip
+    assert len(calls["load_clip"]) == 1
+    call = calls["load_clip"][0]
+    assert call["model_options"] is not None
+    assert call["model_options"]["load_device"] is fake_cpu_device
+    assert call["model_options"]["offload_device"] is fake_cpu_device
+
+
+def test_load_ltxav_text_encoder_device_default_omits_model_options(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """AC-03: device='default' (or omitted) passes no model_options."""
+    models_dir = tmp_path / "models"
+    (models_dir / "checkpoints").mkdir(parents=True)
+    (models_dir / "embeddings").mkdir(parents=True)
+
+    text_encoder_file = tmp_path / "text_encoders" / "ltxav_te.safetensors"
+    text_encoder_file.parent.mkdir(parents=True)
+    text_encoder_file.write_text("stub")
+
+    checkpoint_file = tmp_path / "weights" / "ltxav_ckpt.safetensors"
+    checkpoint_file.parent.mkdir(parents=True)
+    checkpoint_file.write_text("stub")
+
+    embeddings_paths = [str(models_dir / "embeddings")]
+    fake_clip = object()
+    calls = _install_fake_modules_with_model_options(
+        monkeypatch,
+        embeddings_paths=embeddings_paths,
+        clip_object=fake_clip,
+        resolved_text_encoder_path="/unused/te.safetensors",
+        resolved_checkpoint_path="/unused/ckpt.safetensors",
+    )
+
+    result = ModelManager(models_dir=models_dir).load_ltxav_text_encoder(
+        text_encoder_file,
+        checkpoint_file,
+        device="default",
+    )
+
+    assert result is fake_clip
+    assert len(calls["load_clip"]) == 1
+    call = calls["load_clip"][0]
+    assert call["model_options"] is None
+
+
+def test_load_ltxav_text_encoder_device_omitted_omits_model_options(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """AC-03: omitting device is equivalent to device='default'."""
+    models_dir = tmp_path / "models"
+    (models_dir / "checkpoints").mkdir(parents=True)
+    (models_dir / "embeddings").mkdir(parents=True)
+
+    text_encoder_file = tmp_path / "text_encoders" / "ltxav_te.safetensors"
+    text_encoder_file.parent.mkdir(parents=True)
+    text_encoder_file.write_text("stub")
+
+    checkpoint_file = tmp_path / "weights" / "ltxav_ckpt.safetensors"
+    checkpoint_file.parent.mkdir(parents=True)
+    checkpoint_file.write_text("stub")
+
+    embeddings_paths = [str(models_dir / "embeddings")]
+    fake_clip = object()
+    calls = _install_fake_modules_with_model_options(
+        monkeypatch,
+        embeddings_paths=embeddings_paths,
+        clip_object=fake_clip,
+        resolved_text_encoder_path="/unused/te.safetensors",
+        resolved_checkpoint_path="/unused/ckpt.safetensors",
+    )
+
+    result = ModelManager(models_dir=models_dir).load_ltxav_text_encoder(
+        text_encoder_file,
+        checkpoint_file,
+    )
+
+    assert result is fake_clip
+    assert len(calls["load_clip"]) == 1
+    call = calls["load_clip"][0]
+    assert call["model_options"] is None

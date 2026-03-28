@@ -250,7 +250,10 @@ class ModelManager:
         return AudioVAE(state_dict, metadata)
 
     def load_ltxav_text_encoder(
-        self, text_encoder_path: str | Path, checkpoint_path: str | Path
+        self,
+        text_encoder_path: str | Path,
+        checkpoint_path: str | Path,
+        device: str = "default",
     ) -> object:
         """Load an LTXAV text encoder from two separate files.
 
@@ -258,6 +261,9 @@ class ModelManager:
         ``checkpoint_path`` is the companion checkpoint file (from ``checkpoints/``).
         Both can be absolute paths to existing files or relative filenames resolved
         via folder_paths.
+
+        ``device`` controls placement: ``"default"`` uses ComfyUI's device management;
+        ``"cpu"`` pins both load and offload devices to CPU.
         """
         ensure_comfyui_on_path()
 
@@ -282,10 +288,18 @@ class ModelManager:
             name = checkpoint_path if isinstance(checkpoint_path, str) else ckpt_p.name
             resolved_ckpt = folder_paths.get_full_path_or_raise("checkpoints", name)
 
+        kwargs: dict[str, Any] = {}
+        if device == "cpu":
+            import torch
+
+            cpu = torch.device("cpu")
+            kwargs["model_options"] = {"load_device": cpu, "offload_device": cpu}
+
         return comfy_sd.load_clip(
             ckpt_paths=[resolved_te, resolved_ckpt],
             embedding_directory=folder_paths.get_folder_paths("embeddings"),
             clip_type=comfy_sd.CLIPType.LTXV,
+            **kwargs,
         )
 
     def load_llm(self, path: str | Path) -> Any:

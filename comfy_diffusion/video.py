@@ -249,8 +249,55 @@ def get_video_components(video_path: str | Path) -> dict[str, int | float]:
     }
 
 
+def ltxv_img_to_video_inplace(
+    vae: Any,
+    image: Any,
+    latent: dict[str, Any],
+    strength: float = 1.0,
+    bypass: bool = False,
+) -> dict[str, Any]:
+    """Inject an image frame into a latent for LTX2/LTX3 image-to-video pipelines.
+
+    Mirrors ``LTXVImgToVideoInplace.execute()`` from ComfyUI.
+    """
+    if bypass:
+        return latent
+
+    import comfy.utils  # type: ignore[import-untyped]
+    import torch
+
+    samples = latent["samples"]
+    _, height_scale_factor, width_scale_factor = vae.downscale_index_formula
+
+    batch, _, latent_frames, latent_height, latent_width = samples.shape
+    width = latent_width * width_scale_factor
+    height = latent_height * height_scale_factor
+
+    if image.shape[1] != height or image.shape[2] != width:
+        pixels = comfy.utils.common_upscale(
+            image.movedim(-1, 1), width, height, "bilinear", "center"
+        ).movedim(1, -1)
+    else:
+        pixels = image
+
+    encode_pixels = pixels[:, :, :, :3]
+    t = vae.encode(encode_pixels)
+
+    samples[:, :, : t.shape[2]] = t
+
+    conditioning_latent_frames_mask = torch.ones(
+        (batch, 1, latent_frames, 1, 1),
+        dtype=torch.float32,
+        device=samples.device,
+    )
+    conditioning_latent_frames_mask[:, :, : t.shape[2]] = 1.0 - strength
+
+    return {"samples": samples, "noise_mask": conditioning_latent_frames_mask}
+
+
 __all__ = [
     "load_video",
     "save_video",
     "get_video_components",
+    "ltxv_img_to_video_inplace",
 ]
