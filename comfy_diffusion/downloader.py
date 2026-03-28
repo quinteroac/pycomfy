@@ -173,13 +173,50 @@ def _resolve_dest(dest: str | Path, models_dir: Path | None, fallback_name: str)
     return path
 
 
-def _stream_to_file(response: Any, dest: Path) -> None:
-    """Write *response* body to *dest* atomically via a temporary file."""
+def _stream_to_file(
+    response: Any,
+    dest: Path,
+    *,
+    progress_label: str | None = None,
+    quiet: bool = False,
+) -> None:
+    """Write *response* body to *dest* atomically via a temporary file.
+
+    When *progress_label* is provided and *quiet* is ``False``, a tqdm
+    progress bar is shown if tqdm is installed; otherwise falls back to a
+    plain copy.
+    """
+    total: int | None = None
+    if not quiet and progress_label is not None:
+        try:
+            headers = getattr(response, "headers", None)
+            raw_len = headers.get("Content-Length") if headers is not None else None
+            total = int(raw_len) if raw_len is not None else None
+        except (TypeError, ValueError):
+            total = None
+
     tmp_fd, tmp_path_str = tempfile.mkstemp(dir=dest.parent)
     tmp_path = Path(tmp_path_str)
     try:
         with os.fdopen(tmp_fd, "wb") as fh:
-            shutil.copyfileobj(response, fh)
+            if not quiet and progress_label is not None:
+                try:
+                    from tqdm import tqdm  # lazy — optional dep
+
+                    with tqdm(
+                        total=total,
+                        unit="B",
+                        unit_scale=True,
+                        desc=progress_label,
+                        leave=True,
+                    ) as pbar:
+                        for chunk in iter(lambda: response.read(8192), b""):
+                            fh.write(chunk)
+                            pbar.update(len(chunk))
+                except ImportError:
+                    shutil.copyfileobj(response, fh)
+            else:
+                shutil.copyfileobj(response, fh)
         tmp_path.replace(dest)
     except Exception:
         tmp_path.unlink(missing_ok=True)
@@ -210,6 +247,8 @@ def _download_hf_entry(
 
     token: str | None = os.environ.get("HF_TOKEN")
 
+    if quiet:
+        huggingface_hub.disable_progress_bars()
     try:
         cached: str = huggingface_hub.hf_hub_download(
             repo_id=entry.repo_id,
@@ -232,6 +271,9 @@ def _download_hf_entry(
         raise RuntimeError(
             f"Failed to download {entry.repo_id}/{entry.filename}: {exc}"
         ) from exc
+    finally:
+        if quiet:
+            huggingface_hub.enable_progress_bars()
 
     shutil.copy2(cached, dest_path)
 
@@ -315,7 +357,7 @@ def _download_civitai_entry(
     )
     try:
         with urllib.request.urlopen(dl_req) as resp:
-            _stream_to_file(resp, dest_path)
+            _stream_to_file(resp, dest_path, progress_label=dest_path.name, quiet=quiet)
     except urllib.error.URLError as exc:
         raise RuntimeError(
             f"Failed to download CivitAI model_id={entry.model_id} "
@@ -345,6 +387,6 @@ def _download_url_entry(
     )
     try:
         with urllib.request.urlopen(req) as resp:
-            _stream_to_file(resp, dest_path)
+            _stream_to_file(resp, dest_path, progress_label=dest_path.name, quiet=quiet)
     except urllib.error.URLError as exc:
         raise RuntimeError(f"Failed to download {entry.url}: {exc}") from exc
