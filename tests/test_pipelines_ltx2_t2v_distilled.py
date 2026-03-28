@@ -25,7 +25,7 @@ import pytest
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _PIPELINES_PKG = _REPO_ROOT / "comfy_diffusion" / "pipelines"
-_PIPELINE_FILE = _PIPELINES_PKG / "ltx2_t2v_distilled.py"
+_PIPELINE_FILE = _PIPELINES_PKG / "video" / "ltx" / "ltx2" / "t2v_distilled.py"
 
 
 # ---------------------------------------------------------------------------
@@ -35,7 +35,7 @@ _PIPELINE_FILE = _PIPELINES_PKG / "ltx2_t2v_distilled.py"
 
 def test_pipeline_file_exists() -> None:
     assert _PIPELINE_FILE.is_file(), (
-        "comfy_diffusion/pipelines/ltx2_t2v_distilled.py must exist"
+        "comfy_diffusion/pipelines/video/ltx/ltx2/t2v_distilled.py must exist"
     )
 
 
@@ -54,7 +54,7 @@ def test_pipeline_has_module_docstring() -> None:
     source = _PIPELINE_FILE.read_text(encoding="utf-8")
     tree = ast.parse(source, filename=str(_PIPELINE_FILE))
     docstring = ast.get_docstring(tree)
-    assert docstring, "ltx2_t2v_distilled.py must have a module-level docstring"
+    assert docstring, "t2v_distilled.py must have a module-level docstring"
 
 
 def test_pipeline_exports_manifest_and_run() -> None:
@@ -80,14 +80,14 @@ def test_no_top_level_comfy_imports() -> None:
 
 
 def test_import_manifest_and_run() -> None:
-    from comfy_diffusion.pipelines.ltx2_t2v_distilled import manifest, run  # noqa: F401
+    from comfy_diffusion.pipelines.video.ltx.ltx2.t2v_distilled import manifest, run  # noqa: F401
 
     assert callable(manifest)
     assert callable(run)
 
 
 def test_manifest_returns_exactly_three_entries() -> None:
-    from comfy_diffusion.pipelines.ltx2_t2v_distilled import manifest
+    from comfy_diffusion.pipelines.video.ltx.ltx2.t2v_distilled import manifest
 
     result = manifest()
     assert isinstance(result, list)
@@ -96,7 +96,7 @@ def test_manifest_returns_exactly_three_entries() -> None:
 
 def test_manifest_entries_are_hf_model_entries() -> None:
     from comfy_diffusion.downloader import HFModelEntry
-    from comfy_diffusion.pipelines.ltx2_t2v_distilled import manifest
+    from comfy_diffusion.pipelines.video.ltx.ltx2.t2v_distilled import manifest
 
     for entry in manifest():
         assert isinstance(entry, HFModelEntry), (
@@ -105,7 +105,7 @@ def test_manifest_entries_are_hf_model_entries() -> None:
 
 
 def test_manifest_unet_dest_path() -> None:
-    from comfy_diffusion.pipelines.ltx2_t2v_distilled import manifest
+    from comfy_diffusion.pipelines.video.ltx.ltx2.t2v_distilled import manifest
 
     entries = manifest()
     dests = [str(e.dest) for e in entries]
@@ -115,7 +115,7 @@ def test_manifest_unet_dest_path() -> None:
 
 
 def test_manifest_text_encoder_dest_path() -> None:
-    from comfy_diffusion.pipelines.ltx2_t2v_distilled import manifest
+    from comfy_diffusion.pipelines.video.ltx.ltx2.t2v_distilled import manifest
 
     entries = manifest()
     dests = [str(e.dest) for e in entries]
@@ -125,7 +125,7 @@ def test_manifest_text_encoder_dest_path() -> None:
 
 
 def test_manifest_upscaler_dest_path() -> None:
-    from comfy_diffusion.pipelines.ltx2_t2v_distilled import manifest
+    from comfy_diffusion.pipelines.video.ltx.ltx2.t2v_distilled import manifest
 
     entries = manifest()
     dests = [str(e.dest) for e in entries]
@@ -135,7 +135,7 @@ def test_manifest_upscaler_dest_path() -> None:
 
 
 def test_manifest_all_from_lightricks_hf_repo() -> None:
-    from comfy_diffusion.pipelines.ltx2_t2v_distilled import manifest
+    from comfy_diffusion.pipelines.video.ltx.ltx2.t2v_distilled import manifest
 
     for entry in manifest():
         assert entry.repo_id == "Lightricks/LTX-Video", (
@@ -144,7 +144,7 @@ def test_manifest_all_from_lightricks_hf_repo() -> None:
 
 
 def test_manifest_entries_have_nonempty_dest() -> None:
-    from comfy_diffusion.pipelines.ltx2_t2v_distilled import manifest
+    from comfy_diffusion.pipelines.video.ltx.ltx2.t2v_distilled import manifest
 
     for entry in manifest():
         assert entry.dest, f"manifest() entry {entry!r} must have a non-empty dest"
@@ -157,7 +157,7 @@ def test_manifest_entries_have_nonempty_dest() -> None:
 
 def test_run_signature_includes_required_params() -> None:
     import inspect
-    from comfy_diffusion.pipelines.ltx2_t2v_distilled import run
+    from comfy_diffusion.pipelines.video.ltx.ltx2.t2v_distilled import run
 
     sig = inspect.signature(run)
     params = set(sig.parameters.keys())
@@ -167,7 +167,7 @@ def test_run_signature_includes_required_params() -> None:
 
 def test_run_default_steps_is_eight() -> None:
     import inspect
-    from comfy_diffusion.pipelines.ltx2_t2v_distilled import run
+    from comfy_diffusion.pipelines.video.ltx.ltx2.t2v_distilled import run
 
     sig = inspect.signature(run)
     assert sig.parameters["steps"].default == 8, (
@@ -177,7 +177,7 @@ def test_run_default_steps_is_eight() -> None:
 
 def test_run_has_unet_filename_override() -> None:
     import inspect
-    from comfy_diffusion.pipelines.ltx2_t2v_distilled import run
+    from comfy_diffusion.pipelines.video.ltx.ltx2.t2v_distilled import run
 
     sig = inspect.signature(run)
     assert "unet_filename" in sig.parameters
@@ -215,7 +215,7 @@ def test_run_calls_ltxv_latent_upsample_before_vae_decode(
     tmp_path: Path,
 ) -> None:
     """AC03 + AC04: pipeline calls ltxv_latent_upsample() before vae_decode_batch_tiled()."""
-    from comfy_diffusion.pipelines import ltx2_t2v_distilled as pipeline_mod
+    from comfy_diffusion.pipelines.video.ltx.ltx2 import t2v_distilled as pipeline_mod
 
     call_order: list[str] = []
     fake_samples = {"samples": MagicMock()}
@@ -262,7 +262,7 @@ def test_run_passes_upsampled_samples_to_vae_decode(
     tmp_path: Path,
 ) -> None:
     """Upsampled latent (output of ltxv_latent_upsample) is passed to vae_decode_batch_tiled."""
-    from comfy_diffusion.pipelines import ltx2_t2v_distilled as pipeline_mod
+    from comfy_diffusion.pipelines.video.ltx.ltx2 import t2v_distilled as pipeline_mod
 
     original_samples = {"samples": MagicMock(name="original")}
     upsampled_samples = {"samples": MagicMock(name="upsampled")}
@@ -301,7 +301,7 @@ def test_run_uses_load_ltxav_text_encoder_not_load_clip(
     tmp_path: Path,
 ) -> None:
     """Gemma 3 text encoder must be loaded via load_ltxav_text_encoder."""
-    from comfy_diffusion.pipelines import ltx2_t2v_distilled as pipeline_mod
+    from comfy_diffusion.pipelines.video.ltx.ltx2 import t2v_distilled as pipeline_mod
 
     mm = _build_mock_mm()
 
@@ -324,7 +324,7 @@ def test_run_uses_load_latent_upscale_model(
     tmp_path: Path,
 ) -> None:
     """Upscale model must be loaded via load_latent_upscale_model."""
-    from comfy_diffusion.pipelines import ltx2_t2v_distilled as pipeline_mod
+    from comfy_diffusion.pipelines.video.ltx.ltx2 import t2v_distilled as pipeline_mod
 
     mm = _build_mock_mm()
 
@@ -346,7 +346,7 @@ def test_run_raises_on_runtime_error(
     tmp_path: Path,
 ) -> None:
     """run() must raise RuntimeError when check_runtime() returns an error."""
-    from comfy_diffusion.pipelines import ltx2_t2v_distilled as pipeline_mod
+    from comfy_diffusion.pipelines.video.ltx.ltx2 import t2v_distilled as pipeline_mod
 
     with patch(
         _RUNTIME_PATCH,
@@ -359,7 +359,7 @@ def test_run_raises_on_runtime_error(
 def test_download_models_idempotent_all_present(tmp_path: Path) -> None:
     """download_models(manifest()) completes without error when all 3 files are present."""
     from comfy_diffusion.downloader import download_models
-    from comfy_diffusion.pipelines.ltx2_t2v_distilled import manifest
+    from comfy_diffusion.pipelines.video.ltx.ltx2.t2v_distilled import manifest
 
     entries = manifest()
     assert len(entries) == 3

@@ -23,7 +23,7 @@ export MODELS_DIR="$HOME/models"
 ```python
 from comfy_diffusion import check_runtime
 from comfy_diffusion.downloader import download_models
-from comfy_diffusion.pipelines.ltx2_t2v import manifest, run
+from comfy_diffusion.pipelines.video.ltx.ltx2.t2v import manifest, run
 
 check_runtime()
 download_models(manifest(), models_dir="/path/to/models")
@@ -50,7 +50,7 @@ print(f"OK — {len(frames)} frames")
 ```python
 from comfy_diffusion import check_runtime
 from comfy_diffusion.downloader import download_models
-from comfy_diffusion.pipelines.ltx2_t2v_distilled import manifest, run
+from comfy_diffusion.pipelines.video.ltx.ltx2.t2v_distilled import manifest, run
 
 check_runtime()
 download_models(manifest(), models_dir="/path/to/models")
@@ -77,7 +77,7 @@ print(f"OK — {len(frames)} frames")
 ```python
 from comfy_diffusion import check_runtime
 from comfy_diffusion.downloader import download_models
-from comfy_diffusion.pipelines.ltx2_i2v import manifest, run
+from comfy_diffusion.pipelines.video.ltx.ltx2.i2v import manifest, run
 
 check_runtime()
 download_models(manifest(), models_dir="/path/to/models")
@@ -105,7 +105,7 @@ print(f"OK — {len(frames)} frames")
 ```python
 from comfy_diffusion import check_runtime
 from comfy_diffusion.downloader import download_models
-from comfy_diffusion.pipelines.ltx2_i2v_distilled import manifest, run
+from comfy_diffusion.pipelines.video.ltx.ltx2.i2v_distilled import manifest, run
 
 check_runtime()
 download_models(manifest(), models_dir="/path/to/models")
@@ -133,7 +133,7 @@ print(f"OK — {len(frames)} frames")
 ```python
 from comfy_diffusion import check_runtime
 from comfy_diffusion.downloader import download_models
-from comfy_diffusion.pipelines.ltx2_i2v_lora import manifest, run
+from comfy_diffusion.pipelines.video.ltx.ltx2.i2v_lora import manifest, run
 
 check_runtime()
 download_models(manifest(), models_dir="/path/to/models")
@@ -162,7 +162,7 @@ print(f"OK — {len(frames)} frames")
 ```python
 from comfy_diffusion import check_runtime
 from comfy_diffusion.downloader import download_models
-from comfy_diffusion.pipelines.ltx3_t2v import manifest, run
+from comfy_diffusion.pipelines.video.ltx.ltx3.t2v import manifest, run
 
 check_runtime()
 download_models(manifest(), models_dir="/path/to/models")
@@ -189,7 +189,7 @@ print(f"OK — {len(frames)} frames")
 ```python
 from comfy_diffusion import check_runtime
 from comfy_diffusion.downloader import download_models
-from comfy_diffusion.pipelines.ltx3_i2v import manifest, run
+from comfy_diffusion.pipelines.video.ltx.ltx3.i2v import manifest, run
 
 check_runtime()
 download_models(manifest(), models_dir="/path/to/models")

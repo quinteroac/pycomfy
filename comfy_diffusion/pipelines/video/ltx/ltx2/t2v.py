@@ -1,4 +1,4 @@
-"""LTX-Video 2 distilled text-to-video pipeline.
+"""LTX-Video 2 text-to-video pipeline.
 
 Each pipeline module exports ``manifest()`` and ``run()``.
 
@@ -7,17 +7,7 @@ Each pipeline module exports ``manifest()`` and ``run()``.
   weights before the first inference run.
 
 - ``run()`` executes the full inference pipeline end-to-end: model loading,
-  conditioning, sampling, latent upsampling, and VAE decoding.
-
-The distilled variant uses:
-
-- A distilled UNet checkpoint (``ltx-2-19b-distilled.safetensors``) for faster
-  inference with fewer steps (default ``steps=8``).
-- A Gemma 3 12B text encoder loaded via
-  :meth:`~comfy_diffusion.models.ModelManager.load_ltxav_text_encoder` instead
-  of T5.
-- A spatial latent upsampler (``ltx-2-spatial-upscaler-x2-1.0.safetensors``)
-  applied after sampling and before VAE decoding.
+  conditioning, sampling, and VAE decoding.
 
 Pattern
 -------
@@ -37,7 +27,7 @@ Usage
 ::
 
     from comfy_diffusion.downloader import download_models
-    from comfy_diffusion.pipelines.ltx2_t2v_distilled import manifest, run
+    from comfy_diffusion.pipelines.video.ltx.ltx2.t2v import manifest, run
 
     # 1. Download models (idempotent — skips files already present).
     download_models(manifest(), models_dir="/path/to/models")
@@ -65,9 +55,9 @@ __all__ = ["manifest", "run"]
 _HF_REPO = "Lightricks/LTX-Video"
 
 # Relative destination paths (resolved against models_dir by download_models).
-_UNET_DEST = Path("diffusion_models") / "ltx-2-19b-distilled.safetensors"
-_TEXT_ENCODER_DEST = Path("text_encoders") / "gemma_3_12B_it_fp4_mixed.safetensors"
-_UPSCALER_DEST = Path("upscale_models") / "ltx-2-spatial-upscaler-x2-1.0.safetensors"
+_UNET_DEST = Path("diffusion_models") / "ltx-video-2b-v0.9.5.safetensors"
+_VAE_DEST = Path("vae") / "ltx-video-2b-v0.9.5-vae-fp32.safetensors"
+_TEXT_ENCODER_DEST = Path("text_encoders") / "t5xxl_fp16.safetensors"
 
 
 # ---------------------------------------------------------------------------
@@ -76,7 +66,7 @@ _UPSCALER_DEST = Path("upscale_models") / "ltx-2-spatial-upscaler-x2-1.0.safeten
 
 
 def manifest() -> list[ModelEntry]:
-    """Return the list of model files required by the LTX-Video 2 distilled T2V pipeline.
+    """Return the list of model files required by the LTX-Video 2 T2V pipeline.
 
     Each entry is an :class:`~comfy_diffusion.downloader.HFModelEntry` that
     resolves to a deterministic relative path under ``models_dir``.  Pass the
@@ -87,18 +77,18 @@ def manifest() -> list[ModelEntry]:
     return [
         HFModelEntry(
             repo_id=_HF_REPO,
-            filename="ltx-2-19b-distilled.safetensors",
+            filename="ltx-video-2b-v0.9.5.safetensors",
             dest=_UNET_DEST,
         ),
         HFModelEntry(
             repo_id=_HF_REPO,
-            filename="gemma_3_12B_it_fp4_mixed.safetensors",
-            dest=_TEXT_ENCODER_DEST,
+            filename="vae/ltx-video-2b-v0.9.5-vae-fp32.safetensors",
+            dest=_VAE_DEST,
         ),
         HFModelEntry(
-            repo_id=_HF_REPO,
-            filename="ltx-2-spatial-upscaler-x2-1.0.safetensors",
-            dest=_UPSCALER_DEST,
+            repo_id="mcmonkey/google_t5-v1_1-xxl_encoderonly",
+            filename="t5xxl_fp16.safetensors",
+            dest=_TEXT_ENCODER_DEST,
         ),
     ]
 
@@ -111,7 +101,7 @@ def run(
     width: int = 768,
     height: int = 512,
     length: int = 97,
-    steps: int = 8,
+    steps: int = 30,
     cfg: float = 3.0,
     seed: int = 0,
     sampler: str = "euler",
@@ -119,9 +109,8 @@ def run(
     unet_filename: str | None = None,
     vae_filename: str | None = None,
     text_encoder_filename: str | None = None,
-    upscaler_filename: str | None = None,
 ) -> list[Any]:
-    """Run the LTX-Video 2 distilled text-to-video pipeline end-to-end.
+    """Run the LTX-Video 2 text-to-video pipeline end-to-end.
 
     Parameters
     ----------
@@ -139,7 +128,7 @@ def run(
     length : int, optional
         Number of video frames to generate (≈ ~4 s at 24 fps).  Default ``97``.
     steps : int, optional
-        Number of denoising steps.  Default ``8`` (distilled model).
+        Number of denoising steps.  Default ``30``.
     cfg : float, optional
         Classifier-free guidance scale.  Default ``3.0``.
     seed : int, optional
@@ -154,13 +143,9 @@ def run(
         absolute).  When ``None`` the path from :func:`manifest` is used.
         Default ``None``.
     vae_filename : str | None, optional
-        Override the VAE filename.  When ``None`` the VAE is loaded from the
-        UNet checkpoint path (the distilled checkpoint bundles both UNet and
-        VAE weights).  Default ``None``.
+        Override the default VAE filename.  Default ``None``.
     text_encoder_filename : str | None, optional
         Override the default text-encoder filename.  Default ``None``.
-    upscaler_filename : str | None, optional
-        Override the default spatial upscaler filename.  Default ``None``.
 
     Returns
     -------
@@ -169,7 +154,7 @@ def run(
     """
     # Lazy imports — ComfyUI must not be imported at module top level.
     from comfy_diffusion.conditioning import encode_prompt
-    from comfy_diffusion.latent import ltxv_empty_latent_video, ltxv_latent_upsample
+    from comfy_diffusion.latent import ltxv_empty_latent_video
     from comfy_diffusion.models import ModelManager
     from comfy_diffusion.runtime import check_runtime
     from comfy_diffusion.sampling import sample
@@ -186,16 +171,13 @@ def run(
 
     # Resolve model paths (allow caller overrides, fall back to manifest paths).
     unet_path = Path(unet_filename) if unet_filename else models_dir / _UNET_DEST
+    vae_path = Path(vae_filename) if vae_filename else models_dir / _VAE_DEST
     te_path = Path(text_encoder_filename) if text_encoder_filename else models_dir / _TEXT_ENCODER_DEST
-    upscaler_path = Path(upscaler_filename) if upscaler_filename else models_dir / _UPSCALER_DEST
-    # The distilled checkpoint bundles VAE weights; default to the same file.
-    vae_path = Path(vae_filename) if vae_filename else unet_path
 
     # Load models.
     model = mm.load_unet(unet_path)
     vae = mm.load_vae(vae_path)
-    clip = mm.load_ltxav_text_encoder(te_path, unet_path)
-    upscale_model = mm.load_latent_upscale_model(upscaler_path)
+    clip = mm.load_clip(te_path, clip_type="sd3")
 
     # Text conditioning.
     positive, negative = encode_prompt(clip, prompt, negative_prompt)
@@ -215,9 +197,6 @@ def run(
         scheduler=scheduler,
         seed=seed,
     )
-
-    # Spatial upscale in latent space before VAE decode.
-    samples = ltxv_latent_upsample(samples, upscale_model=upscale_model, vae=vae)
 
     # Decode latent → PIL frames.
     frames = vae_decode_batch_tiled(vae, samples)

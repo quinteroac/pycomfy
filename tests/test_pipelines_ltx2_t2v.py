@@ -3,7 +3,7 @@
 Covers:
   AC01: comfy_diffusion/pipelines/ package exists with __init__.py
   AC02: ltx2_t2v.py exists with manifest() and run()
-  AC03: from comfy_diffusion.pipelines.ltx2_t2v import manifest, run works
+  AC03: from comfy_diffusion.pipelines.video.ltx.ltx2.t2v import manifest, run works
   AC04: download_models(manifest()) with all files present completes idempotently
   AC05: module-level docstring explains the pattern
   AC06: file parses without syntax errors (typecheck / lint proxy)
@@ -24,7 +24,7 @@ import pytest
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _PIPELINES_PKG = _REPO_ROOT / "comfy_diffusion" / "pipelines"
-_LTX2_T2V = _PIPELINES_PKG / "ltx2_t2v.py"
+_LTX2_T2V = _PIPELINES_PKG / "video" / "ltx" / "ltx2" / "t2v.py"
 
 
 # ---------------------------------------------------------------------------
@@ -51,7 +51,7 @@ def test_pipelines_init_importable() -> None:
 
 
 def test_ltx2_t2v_file_exists() -> None:
-    assert _LTX2_T2V.is_file(), "comfy_diffusion/pipelines/ltx2_t2v.py must exist"
+    assert _LTX2_T2V.is_file(), "comfy_diffusion/pipelines/video/ltx/ltx2/t2v.py must exist"
 
 
 def test_ltx2_t2v_has_manifest_function() -> None:
@@ -80,7 +80,7 @@ def test_ltx2_t2v_exports_manifest_and_run() -> None:
 
 
 def test_import_manifest_and_run() -> None:
-    from comfy_diffusion.pipelines.ltx2_t2v import manifest, run  # noqa: F401
+    from comfy_diffusion.pipelines.video.ltx.ltx2.t2v import manifest, run  # noqa: F401
 
     assert callable(manifest)
     assert callable(run)
@@ -92,7 +92,7 @@ def test_import_manifest_and_run() -> None:
 
 
 def test_manifest_returns_list() -> None:
-    from comfy_diffusion.pipelines.ltx2_t2v import manifest
+    from comfy_diffusion.pipelines.video.ltx.ltx2.t2v import manifest
 
     result = manifest()
     assert isinstance(result, list)
@@ -101,7 +101,7 @@ def test_manifest_returns_list() -> None:
 
 def test_manifest_entries_are_model_entries() -> None:
     from comfy_diffusion.downloader import HFModelEntry, URLModelEntry, CivitAIModelEntry
-    from comfy_diffusion.pipelines.ltx2_t2v import manifest
+    from comfy_diffusion.pipelines.video.ltx.ltx2.t2v import manifest
 
     valid_types = (HFModelEntry, URLModelEntry, CivitAIModelEntry)
     for entry in manifest():
@@ -111,7 +111,7 @@ def test_manifest_entries_are_model_entries() -> None:
 
 
 def test_manifest_entries_have_dest() -> None:
-    from comfy_diffusion.pipelines.ltx2_t2v import manifest
+    from comfy_diffusion.pipelines.video.ltx.ltx2.t2v import manifest
 
     for entry in manifest():
         assert hasattr(entry, "dest") and entry.dest, (
@@ -122,7 +122,7 @@ def test_manifest_entries_have_dest() -> None:
 def test_download_models_idempotent_all_present(tmp_path: Path) -> None:
     """download_models(manifest()) completes without error when files are present."""
     from comfy_diffusion.downloader import download_models
-    from comfy_diffusion.pipelines.ltx2_t2v import manifest
+    from comfy_diffusion.pipelines.video.ltx.ltx2.t2v import manifest
 
     entries = manifest()
 
@@ -139,7 +139,7 @@ def test_download_models_idempotent_all_present(tmp_path: Path) -> None:
 def test_download_models_idempotent_runs_twice(tmp_path: Path) -> None:
     """Calling download_models twice with all files present is safe."""
     from comfy_diffusion.downloader import download_models
-    from comfy_diffusion.pipelines.ltx2_t2v import manifest
+    from comfy_diffusion.pipelines.video.ltx.ltx2.t2v import manifest
 
     entries = manifest()
 

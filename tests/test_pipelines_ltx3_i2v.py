@@ -23,8 +23,8 @@ import pytest
 # ---------------------------------------------------------------------------
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
-_PIPELINE_FILE = _REPO_ROOT / "comfy_diffusion" / "pipelines" / "ltx3_i2v.py"
-_T2V_FILE = _REPO_ROOT / "comfy_diffusion" / "pipelines" / "ltx3_t2v.py"
+_PIPELINE_FILE = _REPO_ROOT / "comfy_diffusion" / "pipelines" / "video" / "ltx" / "ltx3" / "i2v.py"
+_T2V_FILE = _REPO_ROOT / "comfy_diffusion" / "pipelines" / "video" / "ltx" / "ltx3" / "t2v.py"
 
 
 # ---------------------------------------------------------------------------
@@ -33,7 +33,7 @@ _T2V_FILE = _REPO_ROOT / "comfy_diffusion" / "pipelines" / "ltx3_t2v.py"
 
 
 def test_pipeline_file_exists() -> None:
-    assert _PIPELINE_FILE.is_file(), "comfy_diffusion/pipelines/ltx3_i2v.py must exist"
+    assert _PIPELINE_FILE.is_file(), "comfy_diffusion/pipelines/video/ltx/ltx3/i2v.py must exist"
 
 
 def test_pipeline_parses_without_syntax_errors() -> None:
@@ -51,7 +51,7 @@ def test_pipeline_has_module_docstring() -> None:
     source = _PIPELINE_FILE.read_text(encoding="utf-8")
     tree = ast.parse(source, filename=str(_PIPELINE_FILE))
     docstring = ast.get_docstring(tree)
-    assert docstring, "ltx3_i2v.py must have a module-level docstring"
+    assert docstring, "i2v.py must have a module-level docstring"
 
 
 def test_pipeline_exports_manifest_and_run() -> None:
@@ -77,14 +77,14 @@ def test_no_top_level_comfy_imports() -> None:
 
 
 def test_import_manifest_and_run() -> None:
-    from comfy_diffusion.pipelines.ltx3_i2v import manifest, run  # noqa: F401
+    from comfy_diffusion.pipelines.video.ltx.ltx3.i2v import manifest, run  # noqa: F401
 
     assert callable(manifest)
     assert callable(run)
 
 
 def test_manifest_returns_exactly_three_entries() -> None:
-    from comfy_diffusion.pipelines.ltx3_i2v import manifest
+    from comfy_diffusion.pipelines.video.ltx.ltx3.i2v import manifest
 
     result = manifest()
     assert isinstance(result, list)
@@ -93,7 +93,7 @@ def test_manifest_returns_exactly_three_entries() -> None:
 
 def test_manifest_entries_are_hf_model_entries() -> None:
     from comfy_diffusion.downloader import HFModelEntry
-    from comfy_diffusion.pipelines.ltx3_i2v import manifest
+    from comfy_diffusion.pipelines.video.ltx.ltx3.i2v import manifest
 
     for entry in manifest():
         assert isinstance(entry, HFModelEntry), (
@@ -103,8 +103,8 @@ def test_manifest_entries_are_hf_model_entries() -> None:
 
 def test_manifest_matches_ltx3_t2v() -> None:
     """AC01: manifest() returns the same 3 entries as ltx3_t2v.manifest()."""
-    from comfy_diffusion.pipelines.ltx3_i2v import manifest as i2v_manifest
-    from comfy_diffusion.pipelines.ltx3_t2v import manifest as t2v_manifest
+    from comfy_diffusion.pipelines.video.ltx.ltx3.i2v import manifest as i2v_manifest
+    from comfy_diffusion.pipelines.video.ltx.ltx3.t2v import manifest as t2v_manifest
 
     i2v_entries = i2v_manifest()
     t2v_entries = t2v_manifest()
@@ -120,7 +120,7 @@ def test_manifest_matches_ltx3_t2v() -> None:
 
 
 def test_manifest_unet_dest_path() -> None:
-    from comfy_diffusion.pipelines.ltx3_i2v import manifest
+    from comfy_diffusion.pipelines.video.ltx.ltx3.i2v import manifest
 
     dests = [str(e.dest) for e in manifest()]
     assert any(
@@ -129,7 +129,7 @@ def test_manifest_unet_dest_path() -> None:
 
 
 def test_manifest_text_encoder_dest_path() -> None:
-    from comfy_diffusion.pipelines.ltx3_i2v import manifest
+    from comfy_diffusion.pipelines.video.ltx.ltx3.i2v import manifest
 
     dests = [str(e.dest) for e in manifest()]
     assert any("text_encoders" in d and "gemma_3_12B_it_fp4_mixed" in d for d in dests), (
@@ -138,7 +138,7 @@ def test_manifest_text_encoder_dest_path() -> None:
 
 
 def test_manifest_upscaler_dest_path() -> None:
-    from comfy_diffusion.pipelines.ltx3_i2v import manifest
+    from comfy_diffusion.pipelines.video.ltx.ltx3.i2v import manifest
 
     dests = [str(e.dest) for e in manifest()]
     assert any("upscale_models" in d and "ltx-2-spatial-upscaler" in d for d in dests), (
@@ -147,7 +147,7 @@ def test_manifest_upscaler_dest_path() -> None:
 
 
 def test_manifest_all_from_lightricks_hf_repo() -> None:
-    from comfy_diffusion.pipelines.ltx3_i2v import manifest
+    from comfy_diffusion.pipelines.video.ltx.ltx3.i2v import manifest
 
     for entry in manifest():
         assert entry.repo_id == "Lightricks/LTX-Video"
@@ -159,28 +159,28 @@ def test_manifest_all_from_lightricks_hf_repo() -> None:
 
 
 def test_run_has_image_parameter() -> None:
-    from comfy_diffusion.pipelines.ltx3_i2v import run
+    from comfy_diffusion.pipelines.video.ltx.ltx3.i2v import run
 
     sig = inspect.signature(run)
     assert "image" in sig.parameters, "run() must have an 'image' parameter"
 
 
 def test_run_has_fps_parameter() -> None:
-    from comfy_diffusion.pipelines.ltx3_i2v import run
+    from comfy_diffusion.pipelines.video.ltx.ltx3.i2v import run
 
     sig = inspect.signature(run)
     assert "fps" in sig.parameters, "run() must have an 'fps' parameter"
 
 
 def test_run_fps_default_is_24() -> None:
-    from comfy_diffusion.pipelines.ltx3_i2v import run
+    from comfy_diffusion.pipelines.video.ltx.ltx3.i2v import run
 
     sig = inspect.signature(run)
     assert sig.parameters["fps"].default == 24, "fps default must be 24"
 
 
 def test_run_fps_annotation_is_int() -> None:
-    from comfy_diffusion.pipelines.ltx3_i2v import run
+    from comfy_diffusion.pipelines.video.ltx.ltx3.i2v import run
 
     sig = inspect.signature(run)
     # Under from __future__ import annotations, annotation is a string
@@ -190,8 +190,8 @@ def test_run_fps_annotation_is_int() -> None:
 
 def test_run_has_all_t2v_params_plus_image_and_fps() -> None:
     """run() must include all ltx3_t2v params plus image and fps."""
-    from comfy_diffusion.pipelines.ltx3_i2v import run as i2v_run
-    from comfy_diffusion.pipelines.ltx3_t2v import run as t2v_run
+    from comfy_diffusion.pipelines.video.ltx.ltx3.i2v import run as i2v_run
+    from comfy_diffusion.pipelines.video.ltx.ltx3.t2v import run as t2v_run
 
     i2v_params = set(inspect.signature(i2v_run).parameters)
     t2v_params = set(inspect.signature(t2v_run).parameters)
@@ -209,7 +209,7 @@ def test_run_has_all_t2v_params_plus_image_and_fps() -> None:
 
 
 def test_run_has_filename_override_params() -> None:
-    from comfy_diffusion.pipelines.ltx3_i2v import run
+    from comfy_diffusion.pipelines.video.ltx.ltx3.i2v import run
 
     sig = inspect.signature(run)
     assert "unet_filename" in sig.parameters
@@ -219,7 +219,7 @@ def test_run_has_filename_override_params() -> None:
 
 
 def test_run_default_steps_is_eight() -> None:
-    from comfy_diffusion.pipelines.ltx3_i2v import run
+    from comfy_diffusion.pipelines.video.ltx.ltx3.i2v import run
 
     sig = inspect.signature(run)
     assert sig.parameters["steps"].default == 8
@@ -234,7 +234,7 @@ def test_run_default_steps_is_eight() -> None:
 def test_fps_documented_as_reserved_in_docstring() -> None:
     """AC03: fps docstring must mention 'reserved' since the latent function
     does not yet accept an fps argument."""
-    from comfy_diffusion.pipelines.ltx3_i2v import run
+    from comfy_diffusion.pipelines.video.ltx.ltx3.i2v import run
 
     doc = inspect.getdoc(run) or ""
     assert "reserved" in doc.lower(), (
@@ -245,7 +245,7 @@ def test_fps_documented_as_reserved_in_docstring() -> None:
 
 def test_fps_accepted_without_error(tmp_path: Path) -> None:
     """AC03: run() must accept fps without raising, even if not forwarded."""
-    from comfy_diffusion.pipelines import ltx3_i2v as pipeline_mod
+    from comfy_diffusion.pipelines.video.ltx.ltx3 import i2v as pipeline_mod
 
     mm = _build_mock_mm()
 
@@ -305,7 +305,7 @@ def _run_mocked(
     extra_patches: dict[str, Any] | None = None,
 ) -> tuple[list[Any], MagicMock]:
     """Helper: run pipeline with all heavy dependencies mocked."""
-    from comfy_diffusion.pipelines import ltx3_i2v as pipeline_mod
+    from comfy_diffusion.pipelines.video.ltx.ltx3 import i2v as pipeline_mod
 
     if image is None:
         image = MagicMock(spec=["mode"])
@@ -364,7 +364,7 @@ def test_run_returns_list_of_frames(tmp_path: Path) -> None:
 
 def test_run_calls_ltxv_img_to_video_inplace(tmp_path: Path) -> None:
     """AC04: ltxv_img_to_video_inplace() must be called during run()."""
-    from comfy_diffusion.pipelines import ltx3_i2v as pipeline_mod
+    from comfy_diffusion.pipelines.video.ltx.ltx3 import i2v as pipeline_mod
 
     mm = _build_mock_mm()
     img_to_video_calls: list[Any] = []
@@ -398,7 +398,7 @@ def test_run_calls_ltxv_img_to_video_inplace(tmp_path: Path) -> None:
 
 def test_run_calls_ltxv_latent_upsample_before_vae_decode(tmp_path: Path) -> None:
     """AC04: pipeline calls ltxv_latent_upsample() before vae_decode_batch_tiled()."""
-    from comfy_diffusion.pipelines import ltx3_i2v as pipeline_mod
+    from comfy_diffusion.pipelines.video.ltx.ltx3 import i2v as pipeline_mod
 
     call_order: list[str] = []
     fake_samples = {"samples": MagicMock()}
@@ -447,7 +447,7 @@ def test_run_calls_ltxv_latent_upsample_before_vae_decode(tmp_path: Path) -> Non
 
 def test_run_passes_upsampled_samples_to_vae_decode(tmp_path: Path) -> None:
     """Upsampled latent is passed to vae_decode_batch_tiled, not the original."""
-    from comfy_diffusion.pipelines import ltx3_i2v as pipeline_mod
+    from comfy_diffusion.pipelines.video.ltx.ltx3 import i2v as pipeline_mod
 
     original_samples = {"samples": MagicMock(name="original")}
     upsampled_samples = {"samples": MagicMock(name="upsampled")}
@@ -502,7 +502,7 @@ def test_run_uses_load_latent_upscale_model(tmp_path: Path) -> None:
 
 def test_run_uses_image_to_tensor_for_pil_image(tmp_path: Path) -> None:
     """PIL Image (has .mode attr) must be converted via image_to_tensor."""
-    from comfy_diffusion.pipelines import ltx3_i2v as pipeline_mod
+    from comfy_diffusion.pipelines.video.ltx.ltx3 import i2v as pipeline_mod
 
     mm = _build_mock_mm()
     pil_image = MagicMock(spec=["mode"])
@@ -537,7 +537,7 @@ def test_run_uses_image_to_tensor_for_pil_image(tmp_path: Path) -> None:
 
 def test_run_raises_on_runtime_error(tmp_path: Path) -> None:
     """run() must raise RuntimeError when check_runtime() returns an error."""
-    from comfy_diffusion.pipelines import ltx3_i2v as pipeline_mod
+    from comfy_diffusion.pipelines.video.ltx.ltx3 import i2v as pipeline_mod
 
     with patch(
         _RUNTIME_PATCH,
@@ -557,7 +557,7 @@ def test_run_raises_on_runtime_error(tmp_path: Path) -> None:
 def test_download_models_idempotent_all_present(tmp_path: Path) -> None:
     """download_models(manifest()) completes without error when all 3 files exist."""
     from comfy_diffusion.downloader import download_models
-    from comfy_diffusion.pipelines.ltx3_i2v import manifest
+    from comfy_diffusion.pipelines.video.ltx.ltx3.i2v import manifest
 
     entries = manifest()
     assert len(entries) == 3

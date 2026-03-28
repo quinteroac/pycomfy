@@ -322,9 +322,29 @@ def latent_composite_masked(
 
 
 def ltxv_empty_latent_video(
-    width: int, height: int, length: int = 97, batch_size: int = 1
+    width: int,
+    height: int,
+    length: int = 97,
+    batch_size: int = 1,
+    fps: int = 24,
 ) -> dict[str, Any]:
-    """Create empty LTXV video latents compatible with the LTX-Video model."""
+    """Create empty LTXV video latents compatible with the LTX-Video model.
+
+    Parameters
+    ----------
+    width : int
+        Frame width in pixels (must be divisible by 32).
+    height : int
+        Frame height in pixels (must be divisible by 32).
+    length : int, optional
+        Number of video frames (must satisfy ``(length - 1) % 8 == 0``).
+        Default ``97``.
+    batch_size : int, optional
+        Batch size. Default ``1``.
+    fps : int, optional
+        Target frame rate. Accepted for API consistency and future scheduler
+        use; does not affect the latent tensor shape. Default ``24``.
+    """
     import torch
 
     from ._runtime import ensure_comfyui_on_path

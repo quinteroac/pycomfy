@@ -35,9 +35,20 @@ _PIPELINE_MODULES = [
     "ltx3_i2v",
 ]
 
+# Maps legacy module name to relative path within _PIPELINES_DIR.
+_PIPELINE_FILE_MAP: dict[str, str] = {
+    "ltx2_t2v": "video/ltx/ltx2/t2v.py",
+    "ltx2_t2v_distilled": "video/ltx/ltx2/t2v_distilled.py",
+    "ltx2_i2v": "video/ltx/ltx2/i2v.py",
+    "ltx2_i2v_distilled": "video/ltx/ltx2/i2v_distilled.py",
+    "ltx2_i2v_lora": "video/ltx/ltx2/i2v_lora.py",
+    "ltx3_t2v": "video/ltx/ltx3/t2v.py",
+    "ltx3_i2v": "video/ltx/ltx3/i2v.py",
+}
+
 
 def _parse_pipeline(module_name: str) -> ast.Module:
-    src = (_PIPELINES_DIR / f"{module_name}.py").read_text(encoding="utf-8")
+    src = (_PIPELINES_DIR / _PIPELINE_FILE_MAP[module_name]).read_text(encoding="utf-8")
     return ast.parse(src, filename=f"{module_name}.py")
 
 
@@ -78,7 +89,7 @@ def test_module_docstring_has_usage_section(module_name: str) -> None:
 @pytest.mark.parametrize("module_name", _PIPELINE_MODULES)
 def test_module_docstring_has_runnable_snippet(module_name: str) -> None:
     """AC01: module docstring must contain a fenced code block (``::`` or ```)."""
-    src = (_PIPELINES_DIR / f"{module_name}.py").read_text(encoding="utf-8")
+    src = (_PIPELINES_DIR / _PIPELINE_FILE_MAP[module_name]).read_text(encoding="utf-8")
     tree = ast.parse(src, filename=f"{module_name}.py")
     docstring = ast.get_docstring(tree) or ""
     # RST literal block marker OR markdown fenced block

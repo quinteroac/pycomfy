@@ -1,4 +1,4 @@
-"""LTX-Video 2.3 (22B distilled) image-to-video pipeline.
+"""LTX-Video 2 distilled image-to-video pipeline.
 
 Each pipeline module exports ``manifest()`` and ``run()``.
 
@@ -10,21 +10,18 @@ Each pipeline module exports ``manifest()`` and ``run()``.
   image preprocessing, conditioning, sampling, latent upsampling, and VAE
   decoding.
 
-Key differences from ``ltx3_t2v``:
+The distilled image-to-video variant uses:
 
-- Accepts an ``image`` parameter (file path, ``str``, or
-  :class:`~PIL.Image.Image`) as the first conditioning frame.
-- Accepts an explicit ``fps`` parameter (default 24).  This value is reserved
-  for future use — :func:`~comfy_diffusion.latent.ltxv_empty_latent_video`
-  does not currently expose an fps argument; the parameter is accepted so
-  callers can document their intent and the API will honour it automatically
-  once upstream support is added.
-- The preprocessed image is injected into the latent via
-  :func:`~comfy_diffusion.video.ltxv_img_to_video_inplace` (same mechanism as
-  ``ltx2_i2v``).
-
-Models required are identical to ``ltx3_t2v`` — no extra LoRA is needed
-because the 22B distilled checkpoint is already optimised for fast inference.
+- A distilled UNet checkpoint (``ltx-2-19b-distilled.safetensors``) for faster
+  inference with fewer steps (default ``steps=8``).  No LoRA is applied — the
+  distilled weights are used directly.
+- A Gemma 3 12B text encoder loaded via
+  :meth:`~comfy_diffusion.models.ModelManager.load_ltxav_text_encoder`.
+- An input image preprocessed with
+  :func:`~comfy_diffusion.image.ltxv_preprocess` and injected into the latent
+  via :func:`~comfy_diffusion.video.ltxv_img_to_video_inplace`.
+- A spatial latent upsampler (``ltx-2-spatial-upscaler-x2-1.0.safetensors``)
+  applied after sampling and before VAE decoding.
 
 Pattern
 -------
@@ -44,7 +41,7 @@ Usage
 ::
 
     from comfy_diffusion.downloader import download_models
-    from comfy_diffusion.pipelines.ltx3_i2v import manifest, run
+    from comfy_diffusion.pipelines.video.ltx.ltx2.i2v_distilled import manifest, run
 
     # 1. Download models (idempotent — skips files already present).
     download_models(manifest(), models_dir="/path/to/models")
@@ -52,8 +49,8 @@ Usage
     # 2. Run inference.
     frames = run(
         models_dir="/path/to/models",
-        image="/path/to/first_frame.png",
-        prompt="the queen turns her head slowly towards the camera",
+        image="/path/to/input.png",
+        prompt="the waitress smiles and turns her head",
     )
 """
 
@@ -67,13 +64,13 @@ from comfy_diffusion.downloader import HFModelEntry, ModelEntry
 __all__ = ["manifest", "run"]
 
 # ---------------------------------------------------------------------------
-# Canonical HuggingFace repository for LTX-Video
+# Canonical HuggingFace repository for LTX-Video 2
 # ---------------------------------------------------------------------------
 
 _HF_REPO = "Lightricks/LTX-Video"
 
 # Relative destination paths (resolved against models_dir by download_models).
-_UNET_DEST = Path("diffusion_models") / "ltx-2.3-22b-distilled-fp8.safetensors"
+_UNET_DEST = Path("diffusion_models") / "ltx-2-19b-distilled.safetensors"
 _TEXT_ENCODER_DEST = Path("text_encoders") / "gemma_3_12B_it_fp4_mixed.safetensors"
 _UPSCALER_DEST = Path("upscale_models") / "ltx-2-spatial-upscaler-x2-1.0.safetensors"
 
@@ -84,11 +81,7 @@ _UPSCALER_DEST = Path("upscale_models") / "ltx-2-spatial-upscaler-x2-1.0.safeten
 
 
 def manifest() -> list[ModelEntry]:
-    """Return the list of model files required by the LTX-Video 2.3 I2V pipeline.
-
-    Returns the same three entries as :func:`comfy_diffusion.pipelines.ltx3_t2v.manifest`:
-    the 22B distilled UNet checkpoint, the Gemma 3 12B text encoder, and the
-    spatial latent upscaler.
+    """Return the list of model files required by the LTX-Video 2 distilled I2V pipeline.
 
     Each entry is an :class:`~comfy_diffusion.downloader.HFModelEntry` that
     resolves to a deterministic relative path under ``models_dir``.  Pass the
@@ -99,7 +92,7 @@ def manifest() -> list[ModelEntry]:
     return [
         HFModelEntry(
             repo_id=_HF_REPO,
-            filename="ltx-2.3-22b-distilled-fp8.safetensors",
+            filename="ltx-2-19b-distilled.safetensors",
             dest=_UNET_DEST,
         ),
         HFModelEntry(
@@ -121,10 +114,9 @@ def run(
     image: Any,
     prompt: str,
     negative_prompt: str = "worst quality, inconsistent motion, blurry, jittery, distorted",
-    width: int = 768,
-    height: int = 512,
-    length: int = 97,
-    fps: int = 24,
+    width: int = 1280,
+    height: int = 720,
+    length: int = 121,
     steps: int = 8,
     cfg: float = 3.0,
     seed: int = 0,
@@ -135,32 +127,27 @@ def run(
     text_encoder_filename: str | None = None,
     upscaler_filename: str | None = None,
 ) -> list[Any]:
-    """Run the LTX-Video 2.3 (22B distilled) image-to-video pipeline end-to-end.
+    """Run the LTX-Video 2 distilled image-to-video pipeline end-to-end.
 
     Parameters
     ----------
     models_dir : str | Path
         Root directory where model weights are stored.
     image : str | Path | PIL.Image.Image
-        Input image for the first conditioning frame.  Accepts a file path
-        (``str`` or :class:`~pathlib.Path`) or a :class:`~PIL.Image.Image`
-        instance.
+        Input image.  Accepts a file path (``str`` or :class:`~pathlib.Path`)
+        or a :class:`~PIL.Image.Image` instance.
     prompt : str
         Positive text prompt describing the desired video content.
     negative_prompt : str, optional
         Negative text prompt.
         Default ``"worst quality, inconsistent motion, blurry, jittery, distorted"``.
     width : int, optional
-        Output frame width in pixels (must be divisible by 32).  Default ``768``.
+        Output frame width in pixels (must be divisible by 32).  Default ``1280``.
     height : int, optional
-        Output frame height in pixels (must be divisible by 32).  Default ``512``.
+        Output frame height in pixels (must be divisible by 32).  Default ``720``.
     length : int, optional
-        Number of video frames to generate (≈ ~4 s at 24 fps).  Default ``97``.
-    fps : int, optional
-        Target frame rate of the generated video.  Default ``24``.  Currently
-        reserved — :func:`~comfy_diffusion.latent.ltxv_empty_latent_video`
-        does not yet expose an fps argument; it will be forwarded automatically
-        once upstream support is added.
+        Number of video frames to generate (≈ ~5 s at 24 fps; must be
+        divisible by 8 + 1).  Default ``121``.
     steps : int, optional
         Number of denoising steps.  Default ``8`` (distilled model).
     cfg : float, optional
@@ -241,7 +228,6 @@ def run(
     positive, negative = encode_prompt(clip, prompt, negative_prompt)
 
     # Create empty latent.
-    # NOTE: fps is reserved — ltxv_empty_latent_video does not yet accept fps.
     latent = ltxv_empty_latent_video(width=width, height=height, length=length)
 
     # Inject the preprocessed image frame into the latent.

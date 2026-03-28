@@ -275,7 +275,7 @@ def test_empty_latent_image_import_contract() -> None:
 def test_ltxv_empty_latent_video_signature_matches_contract() -> None:
     signature = inspect.signature(ltxv_empty_latent_video)
     assert str(signature) == (
-        "(width: 'int', height: 'int', length: 'int' = 97, batch_size: 'int' = 1)"
+        "(width: 'int', height: 'int', length: 'int' = 97, batch_size: 'int' = 1, fps: 'int' = 24)"
         " -> 'dict[str, Any]'"
     )
 

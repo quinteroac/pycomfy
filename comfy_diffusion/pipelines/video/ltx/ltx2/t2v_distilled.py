@@ -1,4 +1,4 @@
-"""LTX-Video 2 distilled image-to-video pipeline.
+"""LTX-Video 2 distilled text-to-video pipeline.
 
 Each pipeline module exports ``manifest()`` and ``run()``.
 
@@ -7,19 +7,15 @@ Each pipeline module exports ``manifest()`` and ``run()``.
   weights before the first inference run.
 
 - ``run()`` executes the full inference pipeline end-to-end: model loading,
-  image preprocessing, conditioning, sampling, latent upsampling, and VAE
-  decoding.
+  conditioning, sampling, latent upsampling, and VAE decoding.
 
-The distilled image-to-video variant uses:
+The distilled variant uses:
 
 - A distilled UNet checkpoint (``ltx-2-19b-distilled.safetensors``) for faster
-  inference with fewer steps (default ``steps=8``).  No LoRA is applied — the
-  distilled weights are used directly.
+  inference with fewer steps (default ``steps=8``).
 - A Gemma 3 12B text encoder loaded via
-  :meth:`~comfy_diffusion.models.ModelManager.load_ltxav_text_encoder`.
-- An input image preprocessed with
-  :func:`~comfy_diffusion.image.ltxv_preprocess` and injected into the latent
-  via :func:`~comfy_diffusion.video.ltxv_img_to_video_inplace`.
+  :meth:`~comfy_diffusion.models.ModelManager.load_ltxav_text_encoder` instead
+  of T5.
 - A spatial latent upsampler (``ltx-2-spatial-upscaler-x2-1.0.safetensors``)
   applied after sampling and before VAE decoding.
 
@@ -41,7 +37,7 @@ Usage
 ::
 
     from comfy_diffusion.downloader import download_models
-    from comfy_diffusion.pipelines.ltx2_i2v_distilled import manifest, run
+    from comfy_diffusion.pipelines.video.ltx.ltx2.t2v_distilled import manifest, run
 
     # 1. Download models (idempotent — skips files already present).
     download_models(manifest(), models_dir="/path/to/models")
@@ -49,8 +45,7 @@ Usage
     # 2. Run inference.
     frames = run(
         models_dir="/path/to/models",
-        image="/path/to/input.png",
-        prompt="the waitress smiles and turns her head",
+        prompt="a golden retriever running through a sunlit park",
     )
 """
 
@@ -81,7 +76,7 @@ _UPSCALER_DEST = Path("upscale_models") / "ltx-2-spatial-upscaler-x2-1.0.safeten
 
 
 def manifest() -> list[ModelEntry]:
-    """Return the list of model files required by the LTX-Video 2 distilled I2V pipeline.
+    """Return the list of model files required by the LTX-Video 2 distilled T2V pipeline.
 
     Each entry is an :class:`~comfy_diffusion.downloader.HFModelEntry` that
     resolves to a deterministic relative path under ``models_dir``.  Pass the
@@ -111,12 +106,11 @@ def manifest() -> list[ModelEntry]:
 def run(
     *,
     models_dir: str | Path,
-    image: Any,
     prompt: str,
     negative_prompt: str = "worst quality, inconsistent motion, blurry, jittery, distorted",
-    width: int = 1280,
-    height: int = 720,
-    length: int = 121,
+    width: int = 768,
+    height: int = 512,
+    length: int = 97,
     steps: int = 8,
     cfg: float = 3.0,
     seed: int = 0,
@@ -127,27 +121,23 @@ def run(
     text_encoder_filename: str | None = None,
     upscaler_filename: str | None = None,
 ) -> list[Any]:
-    """Run the LTX-Video 2 distilled image-to-video pipeline end-to-end.
+    """Run the LTX-Video 2 distilled text-to-video pipeline end-to-end.
 
     Parameters
     ----------
     models_dir : str | Path
         Root directory where model weights are stored.
-    image : str | Path | PIL.Image.Image
-        Input image.  Accepts a file path (``str`` or :class:`~pathlib.Path`)
-        or a :class:`~PIL.Image.Image` instance.
     prompt : str
         Positive text prompt describing the desired video content.
     negative_prompt : str, optional
         Negative text prompt.
         Default ``"worst quality, inconsistent motion, blurry, jittery, distorted"``.
     width : int, optional
-        Output frame width in pixels (must be divisible by 32).  Default ``1280``.
+        Output frame width in pixels (must be divisible by 32).  Default ``768``.
     height : int, optional
-        Output frame height in pixels (must be divisible by 32).  Default ``720``.
+        Output frame height in pixels (must be divisible by 32).  Default ``512``.
     length : int, optional
-        Number of video frames to generate (≈ ~5 s at 24 fps; must be
-        divisible by 8 + 1).  Default ``121``.
+        Number of video frames to generate (≈ ~4 s at 24 fps).  Default ``97``.
     steps : int, optional
         Number of denoising steps.  Default ``8`` (distilled model).
     cfg : float, optional
@@ -179,13 +169,11 @@ def run(
     """
     # Lazy imports — ComfyUI must not be imported at module top level.
     from comfy_diffusion.conditioning import encode_prompt
-    from comfy_diffusion.image import image_to_tensor, load_image, ltxv_preprocess
     from comfy_diffusion.latent import ltxv_empty_latent_video, ltxv_latent_upsample
     from comfy_diffusion.models import ModelManager
     from comfy_diffusion.runtime import check_runtime
     from comfy_diffusion.sampling import sample
     from comfy_diffusion.vae import vae_decode_batch_tiled
-    from comfy_diffusion.video import ltxv_img_to_video_inplace
 
     check_result = check_runtime()
     if check_result.get("error"):
@@ -198,14 +186,8 @@ def run(
 
     # Resolve model paths (allow caller overrides, fall back to manifest paths).
     unet_path = Path(unet_filename) if unet_filename else models_dir / _UNET_DEST
-    te_path = (
-        Path(text_encoder_filename)
-        if text_encoder_filename
-        else models_dir / _TEXT_ENCODER_DEST
-    )
-    upscaler_path = (
-        Path(upscaler_filename) if upscaler_filename else models_dir / _UPSCALER_DEST
-    )
+    te_path = Path(text_encoder_filename) if text_encoder_filename else models_dir / _TEXT_ENCODER_DEST
+    upscaler_path = Path(upscaler_filename) if upscaler_filename else models_dir / _UPSCALER_DEST
     # The distilled checkpoint bundles VAE weights; default to the same file.
     vae_path = Path(vae_filename) if vae_filename else unet_path
 
@@ -215,23 +197,11 @@ def run(
     clip = mm.load_ltxav_text_encoder(te_path, unet_path)
     upscale_model = mm.load_latent_upscale_model(upscaler_path)
 
-    # Load input image and convert to BHWC tensor.
-    if hasattr(image, "mode"):
-        image_tensor = image_to_tensor(image)
-    else:
-        image_tensor, _ = load_image(image)
-
-    # Preprocess image for LTXV (center resize + compression).
-    preprocessed = ltxv_preprocess(image_tensor, width, height)
-
     # Text conditioning.
     positive, negative = encode_prompt(clip, prompt, negative_prompt)
 
     # Create empty latent.
     latent = ltxv_empty_latent_video(width=width, height=height, length=length)
-
-    # Inject the preprocessed image frame into the latent.
-    latent = ltxv_img_to_video_inplace(vae, preprocessed, latent)
 
     # Sample.
     samples = sample(

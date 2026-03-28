@@ -24,7 +24,7 @@ import pytest
 # ---------------------------------------------------------------------------
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
-_PIPELINE_FILE = _REPO_ROOT / "comfy_diffusion" / "pipelines" / "ltx2_i2v.py"
+_PIPELINE_FILE = _REPO_ROOT / "comfy_diffusion" / "pipelines" / "video" / "ltx" / "ltx2" / "i2v.py"
 
 
 # ---------------------------------------------------------------------------
@@ -53,7 +53,7 @@ def test_pipeline_has_module_docstring() -> None:
     source = _PIPELINE_FILE.read_text(encoding="utf-8")
     tree = ast.parse(source, filename=str(_PIPELINE_FILE))
     docstring = ast.get_docstring(tree)
-    assert docstring, "ltx2_i2v.py must have a module-level docstring"
+    assert docstring, "i2v.py must have a module-level docstring"
 
 
 def test_pipeline_exports_manifest_and_run() -> None:
@@ -79,14 +79,14 @@ def test_no_top_level_comfy_imports() -> None:
 
 
 def test_import_manifest_and_run() -> None:
-    from comfy_diffusion.pipelines.ltx2_i2v import manifest, run  # noqa: F401
+    from comfy_diffusion.pipelines.video.ltx.ltx2.i2v import manifest, run  # noqa: F401
 
     assert callable(manifest)
     assert callable(run)
 
 
 def test_manifest_returns_exactly_four_entries() -> None:
-    from comfy_diffusion.pipelines.ltx2_i2v import manifest
+    from comfy_diffusion.pipelines.video.ltx.ltx2.i2v import manifest
 
     result = manifest()
     assert isinstance(result, list)
@@ -95,7 +95,7 @@ def test_manifest_returns_exactly_four_entries() -> None:
 
 def test_manifest_entries_are_hf_model_entries() -> None:
     from comfy_diffusion.downloader import HFModelEntry
-    from comfy_diffusion.pipelines.ltx2_i2v import manifest
+    from comfy_diffusion.pipelines.video.ltx.ltx2.i2v import manifest
 
     for entry in manifest():
         assert isinstance(entry, HFModelEntry), (
@@ -104,7 +104,7 @@ def test_manifest_entries_are_hf_model_entries() -> None:
 
 
 def test_manifest_unet_dest_path() -> None:
-    from comfy_diffusion.pipelines.ltx2_i2v import manifest
+    from comfy_diffusion.pipelines.video.ltx.ltx2.i2v import manifest
 
     dests = [str(e.dest) for e in manifest()]
     assert any("diffusion_models" in d and "ltx-2-19b-dev-fp8" in d for d in dests), (
@@ -113,7 +113,7 @@ def test_manifest_unet_dest_path() -> None:
 
 
 def test_manifest_text_encoder_dest_path() -> None:
-    from comfy_diffusion.pipelines.ltx2_i2v import manifest
+    from comfy_diffusion.pipelines.video.ltx.ltx2.i2v import manifest
 
     dests = [str(e.dest) for e in manifest()]
     assert any("text_encoders" in d and "gemma_3_12B_it_fp4_mixed" in d for d in dests), (
@@ -122,7 +122,7 @@ def test_manifest_text_encoder_dest_path() -> None:
 
 
 def test_manifest_lora_dest_path() -> None:
-    from comfy_diffusion.pipelines.ltx2_i2v import manifest
+    from comfy_diffusion.pipelines.video.ltx.ltx2.i2v import manifest
 
     dests = [str(e.dest) for e in manifest()]
     assert any("loras" in d and "ltx-2-19b-distilled-lora-384" in d for d in dests), (
@@ -131,7 +131,7 @@ def test_manifest_lora_dest_path() -> None:
 
 
 def test_manifest_upscaler_dest_path() -> None:
-    from comfy_diffusion.pipelines.ltx2_i2v import manifest
+    from comfy_diffusion.pipelines.video.ltx.ltx2.i2v import manifest
 
     dests = [str(e.dest) for e in manifest()]
     assert any("upscale_models" in d and "ltx-2-spatial-upscaler" in d for d in dests), (
@@ -140,7 +140,7 @@ def test_manifest_upscaler_dest_path() -> None:
 
 
 def test_manifest_all_from_lightricks_hf_repo() -> None:
-    from comfy_diffusion.pipelines.ltx2_i2v import manifest
+    from comfy_diffusion.pipelines.video.ltx.ltx2.i2v import manifest
 
     for entry in manifest():
         assert entry.repo_id == "Lightricks/LTX-Video", (
@@ -154,14 +154,14 @@ def test_manifest_all_from_lightricks_hf_repo() -> None:
 
 
 def test_run_signature_includes_image_param() -> None:
-    from comfy_diffusion.pipelines.ltx2_i2v import run
+    from comfy_diffusion.pipelines.video.ltx.ltx2.i2v import run
 
     sig = inspect.signature(run)
     assert "image" in sig.parameters, "run() must accept an 'image' parameter"
 
 
 def test_run_signature_includes_all_required_params() -> None:
-    from comfy_diffusion.pipelines.ltx2_i2v import run
+    from comfy_diffusion.pipelines.video.ltx.ltx2.i2v import run
 
     sig = inspect.signature(run)
     required = {
@@ -182,7 +182,7 @@ def test_run_signature_includes_all_required_params() -> None:
 
 
 def test_run_has_lora_and_upscaler_override_params() -> None:
-    from comfy_diffusion.pipelines.ltx2_i2v import run
+    from comfy_diffusion.pipelines.video.ltx.ltx2.i2v import run
 
     sig = inspect.signature(run)
     assert "lora_filename" in sig.parameters
@@ -231,7 +231,7 @@ def _run_with_mocks(
     fake_frames: list[Any] | None = None,
 ) -> list[Any]:
     """Execute pipeline.run() with all heavy dependencies mocked."""
-    from comfy_diffusion.pipelines import ltx2_i2v as pipeline_mod
+    from comfy_diffusion.pipelines.video.ltx.ltx2 import i2v as pipeline_mod
 
     if fake_latent is None:
         fake_latent = {"samples": MagicMock(name="empty_latent")}
@@ -309,7 +309,7 @@ def test_preprocess_called_before_img_to_video_inplace(tmp_path: Path) -> None:
 
 def test_preprocessed_image_passed_to_img_to_video_inplace(tmp_path: Path) -> None:
     """The output of ltxv_preprocess must be passed to ltxv_img_to_video_inplace."""
-    from comfy_diffusion.pipelines import ltx2_i2v as pipeline_mod
+    from comfy_diffusion.pipelines.video.ltx.ltx2 import i2v as pipeline_mod
 
     fake_preprocessed = MagicMock(name="preprocessed_image")
     received_image: list[Any] = []
@@ -346,7 +346,7 @@ def test_preprocessed_image_passed_to_img_to_video_inplace(tmp_path: Path) -> No
 
 
 def test_apply_lora_is_called(tmp_path: Path) -> None:
-    from comfy_diffusion.pipelines import ltx2_i2v as pipeline_mod
+    from comfy_diffusion.pipelines.video.ltx.ltx2 import i2v as pipeline_mod
 
     mm = _build_mock_mm()
     lora_calls: list[tuple[Any, ...]] = []
@@ -374,7 +374,7 @@ def test_apply_lora_is_called(tmp_path: Path) -> None:
 
 
 def test_apply_lora_uses_lora_dest_path(tmp_path: Path) -> None:
-    from comfy_diffusion.pipelines import ltx2_i2v as pipeline_mod
+    from comfy_diffusion.pipelines.video.ltx.ltx2 import i2v as pipeline_mod
 
     mm = _build_mock_mm()
     lora_paths: list[Any] = []
@@ -422,7 +422,7 @@ def test_apply_lora_called_before_sampling(tmp_path: Path) -> None:
 
 def test_run_accepts_pil_image(tmp_path: Path) -> None:
     """run() must accept a PIL.Image.Image without raising."""
-    from comfy_diffusion.pipelines import ltx2_i2v as pipeline_mod
+    from comfy_diffusion.pipelines.video.ltx.ltx2 import i2v as pipeline_mod
 
     pil_image = MagicMock()
     pil_image.mode = "RGB"  # makes hasattr(image, "mode") True
@@ -490,7 +490,7 @@ def test_run_returns_list(tmp_path: Path) -> None:
 
 def test_run_raises_on_runtime_error(tmp_path: Path) -> None:
     """run() must raise RuntimeError when check_runtime() returns an error."""
-    from comfy_diffusion.pipelines import ltx2_i2v as pipeline_mod
+    from comfy_diffusion.pipelines.video.ltx.ltx2 import i2v as pipeline_mod
 
     with patch(
         _RUNTIME_PATCH,
@@ -504,7 +504,7 @@ def test_run_raises_on_runtime_error(tmp_path: Path) -> None:
 
 def test_run_uses_load_ltxav_text_encoder(tmp_path: Path) -> None:
     """Gemma 3 text encoder must be loaded via load_ltxav_text_encoder, not load_clip."""
-    from comfy_diffusion.pipelines import ltx2_i2v as pipeline_mod
+    from comfy_diffusion.pipelines.video.ltx.ltx2 import i2v as pipeline_mod
 
     mm = _build_mock_mm()
 
@@ -528,7 +528,7 @@ def test_run_uses_load_ltxav_text_encoder(tmp_path: Path) -> None:
 
 
 def test_run_uses_load_latent_upscale_model(tmp_path: Path) -> None:
-    from comfy_diffusion.pipelines import ltx2_i2v as pipeline_mod
+    from comfy_diffusion.pipelines.video.ltx.ltx2 import i2v as pipeline_mod
 
     mm = _build_mock_mm()
 
@@ -553,7 +553,7 @@ def test_run_uses_load_latent_upscale_model(tmp_path: Path) -> None:
 def test_download_models_idempotent_all_present(tmp_path: Path) -> None:
     """download_models(manifest()) completes without error when all 4 files are present."""
     from comfy_diffusion.downloader import download_models
-    from comfy_diffusion.pipelines.ltx2_i2v import manifest
+    from comfy_diffusion.pipelines.video.ltx.ltx2.i2v import manifest
 
     entries = manifest()
     assert len(entries) == 4
