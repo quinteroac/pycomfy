@@ -417,6 +417,19 @@ def inpaint_model_conditioning(
     return patched_model, patched_positive, patched_negative
 
 
+def trim_video_latent(latent: dict[str, Any], n_latent_frames: int) -> dict[str, Any]:
+    """Trim the first *n_latent_frames* along the time axis of a 5-D video latent.
+
+    Use this after sampling with :func:`wan_infinite_talk_to_video` to remove the
+    motion-frame prefix.  Convert video frames to latent frames with
+    ``((n_video_frames - 1) // temporal_compression) + 1`` before calling.
+    """
+    trimmed: dict[str, Any] = {"samples": latent["samples"][:, :, n_latent_frames:]}
+    if "noise_mask" in latent:
+        trimmed["noise_mask"] = latent["noise_mask"][:, :, n_latent_frames:]
+    return trimmed
+
+
 __all__ = [
     "empty_latent_image",
     "ltxv_empty_latent_video",
@@ -433,4 +446,5 @@ __all__ = [
     "set_latent_noise_mask",
     "inpaint_model_conditioning",
     "ltxv_latent_upsample",
+    "trim_video_latent",
 ]

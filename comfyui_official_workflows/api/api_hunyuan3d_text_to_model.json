@@ -1,0 +1,216 @@
+{
+  "id": "c011edfd-1486-403b-95ae-3116d3755d37",
+  "revision": 0,
+  "last_node_id": 8,
+  "last_link_id": 5,
+  "nodes": [
+    {
+      "id": 6,
+      "type": "Preview3D",
+      "pos": [
+        3060.333359454702,
+        -430
+      ],
+      "size": [
+        333.33333333333337,
+        433.33333333333337
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "camera_info",
+          "shape": 7,
+          "type": "LOAD3D_CAMERA",
+          "link": null
+        },
+        {
+          "name": "bg_image",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "name": "model_file",
+          "type": "STRING,FILE_3D_GLB,FILE_3D_GLTF,FILE_3D_FBX,FILE_3D_OBJ,FILE_3D_STL,FILE_3D_USDZ,FILE_3D",
+          "widget": {
+            "name": "model_file"
+          },
+          "link": 3
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.10.0",
+        "Node name for S&R": "Preview3D"
+      },
+      "widgets_values": [
+        "",
+        ""
+      ]
+    },
+    {
+      "id": 7,
+      "type": "SaveGLB",
+      "pos": [
+        3505.6666927880356,
+        -430
+      ],
+      "size": [
+        400,
+        550
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "mesh",
+          "type": "MESH,FILE_3D_GLB,FILE_3D_GLTF,FILE_3D_OBJ,FILE_3D_FBX,FILE_3D_STL,FILE_3D_USDZ,FILE_3D",
+          "link": 4
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.16.3"
+      },
+      "widgets_values": [
+        "3d/hunyuan3d_text2model",
+        ""
+      ]
+    },
+    {
+      "id": 8,
+      "type": "SaveGLB",
+      "pos": [
+        4017.6666927880356,
+        -430
+      ],
+      "size": [
+        400,
+        550
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "mesh",
+          "type": "MESH,FILE_3D_GLB,FILE_3D_GLTF,FILE_3D_OBJ,FILE_3D_FBX,FILE_3D_STL,FILE_3D_USDZ,FILE_3D",
+          "link": 5
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.16.3"
+      },
+      "widgets_values": [
+        "3d/hunyuan3d_text2model",
+        ""
+      ]
+    },
+    {
+      "id": 2,
+      "type": "TencentTextToModelNode",
+      "pos": [
+        2615.0000261213686,
+        -430
+      ],
+      "size": [
+        333.33333333333337,
+        272
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "model_file",
+          "type": "STRING",
+          "links": [
+            3
+          ]
+        },
+        {
+          "name": "GLB",
+          "type": "FILE_3D_GLB",
+          "links": [
+            4
+          ]
+        },
+        {
+          "name": "OBJ",
+          "type": "FILE_3D_OBJ",
+          "links": [
+            5
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.10.0",
+        "Node name for S&R": "TencentTextToModelNode"
+      },
+      "widgets_values": [
+        "3.0",
+        "A full-body muscular barbarian warrior, strong physique, bearded, tribal tattoos on shoulders and arms, fur shoulder pads, leather armbands, reddish loincloth, large battle axe in hand, realistic fantasy character, studio lighting.\n",
+        500000,
+        "Normal",
+        false,
+        2127907248,
+        "randomize"
+      ],
+      "color": "#432",
+      "bgcolor": "#653"
+    }
+  ],
+  "links": [
+    [
+      3,
+      2,
+      0,
+      6,
+      2,
+      "STRING"
+    ],
+    [
+      4,
+      2,
+      1,
+      7,
+      0,
+      "FILE_3D_GLB"
+    ],
+    [
+      5,
+      2,
+      2,
+      8,
+      0,
+      "FILE_3D_OBJ"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.5513472401298007,
+      "offset": [
+        -1674.108734910671,
+        1125.3254622126324
+      ]
+    },
+    "frontendVersion": "1.39.19",
+    "workflowRendererVersion": "LG",
+    "VHS_latentpreview": false,
+    "VHS_latentpreviewrate": 0,
+    "VHS_MetadataImage": true,
+    "VHS_KeepIntermediate": true
+  },
+  "version": 0.4
+}

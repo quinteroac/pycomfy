@@ -534,7 +534,6 @@ def model_sampling_aura_flow(model: Any, shift: float) -> Any:
 __all__ = [
     "CheckpointResult",
     "ModelManager",
-    "load_latent_upscale_model",
     "model_sampling_aura_flow",
     "model_sampling_flux",
     "model_sampling_sd3",
