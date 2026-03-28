@@ -16,7 +16,12 @@ import pytest
 
 import comfy_diffusion
 import comfy_diffusion.video as video_module
-from comfy_diffusion.video import get_video_components, load_video, save_video
+from comfy_diffusion.video import (
+    get_video_components,
+    load_video,
+    ltxv_img_to_video_inplace,
+    save_video,
+)
 
 
 def _repo_root() -> Path:
@@ -40,7 +45,12 @@ def _run_python(code: str) -> subprocess.CompletedProcess[str]:
 
 
 def test_video_module_exports_expected_entrypoints() -> None:
-    assert video_module.__all__ == ["load_video", "save_video", "get_video_components"]
+    assert video_module.__all__ == [
+        "load_video",
+        "save_video",
+        "get_video_components",
+        "ltxv_img_to_video_inplace",
+    ]
 
 
 def test_load_video_signature_matches_contract() -> None:
@@ -256,6 +266,137 @@ def test_get_video_backend_raises_clear_error_when_video_extra_is_missing(
 
     with pytest.raises(ModuleNotFoundError, match=r"comfy-diffusion\[video\]"):
         video_module._get_video_backend()
+
+
+def test_ltxv_img_to_video_inplace_signature_matches_contract() -> None:
+    sig = inspect.signature(ltxv_img_to_video_inplace)
+    params = sig.parameters
+    assert list(params.keys()) == ["vae", "image", "latent", "strength", "bypass"]
+    assert params["strength"].default == 1.0
+    assert params["bypass"].default is False
+    assert str(sig.return_annotation) == "dict[str, Any]"
+
+
+def test_ltxv_img_to_video_inplace_bypass_returns_input_latent_unchanged() -> None:
+    sentinel = {"samples": object(), "noise_mask": object()}
+    result = ltxv_img_to_video_inplace(
+        vae=object(), image=object(), latent=sentinel, bypass=True
+    )
+    assert result is sentinel
+
+
+def test_ltxv_img_to_video_inplace_bypass_does_not_call_vae_or_touch_image(
+    monkeypatch: Any,
+) -> None:
+    class StrictVAE:
+        def encode(self, _pixels: Any) -> Any:
+            raise AssertionError("vae.encode must not be called when bypass=True")
+
+    latent: dict[str, Any] = {"samples": object()}
+    result = ltxv_img_to_video_inplace(
+        vae=StrictVAE(), image=object(), latent=latent, bypass=True
+    )
+    assert result is latent
+
+
+def test_ltxv_img_to_video_inplace_returns_samples_and_noise_mask(
+    monkeypatch: Any,
+) -> None:
+    """AC03 — returned dict contains 'samples' and 'noise_mask'."""
+    torch = pytest.importorskip("torch")
+
+    batch, channels, latent_frames, lh, lw = 1, 16, 8, 4, 4
+    samples = torch.zeros(batch, channels, latent_frames, lh, lw)
+    latent: dict[str, Any] = {"samples": samples}
+
+    # Minimal encoded image: 1 frame
+    encoded_t = torch.zeros(batch, channels, 1, lh, lw)
+    pixels_out = torch.zeros(batch, lh * 8, lw * 8, 3)
+
+    class FakeVAE:
+        downscale_index_formula = (1, 8, 8)
+
+        def encode(self, pixels: Any) -> Any:
+            return encoded_t
+
+    # Patch comfy.utils so the test doesn't need ComfyUI vendored
+    import types
+
+    fake_comfy = types.ModuleType("comfy")
+    fake_comfy_utils = types.ModuleType("comfy.utils")
+
+    def fake_common_upscale(img: Any, w: int, h: int, mode: str, crop: str) -> Any:
+        return img
+
+    fake_comfy_utils.common_upscale = fake_common_upscale
+    fake_comfy.utils = fake_comfy_utils
+    monkeypatch.setitem(sys.modules, "comfy", fake_comfy)
+    monkeypatch.setitem(sys.modules, "comfy.utils", fake_comfy_utils)
+
+    image = torch.zeros(batch, lh * 8, lw * 8, 3)
+    result = ltxv_img_to_video_inplace(
+        vae=FakeVAE(), image=image, latent=latent, strength=1.0
+    )
+
+    assert "samples" in result
+    assert "noise_mask" in result
+    mask = result["noise_mask"]
+    assert mask.shape == (batch, 1, latent_frames, 1, 1)
+
+
+def test_ltxv_img_to_video_inplace_noise_mask_values_reflect_strength(
+    monkeypatch: Any,
+) -> None:
+    """AC03 — noise_mask first frames set to 1.0 - strength."""
+    torch = pytest.importorskip("torch")
+
+    batch, channels, latent_frames, lh, lw = 1, 16, 4, 2, 2
+    samples = torch.zeros(batch, channels, latent_frames, lh, lw)
+    latent: dict[str, Any] = {"samples": samples}
+
+    encoded_t = torch.zeros(batch, channels, 1, lh, lw)
+
+    class FakeVAE:
+        downscale_index_formula = (1, 8, 8)
+
+        def encode(self, pixels: Any) -> Any:
+            return encoded_t
+
+    import types
+
+    fake_comfy = types.ModuleType("comfy")
+    fake_comfy_utils = types.ModuleType("comfy.utils")
+    fake_comfy_utils.common_upscale = lambda img, w, h, mode, crop: img
+    fake_comfy.utils = fake_comfy_utils
+    monkeypatch.setitem(sys.modules, "comfy", fake_comfy)
+    monkeypatch.setitem(sys.modules, "comfy.utils", fake_comfy_utils)
+
+    image = torch.zeros(batch, lh * 8, lw * 8, 3)
+    strength = 0.6
+    result = ltxv_img_to_video_inplace(
+        vae=FakeVAE(), image=image, latent=latent, strength=strength
+    )
+
+    mask = result["noise_mask"]
+    # First encoded frames: 1.0 - strength
+    assert abs(float(mask[0, 0, 0, 0, 0]) - (1.0 - strength)) < 1e-5
+    # Remaining frames: 1.0
+    assert float(mask[0, 0, 1, 0, 0]) == pytest.approx(1.0)
+
+
+def test_ltxv_img_to_video_inplace_no_top_level_torch_or_comfy_imports() -> None:
+    """AC05 — no top-level torch/comfy imports in video module."""
+    result = _run_python(
+        "import json, sys\n"
+        "from comfy_diffusion import video as _v\n"
+        "print(json.dumps({\n"
+        "  'torch': 'torch' in sys.modules,\n"
+        "  'comfy': 'comfy' in sys.modules,\n"
+        "}))\n"
+    )
+    payload = json.loads(result.stdout)
+    assert payload["torch"] is False
+    assert payload["comfy"] is False
 
 
 def test_import_comfy_diffusion_video_has_no_cv2_or_imageio_side_effects() -> None:
