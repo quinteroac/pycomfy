@@ -1,0 +1,250 @@
+{
+  "goals": [
+    "Expose all 10 missing ComfyUI node wrappers as typed, lazy-import functions in the",
+    "Implement `comfy_diffusion/pipelines/video/ltx/ltx2/audio_to_video.py` with the",
+    "Provide a self-contained example script under `examples/`.",
+    "Cover all new wrappers and the pipeline with CPU-safe pytest tests."
+  ],
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Audio preprocessing wrappers",
+      "description": "As a Python developer, I want `audio_crop`, `audio_separation`, and `trim_audio_duration` functions in `comfy_diffusion.audio` so that I can preprocess audio segments before injecting them into LTX2 audio-to-video inference.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-001-AC01",
+          "text": "`audio_crop(audio, start_time, end_time)` wraps `AudioCrop`; `start_time` and"
+        },
+        {
+          "id": "US-001-AC02",
+          "text": "`audio_separation(audio, mode, fft_n, win_length)` wraps `AudioSeparation`;"
+        },
+        {
+          "id": "US-001-AC03",
+          "text": "`trim_audio_duration(audio, start, duration)` wraps `TrimAudioDuration`; `start`"
+        },
+        {
+          "id": "US-001-AC04",
+          "text": "All three functions follow the lazy-import pattern (no top-level `comfy.*` imports)."
+        },
+        {
+          "id": "US-001-AC05",
+          "text": "All three are added to `audio.__all__`."
+        },
+        {
+          "id": "US-001-AC06",
+          "text": "Typecheck / lint passes."
+        }
+      ]
+    },
+    {
+      "id": "US-002",
+      "title": "Video / model wrappers",
+      "description": "As a Python developer, I want `ltx2_nag`, `ltxv_img_to_video_inplace_kj`, `ltx2_sampling_preview_override`, and `create_video` available in `comfy_diffusion.video`, and `load_vae_kj` as a method on `ModelManager` in `comfy_diffusion.models`, so that the audio-to-video pipeline can be implemented without raw `comfy.*` calls in the pipeline file.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-002-AC01",
+          "text": "`ltx2_nag(model, nag_scale, nag_alpha, nag_tau, nag_cond_video=None,"
+        },
+        {
+          "id": "US-002-AC02",
+          "text": "`ltxv_img_to_video_inplace_kj(vae, latent, image, index=0, strength=1.0)` wraps"
+        },
+        {
+          "id": "US-002-AC03",
+          "text": "`ltx2_sampling_preview_override(model, preview_rate=8, latent_upscale_model=None,"
+        },
+        {
+          "id": "US-002-AC04",
+          "text": "`create_video(images, audio, fps)` wraps `CreateVideo`; returns a VIDEO object."
+        },
+        {
+          "id": "US-002-AC05",
+          "text": "`ModelManager.load_vae_kj(path, device=\"main_device\", dtype=\"bf16\")` wraps"
+        },
+        {
+          "id": "US-002-AC06",
+          "text": "All five symbols follow the lazy-import pattern."
+        },
+        {
+          "id": "US-002-AC07",
+          "text": "`ltx2_nag`, `ltxv_img_to_video_inplace_kj`, `ltx2_sampling_preview_override`, and"
+        },
+        {
+          "id": "US-002-AC08",
+          "text": "`load_vae_kj` is accessible via `ModelManager`."
+        },
+        {
+          "id": "US-002-AC09",
+          "text": "Typecheck / lint passes."
+        }
+      ]
+    },
+    {
+      "id": "US-003",
+      "title": "Image wrappers",
+      "description": "As a Python developer, I want `image_resize_kj` and `image_batch_extend_with_overlap` in `comfy_diffusion.image` so that I can resize input images (KJ-style) and stitch video extension frames with cross-fade overlap.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-003-AC01",
+          "text": "`image_resize_kj(image, width, height, upscale_method=\"lanczos\","
+        },
+        {
+          "id": "US-003-AC02",
+          "text": "`image_batch_extend_with_overlap(source_images, new_images=None, overlap=13,"
+        },
+        {
+          "id": "US-003-AC03",
+          "text": "Both functions follow the lazy-import pattern."
+        },
+        {
+          "id": "US-003-AC04",
+          "text": "Both are added to `image.__all__`."
+        },
+        {
+          "id": "US-003-AC05",
+          "text": "Typecheck / lint passes."
+        }
+      ]
+    },
+    {
+      "id": "US-004",
+      "title": "`ltx2/audio_to_video` pipeline",
+      "description": "As a Python developer, I want `comfy_diffusion.pipelines.video.ltx.ltx2.audio_to_video` with `manifest()` and `run()` so that I can generate an audio-driven video from a single image and audio file without manually assembling node calls.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-004-AC01",
+          "text": "`manifest()` returns a `list[ModelEntry]` containing exactly the model files"
+        },
+        {
+          "id": "US-004-AC02",
+          "text": "`run(*, models_dir, prompt, image_path, audio_path, audio_start_time, audio_end_time,"
+        },
+        {
+          "id": "US-004-AC03",
+          "text": "`run()` returns a dict with key `\"video\"` (VIDEO object) and `\"frames\"` (list of"
+        },
+        {
+          "id": "US-004-AC04",
+          "text": "`__all__ = [\"manifest\", \"run\"]`."
+        },
+        {
+          "id": "US-004-AC05",
+          "text": "`ltx2/__init__.py` exports `\"audio_to_video\"`."
+        },
+        {
+          "id": "US-004-AC06",
+          "text": "Typecheck / lint passes."
+        }
+      ]
+    },
+    {
+      "id": "US-005",
+      "title": "Example script",
+      "description": "As a Python developer, I want `examples/video_ltx2_audio_to_video.py` so that I can run the audio-to-video pipeline from the command line with minimal boilerplate.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-005-AC01",
+          "text": "Script accepts `--models-dir`, `--prompt`, `--image`, `--audio`,"
+        },
+        {
+          "id": "US-005-AC02",
+          "text": "Script calls `download_models(manifest(), models_dir=...)` then `run(...)`."
+        },
+        {
+          "id": "US-005-AC03",
+          "text": "All heavy imports (`torch`, `torchaudio`, `comfy.*`, `comfy_diffusion.*`) are"
+        },
+        {
+          "id": "US-005-AC04",
+          "text": "Typecheck / lint passes."
+        }
+      ]
+    },
+    {
+      "id": "US-006",
+      "title": "Tests",
+      "description": "As a developer, I want CPU-safe pytest tests for all new wrappers and the pipeline so that CI stays green without GPU access.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-006-AC01",
+          "text": "`tests/test_audio_wrappers_phase6.py` covers `audio_crop`, `audio_separation`,"
+        },
+        {
+          "id": "US-006-AC02",
+          "text": "`tests/test_video_wrappers_phase6.py` covers `ltx2_nag`,"
+        },
+        {
+          "id": "US-006-AC03",
+          "text": "`tests/test_image_wrappers_phase6.py` covers `image_resize_kj` and"
+        },
+        {
+          "id": "US-006-AC04",
+          "text": "`tests/test_pipelines_ltx2_audio_to_video.py` validates `manifest()` (entry count,"
+        },
+        {
+          "id": "US-006-AC05",
+          "text": "`uv run pytest` passes with 0 failures."
+        }
+      ]
+    }
+  ],
+  "functionalRequirements": [
+    {
+      "id": "FR-1",
+      "description": "** `audio.audio_crop(audio, start_time, end_time)` — wraps `AudioCrop` with"
+    },
+    {
+      "id": "FR-2",
+      "description": "** `audio.audio_separation(audio, mode, fft_n, win_length)` — wraps"
+    },
+    {
+      "id": "FR-3",
+      "description": "** `audio.trim_audio_duration(audio, start, duration)` — wraps"
+    },
+    {
+      "id": "FR-4",
+      "description": "** `video.ltx2_nag(model, nag_scale, nag_alpha, nag_tau, nag_cond_video=None,"
+    },
+    {
+      "id": "FR-5",
+      "description": "** `video.ltxv_img_to_video_inplace_kj(vae, latent, image, index=0, strength=1.0)`"
+    },
+    {
+      "id": "FR-6",
+      "description": "** `video.ltx2_sampling_preview_override(model, preview_rate=8,"
+    },
+    {
+      "id": "FR-7",
+      "description": "** `video.create_video(images, audio, fps)` — wraps `CreateVideo`; returns"
+    },
+    {
+      "id": "FR-8",
+      "description": "** `ModelManager.load_vae_kj(path, device=\"main_device\", dtype=\"bf16\")` — wraps"
+    },
+    {
+      "id": "FR-9",
+      "description": "** `image.image_resize_kj(image, width, height, upscale_method, keep_proportion,"
+    },
+    {
+      "id": "FR-10",
+      "description": "** `image.image_batch_extend_with_overlap(source_images, new_images=None,"
+    },
+    {
+      "id": "FR-11",
+      "description": "** `pipelines/video/ltx/ltx2/audio_to_video.py` — exports `manifest()` and"
+    },
+    {
+      "id": "FR-12",
+      "description": "** `ltx2/__init__.py` updated to include `\"audio_to_video\"` in `__all__`."
+    },
+    {
+      "id": "FR-13",
+      "description": "** `examples/video_ltx2_audio_to_video.py` — self-contained CLI entry point"
+    },
+    {
+      "id": "FR-14",
+      "description": "** All new wrappers and the pipeline module are covered by CPU-safe pytest tests."
+    }
+  ]
+}

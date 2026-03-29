@@ -129,8 +129,6 @@ Experimental LTX2 nodes and third-party integrations required by `ltx2/video_ltx
 | `AudioCrop`, `AudioSeparation`, `TrimAudioDuration` | Audio preprocessing utilities |
 | `VHS_VideoCombine`, `VAELoaderKJ`, `ImageResizeKJv2` | Third-party (VideoHelperSuite / KJ nodes) |
 
----
-
-### Phase 7 — LTX Audio-to-Video Pipeline
+# LTX Audio-to-Video Pipeline
 
 - `ltx2/video_ltx_2_audio_to_video`
