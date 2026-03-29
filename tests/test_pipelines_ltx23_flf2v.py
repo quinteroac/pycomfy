@@ -1,7 +1,7 @@
 """Tests for LTX-Video 2.3 first-last-frame-to-video pipeline.
 
 Covers:
-  AC01: manifest() returns 2 HFModelEntry items matching ltx3_t2v
+  AC01: manifest() returns 2 HFModelEntry items matching ltx23_t2v
   AC02: run() parameter signature includes first_image, last_image, first_frame_strength, last_frame_strength
   AC03: CPU test passes with mocked inputs
   AC04: typecheck / lint — file parses without syntax errors; no top-level comfy imports
@@ -23,7 +23,7 @@ import pytest
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _PIPELINE_FILE = (
-    _REPO_ROOT / "comfy_diffusion" / "pipelines" / "video" / "ltx" / "ltx3" / "flf2v.py"
+    _REPO_ROOT / "comfy_diffusion" / "pipelines" / "video" / "ltx" / "ltx23" / "flf2v.py"
 )
 
 
@@ -34,7 +34,7 @@ _PIPELINE_FILE = (
 
 def test_pipeline_file_exists() -> None:
     assert _PIPELINE_FILE.is_file(), (
-        "comfy_diffusion/pipelines/video/ltx/ltx3/flf2v.py must exist"
+        "comfy_diffusion/pipelines/video/ltx/ltx23/flf2v.py must exist"
     )
 
 
@@ -74,19 +74,19 @@ def test_no_top_level_comfy_imports() -> None:
 
 
 # ---------------------------------------------------------------------------
-# AC01 — manifest() returns 2 HFModelEntry items matching ltx3 t2v
+# AC01 — manifest() returns 2 HFModelEntry items matching ltx23 t2v
 # ---------------------------------------------------------------------------
 
 
 def test_import_manifest_and_run() -> None:
-    from comfy_diffusion.pipelines.video.ltx.ltx3.flf2v import manifest, run  # noqa: F401
+    from comfy_diffusion.pipelines.video.ltx.ltx23.flf2v import manifest, run  # noqa: F401
 
     assert callable(manifest)
     assert callable(run)
 
 
 def test_manifest_returns_exactly_two_entries() -> None:
-    from comfy_diffusion.pipelines.video.ltx.ltx3.flf2v import manifest
+    from comfy_diffusion.pipelines.video.ltx.ltx23.flf2v import manifest
 
     result = manifest()
     assert isinstance(result, list)
@@ -95,7 +95,7 @@ def test_manifest_returns_exactly_two_entries() -> None:
 
 def test_manifest_entries_are_hf_model_entries() -> None:
     from comfy_diffusion.downloader import HFModelEntry
-    from comfy_diffusion.pipelines.video.ltx.ltx3.flf2v import manifest
+    from comfy_diffusion.pipelines.video.ltx.ltx23.flf2v import manifest
 
     for entry in manifest():
         assert isinstance(entry, HFModelEntry), (
@@ -103,10 +103,10 @@ def test_manifest_entries_are_hf_model_entries() -> None:
         )
 
 
-def test_manifest_matches_ltx3_t2v() -> None:
+def test_manifest_matches_ltx23_t2v() -> None:
     """flf2v manifest must be identical to t2v manifest (same weights)."""
-    from comfy_diffusion.pipelines.video.ltx.ltx3.flf2v import manifest as flf2v_manifest
-    from comfy_diffusion.pipelines.video.ltx.ltx3.t2v import manifest as t2v_manifest
+    from comfy_diffusion.pipelines.video.ltx.ltx23.flf2v import manifest as flf2v_manifest
+    from comfy_diffusion.pipelines.video.ltx.ltx23.t2v import manifest as t2v_manifest
 
     flf2v_entries = flf2v_manifest()
     t2v_entries = t2v_manifest()
@@ -125,7 +125,7 @@ def test_manifest_matches_ltx3_t2v() -> None:
 
 
 def test_manifest_unet_dest_path() -> None:
-    from comfy_diffusion.pipelines.video.ltx.ltx3.flf2v import manifest
+    from comfy_diffusion.pipelines.video.ltx.ltx23.flf2v import manifest
 
     dests = [str(e.dest) for e in manifest()]
     assert any(
@@ -134,7 +134,7 @@ def test_manifest_unet_dest_path() -> None:
 
 
 def test_manifest_text_encoder_dest_path() -> None:
-    from comfy_diffusion.pipelines.video.ltx.ltx3.flf2v import manifest
+    from comfy_diffusion.pipelines.video.ltx.ltx23.flf2v import manifest
 
     dests = [str(e.dest) for e in manifest()]
     assert any("text_encoders" in d and "gemma_3_12B_it_fp4_mixed" in d for d in dests), (
@@ -143,7 +143,7 @@ def test_manifest_text_encoder_dest_path() -> None:
 
 
 def test_manifest_all_from_lightricks_hf_repo() -> None:
-    from comfy_diffusion.pipelines.video.ltx.ltx3.flf2v import manifest
+    from comfy_diffusion.pipelines.video.ltx.ltx23.flf2v import manifest
 
     for entry in manifest():
         assert entry.repo_id == "Lightricks/LTX-Video", (
@@ -157,21 +157,21 @@ def test_manifest_all_from_lightricks_hf_repo() -> None:
 
 
 def test_run_has_first_image_parameter() -> None:
-    from comfy_diffusion.pipelines.video.ltx.ltx3.flf2v import run
+    from comfy_diffusion.pipelines.video.ltx.ltx23.flf2v import run
 
     sig = inspect.signature(run)
     assert "first_image" in sig.parameters, "run() must have a 'first_image' parameter"
 
 
 def test_run_has_last_image_parameter() -> None:
-    from comfy_diffusion.pipelines.video.ltx.ltx3.flf2v import run
+    from comfy_diffusion.pipelines.video.ltx.ltx23.flf2v import run
 
     sig = inspect.signature(run)
     assert "last_image" in sig.parameters, "run() must have a 'last_image' parameter"
 
 
 def test_run_has_first_frame_strength_parameter() -> None:
-    from comfy_diffusion.pipelines.video.ltx.ltx3.flf2v import run
+    from comfy_diffusion.pipelines.video.ltx.ltx23.flf2v import run
 
     sig = inspect.signature(run)
     assert "first_frame_strength" in sig.parameters, (
@@ -183,7 +183,7 @@ def test_run_has_first_frame_strength_parameter() -> None:
 
 
 def test_run_has_last_frame_strength_parameter() -> None:
-    from comfy_diffusion.pipelines.video.ltx.ltx3.flf2v import run
+    from comfy_diffusion.pipelines.video.ltx.ltx23.flf2v import run
 
     sig = inspect.signature(run)
     assert "last_frame_strength" in sig.parameters, (
@@ -195,7 +195,7 @@ def test_run_has_last_frame_strength_parameter() -> None:
 
 
 def test_run_has_fps_parameter() -> None:
-    from comfy_diffusion.pipelines.video.ltx.ltx3.flf2v import run
+    from comfy_diffusion.pipelines.video.ltx.ltx23.flf2v import run
 
     sig = inspect.signature(run)
     assert "fps" in sig.parameters, "run() must have an 'fps' parameter"
@@ -203,7 +203,7 @@ def test_run_has_fps_parameter() -> None:
 
 
 def test_run_has_filename_override_params() -> None:
-    from comfy_diffusion.pipelines.video.ltx.ltx3.flf2v import run
+    from comfy_diffusion.pipelines.video.ltx.ltx23.flf2v import run
 
     sig = inspect.signature(run)
     assert "unet_filename" in sig.parameters
@@ -215,7 +215,7 @@ def test_run_has_filename_override_params() -> None:
 
 
 def test_run_has_required_params() -> None:
-    from comfy_diffusion.pipelines.video.ltx.ltx3.flf2v import run
+    from comfy_diffusion.pipelines.video.ltx.ltx23.flf2v import run
 
     sig = inspect.signature(run)
     assert "models_dir" in sig.parameters
@@ -279,7 +279,7 @@ def _run_mocked(
 
     Returns ``(result, mm_mock, add_guide_mock)``.
     """
-    import comfy_diffusion.pipelines.video.ltx.ltx3.flf2v as pipeline_mod
+    import comfy_diffusion.pipelines.video.ltx.ltx23.flf2v as pipeline_mod
 
     mm = _build_mock_mm()
     fake_tensor = MagicMock()
@@ -360,7 +360,7 @@ def test_run_calls_ltxv_add_guide_twice(tmp_path: Path) -> None:
 
 def test_run_calls_ltxv_crop_guides(tmp_path: Path) -> None:
     """ltxv_crop_guides must be called exactly once after both add_guide calls."""
-    import comfy_diffusion.pipelines.video.ltx.ltx3.flf2v as pipeline_mod
+    import comfy_diffusion.pipelines.video.ltx.ltx23.flf2v as pipeline_mod
 
     mm = _build_mock_mm()
     fake_tensor = MagicMock()
@@ -406,7 +406,7 @@ def test_run_calls_ltxv_crop_guides(tmp_path: Path) -> None:
 def test_run_calls_sample_custom_and_separates_av_latent(tmp_path: Path) -> None:
     """AC03: verify call order — sample_custom → ltxv_separate_av_latent
     → vae_decode_batch_tiled → ltxv_audio_vae_decode."""
-    import comfy_diffusion.pipelines.video.ltx.ltx3.flf2v as pipeline_mod
+    import comfy_diffusion.pipelines.video.ltx.ltx23.flf2v as pipeline_mod
 
     call_order: list[str] = []
     mm = _build_mock_mm()
@@ -492,7 +492,7 @@ def test_run_uses_load_ltxav_text_encoder(tmp_path: Path) -> None:
 
 def test_run_raises_on_runtime_error(tmp_path: Path) -> None:
     """run() must raise RuntimeError when check_runtime() returns an error."""
-    import comfy_diffusion.pipelines.video.ltx.ltx3.flf2v as pipeline_mod
+    import comfy_diffusion.pipelines.video.ltx.ltx23.flf2v as pipeline_mod
 
     first_image = MagicMock(spec=["mode"])
     last_image = MagicMock(spec=["mode"])
@@ -512,7 +512,7 @@ def test_run_raises_on_runtime_error(tmp_path: Path) -> None:
 
 def test_run_uses_image_to_tensor_for_pil_images(tmp_path: Path) -> None:
     """image_to_tensor must be called for both first_image and last_image (PIL inputs)."""
-    import comfy_diffusion.pipelines.video.ltx.ltx3.flf2v as pipeline_mod
+    import comfy_diffusion.pipelines.video.ltx.ltx23.flf2v as pipeline_mod
 
     mm = _build_mock_mm()
     fake_tensor = MagicMock()
@@ -559,7 +559,7 @@ def test_run_uses_image_to_tensor_for_pil_images(tmp_path: Path) -> None:
 def test_download_models_idempotent_all_present(tmp_path: Path) -> None:
     """download_models(manifest()) completes without error when all 2 files are present."""
     from comfy_diffusion.downloader import download_models
-    from comfy_diffusion.pipelines.video.ltx.ltx3.flf2v import manifest
+    from comfy_diffusion.pipelines.video.ltx.ltx23.flf2v import manifest
 
     entries = manifest()
     assert len(entries) == 2

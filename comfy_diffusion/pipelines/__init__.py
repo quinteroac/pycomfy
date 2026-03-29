@@ -6,7 +6,7 @@ Each sub-package groups pipelines by model family, mirroring the layout of
 Import directly from the specific pipeline module, e.g.::
 
     from comfy_diffusion.pipelines.video.ltx.ltx2.t2v import manifest, run
-    from comfy_diffusion.pipelines.video.ltx.ltx3.i2v import manifest, run
+    from comfy_diffusion.pipelines.video.ltx.ltx23.i2v import manifest, run
 
 Sub-packages
 ------------

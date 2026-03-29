@@ -227,51 +227,51 @@ def vae_decode_batch_tiled(
     if samples.shape[0] == 0:
         raise ValueError("latent samples must not be empty")
 
-    if sample_dims == 5:
-        samples = samples.reshape(-1, samples.shape[-3], samples.shape[-2], samples.shape[-1])
-        sample_dims = 4
-
     result: list[Image.Image] = []
-    for index in range(samples.shape[0]):
-        frame_samples = samples[index : index + 1]
-        # 4D latents need a temporal dim for video VAEs (e.g. Wan) that call
-        # decode_tiled_3d internally; 5D latents are passed as-is.
-        if sample_dims == 4 and hasattr(frame_samples, "unsqueeze"):
-            # frame_samples: (1, C, H, W) -> (1, C, 1, H, W)
-            frame_samples = frame_samples.unsqueeze(2)
-        # process_output uses in-place ops that fail on inference tensors produced
-        # by the VAE decoder. Patch the instance attribute temporarily to use
-        # non-in-place equivalents without modifying vendor code.
-        _orig_process_output = getattr(vae, "process_output", None)
+
+    # process_output uses in-place ops that fail on inference tensors.
+    # Patch the instance attribute temporarily to use non-in-place equivalents.
+    _orig_process_output = getattr(vae, "process_output", None)
+    if _orig_process_output is not None:
+        vae.process_output = lambda image: (image + 1.0).div_(2.0).clamp_(0.0, 1.0)
+
+    try:
+        if sample_dims == 5:
+            # 5D latents: (B, C, T, H, W) — video VAE (e.g. LTX-2). Decode the
+            # full video at once via decode_tiled_3d. Output: (B, T, H, W, C).
+            images = vae.decode_tiled(samples, tile_x=tile_size, tile_y=tile_size, overlap=overlap)
+            if hasattr(images, "detach"):
+                images = images.detach().cpu()
+            # images: (B, T, H, W, C)
+            for b in range(images.shape[0]):
+                for t in range(images.shape[1]):
+                    result.append(_tensor_like_to_pil(images[b, t]))
+        else:
+            # 4D latents: (B, C, H, W). Decode one item at a time, adding a
+            # temporal dim so video VAEs can call decode_tiled_3d internally.
+            for index in range(samples.shape[0]):
+                frame_samples = samples[index : index + 1]
+                if hasattr(frame_samples, "unsqueeze"):
+                    # (1, C, H, W) -> (1, C, 1, H, W)
+                    frame_samples = frame_samples.unsqueeze(2)
+                images = vae.decode_tiled(frame_samples, tile_x=tile_size, tile_y=tile_size, overlap=overlap)
+                image_dims = len(images.shape)
+                if image_dims == 5:
+                    # (B, T, H, W, C) — extract frames
+                    if hasattr(images, "detach"):
+                        images = images.detach().cpu()
+                    for t in range(images.shape[1]):
+                        result.append(_tensor_like_to_pil(images[0, t]))
+                elif image_dims == 4:
+                    # (B, C, H, W) — single frame
+                    if hasattr(images, "detach"):
+                        images = images.detach().cpu()
+                    result.append(_tensor_like_to_pil(images[0].permute(1, 2, 0)))
+                else:
+                    raise ValueError("unsupported decoded image shape")
+    finally:
         if _orig_process_output is not None:
-            vae.process_output = lambda image: (image + 1.0).div_(2.0).clamp_(0.0, 1.0)
-        try:
-            images = vae.decode_tiled(
-                frame_samples,
-                tile_x=tile_size,
-                tile_y=tile_size,
-                overlap=overlap,
-            )
-        finally:
-            if _orig_process_output is not None:
-                vae.process_output = _orig_process_output
-
-        image_dims = len(images.shape)
-        if image_dims == 5:
-            images = images.reshape(-1, images.shape[-3], images.shape[-2], images.shape[-1])
-        elif image_dims != 4:
-            raise ValueError("unsupported decoded image shape")
-
-        if images.shape[0] == 0:
-            raise ValueError("decoded image tensor is empty")
-
-        for frame_index in range(images.shape[0]):
-            image = images[frame_index]
-            if hasattr(image, "detach"):
-                image = image.detach()
-            if hasattr(image, "cpu"):
-                image = image.cpu()
-            result.append(_tensor_like_to_pil(image))
+            vae.process_output = _orig_process_output
 
     if not result:
         raise ValueError("decoded image tensor is empty")

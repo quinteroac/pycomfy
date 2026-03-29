@@ -62,10 +62,11 @@ from comfy_diffusion.downloader import HFModelEntry, ModelEntry
 __all__ = ["manifest", "run"]
 
 # ---------------------------------------------------------------------------
-# Canonical HuggingFace repository for LTX-Video 2
+# HuggingFace repositories for LTX-Video 2
 # ---------------------------------------------------------------------------
 
-_HF_REPO = "Lightricks/LTX-Video"
+_HF_REPO_LTX = "Lightricks/LTX-2"          # UNet and upscaler
+_HF_REPO_COMFY = "Comfy-Org/ltx-2"         # Gemma text encoder
 
 # Relative destination paths (resolved against models_dir by download_models).
 _UNET_DEST = Path("diffusion_models") / "ltx-2-19b-distilled.safetensors"
@@ -89,17 +90,17 @@ def manifest() -> list[ModelEntry]:
     """
     return [
         HFModelEntry(
-            repo_id=_HF_REPO,
+            repo_id=_HF_REPO_LTX,
             filename="ltx-2-19b-distilled.safetensors",
             dest=_UNET_DEST,
         ),
         HFModelEntry(
-            repo_id=_HF_REPO,
-            filename="gemma_3_12B_it_fp4_mixed.safetensors",
+            repo_id=_HF_REPO_COMFY,
+            filename="split_files/text_encoders/gemma_3_12B_it_fp4_mixed.safetensors",
             dest=_TEXT_ENCODER_DEST,
         ),
         HFModelEntry(
-            repo_id=_HF_REPO,
+            repo_id=_HF_REPO_LTX,
             filename="ltx-2-spatial-upscaler-x2-1.0.safetensors",
             dest=_UPSCALER_DEST,
         ),
@@ -111,25 +112,23 @@ def run(
     models_dir: str | Path,
     prompt: str,
     negative_prompt: str = "worst quality, inconsistent motion, blurry, jittery, distorted",
-    width: int = 768,
-    height: int = 512,
-    length: int = 97,
-    fps: int = 24,
-    steps: int = 8,
-    cfg: float = 3.0,
+    width: int = 1280,
+    height: int = 720,
+    length: int = 121,
+    fps: int = 25,
+    cfg: float = 1.0,
     seed: int = 0,
-    sampler: str = "euler",
-    scheduler: str = "beta",
     unet_filename: str | None = None,
     vae_filename: str | None = None,
+    audio_vae_filename: str | None = None,
     text_encoder_filename: str | None = None,
     upscaler_filename: str | None = None,
 ) -> dict[str, Any]:
     """Run the LTX-Video 2 distilled text-to-video-with-audio pipeline end-to-end.
 
-    Uses fixed distilled sigmas (``manual_sigmas``) and the ``euler_ancestral``
-    sampler.  The full audio-visual (AV) chain generates video and audio
-    simultaneously.
+    Two-pass sampling: full distilled sigmas at half resolution (pass 1), then
+    spatial upscale and refinement sigmas at full resolution (pass 2).  Mirrors
+    the ``video_ltx2_t2v_distilled.json`` reference workflow exactly.
 
     Parameters
     ----------
@@ -141,30 +140,29 @@ def run(
         Negative text prompt.
         Default ``"worst quality, inconsistent motion, blurry, jittery, distorted"``.
     width : int, optional
-        Output frame width in pixels (must be divisible by 32).  Default ``768``.
+        Output frame width in pixels.  The latent is sampled at half this size
+        and the spatial upscaler restores the full resolution.  Default ``1280``.
     height : int, optional
-        Output frame height in pixels (must be divisible by 32).  Default ``512``.
+        Output frame height in pixels.  Same halving logic as ``width``.
+        Default ``720``.
     length : int, optional
-        Number of video frames to generate.  Default ``97``.
+        Number of video frames to generate.  Default ``121`` (≈ 5 s at 25 fps).
     fps : int, optional
         Frame rate used for the audio latent and ``LTXVConditioning``.
-        Default ``24``.
-    steps : int, optional
-        Kept for backward-compatibility; not used by the fixed-sigma distilled
-        sampler.  Default ``8``.
+        Default ``25``.
     cfg : float, optional
-        Classifier-free guidance scale.  Default ``3.0``.
+        Classifier-free guidance scale applied to both passes.  Default ``1.0``
+        (distilled model requires no guidance).
     seed : int, optional
         Random seed for reproducibility.  Default ``0``.
-    sampler : str, optional
-        Kept for backward-compatibility.  Default ``"euler"``.
-    scheduler : str, optional
-        Kept for backward-compatibility.  Default ``"beta"``.
     unet_filename : str | None, optional
-        Override the default UNet filename.  Default ``None``.
+        Override the default UNet/checkpoint filename.  Default ``None``.
     vae_filename : str | None, optional
         Override the VAE filename.  When ``None`` the VAE is loaded from the
-        UNet checkpoint (bundles both UNet and VAE weights).  Default ``None``.
+        UNet checkpoint (bundles UNet, VAE, and audio VAE).  Default ``None``.
+    audio_vae_filename : str | None, optional
+        Override the audio VAE filename.  When ``None`` falls back to
+        ``vae_filename``.  Default ``None``.
     text_encoder_filename : str | None, optional
         Override the default text-encoder filename.  Default ``None``.
     upscaler_filename : str | None, optional
@@ -204,13 +202,13 @@ def run(
     upscaler_path = (
         Path(upscaler_filename) if upscaler_filename else models_dir / _UPSCALER_DEST
     )
-    # The distilled checkpoint bundles VAE weights; default to the same file.
     vae_path = Path(vae_filename) if vae_filename else unet_path
+    audio_vae_path = Path(audio_vae_filename) if audio_vae_filename else vae_path
 
     # Load models.
     model = mm.load_unet(unet_path)
     vae = mm.load_vae(vae_path)
-    audio_vae = mm.load_ltxv_audio_vae(vae_path)
+    audio_vae = mm.load_ltxv_audio_vae(audio_vae_path)
     clip = mm.load_ltxav_text_encoder(te_path, unet_path)
     upscale_model = mm.load_latent_upscale_model(upscaler_path)
 
@@ -218,26 +216,35 @@ def run(
     positive, negative = encode_prompt(clip, prompt, negative_prompt)
     positive, negative = ltxv_conditioning(positive, negative, frame_rate=fps)
 
-    # Create video and audio latents, then concatenate into a single AV latent.
-    latent = ltxv_empty_latent_video(width=width, height=height, length=length)
+    # Pass 1: sample at half resolution (mirrors EmptyImage → ImageScaleBy(0.5) in the workflow).
+    latent_width = width // 2
+    latent_height = height // 2
+    video_latent = ltxv_empty_latent_video(width=latent_width, height=latent_height, length=length)
     audio_latent = ltxv_empty_latent_audio(audio_vae, frames_number=length, frame_rate=fps)
-    av_latent = ltxv_concat_av_latent(latent, audio_latent)
+    av_latent = ltxv_concat_av_latent(video_latent, audio_latent)
 
-    # Build the sampling chain with fixed distilled sigmas.
-    guider = cfg_guider(model, positive, negative, cfg)
-    noise = random_noise(seed)
-    sigmas = manual_sigmas("1., 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421875, 0.0")
+    sigmas_p1 = manual_sigmas("1., 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421875, 0.0")
+    guider_p1 = cfg_guider(model, positive, negative, cfg)
+    noise_p1 = random_noise(seed)
     sampler_obj = get_sampler("euler_ancestral")
-    _, denoised = sample_custom(noise, guider, sampler_obj, sigmas, av_latent)
+    _, denoised_p1 = sample_custom(noise_p1, guider_p1, sampler_obj, sigmas_p1, av_latent)
 
-    # Separate video and audio from the denoised AV latent.
-    video_latent_out, audio_latent_out = ltxv_separate_av_latent(denoised)
+    # Between passes: separate → upscale video latent → re-concat with audio latent.
+    video_latent_p1, audio_latent_p1 = ltxv_separate_av_latent(denoised_p1)
+    video_latent_up = ltxv_latent_upsample(video_latent_p1, upscale_model=upscale_model, vae=vae)
+    av_latent_p2 = ltxv_concat_av_latent(video_latent_up, audio_latent_p1)
 
-    # Spatial upscale video in latent space before VAE decode.
-    video_latent_up = ltxv_latent_upsample(video_latent_out, upscale_model=upscale_model, vae=vae)
+    # Pass 2: refinement at full resolution.
+    sigmas_p2 = manual_sigmas("0.909375, 0.725, 0.421875, 0.0")
+    guider_p2 = cfg_guider(model, positive, negative, cfg)
+    noise_p2 = random_noise(seed)
+    _, denoised_p2 = sample_custom(noise_p2, guider_p2, sampler_obj, sigmas_p2, av_latent_p2)
+
+    # Separate video and audio from the final denoised AV latent.
+    video_latent_out, audio_latent_out = ltxv_separate_av_latent(denoised_p2)
 
     # Decode video → PIL frames; decode audio → waveform dict.
-    frames = vae_decode_batch_tiled(vae, video_latent_up)
+    frames = vae_decode_batch_tiled(vae, video_latent_out)
     audio = ltxv_audio_vae_decode(audio_vae, audio_latent_out)
 
     return {"frames": frames, "audio": audio}

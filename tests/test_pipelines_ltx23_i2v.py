@@ -1,8 +1,8 @@
-"""Tests for US-006 — comfy_diffusion/pipelines/ltx3_i2v.py pipeline.
+"""Tests for US-006 — comfy_diffusion/pipelines/ltx23_i2v.py pipeline.
 
 Covers:
-  AC01: manifest() returns same 2 entries as ltx3_t2v
-  AC02: run() adds image, fps, and guide_strength parameters vs ltx3_t2v.run()
+  AC01: manifest() returns same 2 entries as ltx23_t2v
+  AC02: run() adds image, fps, and guide_strength parameters vs ltx23_t2v.run()
   AC04: CPU test passes with mocked inputs (AV sampling chain + ltxv_add_guide)
   AC05: typecheck / lint — file parses without syntax errors; no top-level comfy imports
 """
@@ -22,8 +22,8 @@ import pytest
 # ---------------------------------------------------------------------------
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
-_PIPELINE_FILE = _REPO_ROOT / "comfy_diffusion" / "pipelines" / "video" / "ltx" / "ltx3" / "i2v.py"
-_T2V_FILE = _REPO_ROOT / "comfy_diffusion" / "pipelines" / "video" / "ltx" / "ltx3" / "t2v.py"
+_PIPELINE_FILE = _REPO_ROOT / "comfy_diffusion" / "pipelines" / "video" / "ltx" / "ltx23" / "i2v.py"
+_T2V_FILE = _REPO_ROOT / "comfy_diffusion" / "pipelines" / "video" / "ltx" / "ltx23" / "t2v.py"
 
 
 # ---------------------------------------------------------------------------
@@ -32,7 +32,7 @@ _T2V_FILE = _REPO_ROOT / "comfy_diffusion" / "pipelines" / "video" / "ltx" / "lt
 
 
 def test_pipeline_file_exists() -> None:
-    assert _PIPELINE_FILE.is_file(), "comfy_diffusion/pipelines/video/ltx/ltx3/i2v.py must exist"
+    assert _PIPELINE_FILE.is_file(), "comfy_diffusion/pipelines/video/ltx/ltx23/i2v.py must exist"
 
 
 def test_pipeline_parses_without_syntax_errors() -> None:
@@ -71,19 +71,19 @@ def test_no_top_level_comfy_imports() -> None:
 
 
 # ---------------------------------------------------------------------------
-# AC01 — manifest() returns same 2 entries as ltx3_t2v
+# AC01 — manifest() returns same 2 entries as ltx23_t2v
 # ---------------------------------------------------------------------------
 
 
 def test_import_manifest_and_run() -> None:
-    from comfy_diffusion.pipelines.video.ltx.ltx3.i2v import manifest, run  # noqa: F401
+    from comfy_diffusion.pipelines.video.ltx.ltx23.i2v import manifest, run  # noqa: F401
 
     assert callable(manifest)
     assert callable(run)
 
 
 def test_manifest_returns_exactly_two_entries() -> None:
-    from comfy_diffusion.pipelines.video.ltx.ltx3.i2v import manifest
+    from comfy_diffusion.pipelines.video.ltx.ltx23.i2v import manifest
 
     result = manifest()
     assert isinstance(result, list)
@@ -92,7 +92,7 @@ def test_manifest_returns_exactly_two_entries() -> None:
 
 def test_manifest_entries_are_hf_model_entries() -> None:
     from comfy_diffusion.downloader import HFModelEntry
-    from comfy_diffusion.pipelines.video.ltx.ltx3.i2v import manifest
+    from comfy_diffusion.pipelines.video.ltx.ltx23.i2v import manifest
 
     for entry in manifest():
         assert isinstance(entry, HFModelEntry), (
@@ -100,17 +100,17 @@ def test_manifest_entries_are_hf_model_entries() -> None:
         )
 
 
-def test_manifest_matches_ltx3_t2v() -> None:
-    """AC01: manifest() returns the same 2 entries as ltx3_t2v.manifest()."""
-    from comfy_diffusion.pipelines.video.ltx.ltx3.i2v import manifest as i2v_manifest
-    from comfy_diffusion.pipelines.video.ltx.ltx3.t2v import manifest as t2v_manifest
+def test_manifest_matches_ltx23_t2v() -> None:
+    """AC01: manifest() returns the same 2 entries as ltx23_t2v.manifest()."""
+    from comfy_diffusion.pipelines.video.ltx.ltx23.i2v import manifest as i2v_manifest
+    from comfy_diffusion.pipelines.video.ltx.ltx23.t2v import manifest as t2v_manifest
 
     i2v_entries = i2v_manifest()
     t2v_entries = t2v_manifest()
 
     assert len(i2v_entries) == len(t2v_entries), (
-        f"ltx3_i2v manifest has {len(i2v_entries)} entries; "
-        f"ltx3_t2v manifest has {len(t2v_entries)} entries — must match"
+        f"ltx23_i2v manifest has {len(i2v_entries)} entries; "
+        f"ltx23_t2v manifest has {len(t2v_entries)} entries — must match"
     )
     for i2v_e, t2v_e in zip(i2v_entries, t2v_entries):
         assert i2v_e.repo_id == t2v_e.repo_id
@@ -119,7 +119,7 @@ def test_manifest_matches_ltx3_t2v() -> None:
 
 
 def test_manifest_unet_dest_path() -> None:
-    from comfy_diffusion.pipelines.video.ltx.ltx3.i2v import manifest
+    from comfy_diffusion.pipelines.video.ltx.ltx23.i2v import manifest
 
     dests = [str(e.dest) for e in manifest()]
     assert any(
@@ -128,7 +128,7 @@ def test_manifest_unet_dest_path() -> None:
 
 
 def test_manifest_text_encoder_dest_path() -> None:
-    from comfy_diffusion.pipelines.video.ltx.ltx3.i2v import manifest
+    from comfy_diffusion.pipelines.video.ltx.ltx23.i2v import manifest
 
     dests = [str(e.dest) for e in manifest()]
     assert any("text_encoders" in d and "gemma_3_12B_it_fp4_mixed" in d for d in dests), (
@@ -137,40 +137,40 @@ def test_manifest_text_encoder_dest_path() -> None:
 
 
 def test_manifest_all_from_lightricks_hf_repo() -> None:
-    from comfy_diffusion.pipelines.video.ltx.ltx3.i2v import manifest
+    from comfy_diffusion.pipelines.video.ltx.ltx23.i2v import manifest
 
     for entry in manifest():
         assert entry.repo_id == "Lightricks/LTX-Video"
 
 
 # ---------------------------------------------------------------------------
-# AC02 — run() adds image, fps, guide_strength parameters vs ltx3_t2v.run()
+# AC02 — run() adds image, fps, guide_strength parameters vs ltx23_t2v.run()
 # ---------------------------------------------------------------------------
 
 
 def test_run_has_image_parameter() -> None:
-    from comfy_diffusion.pipelines.video.ltx.ltx3.i2v import run
+    from comfy_diffusion.pipelines.video.ltx.ltx23.i2v import run
 
     sig = inspect.signature(run)
     assert "image" in sig.parameters, "run() must have an 'image' parameter"
 
 
 def test_run_has_fps_parameter() -> None:
-    from comfy_diffusion.pipelines.video.ltx.ltx3.i2v import run
+    from comfy_diffusion.pipelines.video.ltx.ltx23.i2v import run
 
     sig = inspect.signature(run)
     assert "fps" in sig.parameters, "run() must have an 'fps' parameter"
 
 
 def test_run_fps_default_is_25() -> None:
-    from comfy_diffusion.pipelines.video.ltx.ltx3.i2v import run
+    from comfy_diffusion.pipelines.video.ltx.ltx23.i2v import run
 
     sig = inspect.signature(run)
     assert sig.parameters["fps"].default == 25, "fps default must be 25"
 
 
 def test_run_fps_annotation_is_int() -> None:
-    from comfy_diffusion.pipelines.video.ltx.ltx3.i2v import run
+    from comfy_diffusion.pipelines.video.ltx.ltx23.i2v import run
 
     sig = inspect.signature(run)
     # Under from __future__ import annotations, annotation is a string
@@ -179,7 +179,7 @@ def test_run_fps_annotation_is_int() -> None:
 
 
 def test_run_has_guide_strength_parameter() -> None:
-    from comfy_diffusion.pipelines.video.ltx.ltx3.i2v import run
+    from comfy_diffusion.pipelines.video.ltx.ltx23.i2v import run
 
     sig = inspect.signature(run)
     assert "guide_strength" in sig.parameters, "run() must have a 'guide_strength' parameter"
@@ -187,16 +187,16 @@ def test_run_has_guide_strength_parameter() -> None:
 
 
 def test_run_has_all_t2v_params_plus_image_and_fps() -> None:
-    """run() must include all ltx3_t2v params plus image, fps, and guide_strength."""
-    from comfy_diffusion.pipelines.video.ltx.ltx3.i2v import run as i2v_run
-    from comfy_diffusion.pipelines.video.ltx.ltx3.t2v import run as t2v_run
+    """run() must include all ltx23_t2v params plus image, fps, and guide_strength."""
+    from comfy_diffusion.pipelines.video.ltx.ltx23.i2v import run as i2v_run
+    from comfy_diffusion.pipelines.video.ltx.ltx23.t2v import run as t2v_run
 
     i2v_params = set(inspect.signature(i2v_run).parameters)
     t2v_params = set(inspect.signature(t2v_run).parameters)
 
     # i2v must contain everything from t2v
     assert t2v_params <= i2v_params, (
-        f"ltx3_i2v.run() is missing t2v parameters: {t2v_params - i2v_params}"
+        f"ltx23_i2v.run() is missing t2v parameters: {t2v_params - i2v_params}"
     )
     # Plus image, fps, guide_strength
     assert "image" in i2v_params
@@ -204,11 +204,11 @@ def test_run_has_all_t2v_params_plus_image_and_fps() -> None:
     assert "guide_strength" in i2v_params
     # And nothing extra beyond image, fps, guide_strength
     extra = i2v_params - t2v_params - {"image", "fps", "guide_strength"}
-    assert not extra, f"ltx3_i2v.run() has unexpected extra parameters: {extra}"
+    assert not extra, f"ltx23_i2v.run() has unexpected extra parameters: {extra}"
 
 
 def test_run_has_filename_override_params() -> None:
-    from comfy_diffusion.pipelines.video.ltx.ltx3.i2v import run
+    from comfy_diffusion.pipelines.video.ltx.ltx23.i2v import run
 
     sig = inspect.signature(run)
     assert "unet_filename" in sig.parameters
@@ -259,7 +259,7 @@ def _run_mocked(
     extra_patches: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], MagicMock]:
     """Helper: run pipeline with all heavy dependencies mocked."""
-    from comfy_diffusion.pipelines.video.ltx.ltx3 import i2v as pipeline_mod
+    from comfy_diffusion.pipelines.video.ltx.ltx23 import i2v as pipeline_mod
 
     if image is None:
         image = MagicMock(spec=["mode"])
@@ -333,7 +333,7 @@ def test_run_returns_dict_with_frames_and_audio(tmp_path: Path) -> None:
 
 def test_run_calls_ltxv_add_guide(tmp_path: Path) -> None:
     """AC04: ltxv_add_guide() must be called with frame_idx=0."""
-    from comfy_diffusion.pipelines.video.ltx.ltx3 import i2v as pipeline_mod
+    from comfy_diffusion.pipelines.video.ltx.ltx23 import i2v as pipeline_mod
 
     mm = _build_mock_mm()
     add_guide_calls: list[dict[str, Any]] = []
@@ -376,7 +376,7 @@ def test_run_calls_ltxv_add_guide(tmp_path: Path) -> None:
 
 def test_run_accepts_fps_and_guide_strength(tmp_path: Path) -> None:
     """run() must accept fps and guide_strength without raising."""
-    from comfy_diffusion.pipelines.video.ltx.ltx3 import i2v as pipeline_mod
+    from comfy_diffusion.pipelines.video.ltx.ltx23 import i2v as pipeline_mod
 
     mm = _build_mock_mm()
 
@@ -418,7 +418,7 @@ def test_run_uses_load_ltxav_text_encoder(tmp_path: Path) -> None:
 
 def test_run_uses_image_to_tensor_for_pil_image(tmp_path: Path) -> None:
     """PIL Image (has .mode attr) must be converted via image_to_tensor."""
-    from comfy_diffusion.pipelines.video.ltx.ltx3 import i2v as pipeline_mod
+    from comfy_diffusion.pipelines.video.ltx.ltx23 import i2v as pipeline_mod
 
     mm = _build_mock_mm()
     pil_image = MagicMock(spec=["mode"])
@@ -460,7 +460,7 @@ def test_run_uses_image_to_tensor_for_pil_image(tmp_path: Path) -> None:
 
 def test_run_raises_on_runtime_error(tmp_path: Path) -> None:
     """run() must raise RuntimeError when check_runtime() returns an error."""
-    from comfy_diffusion.pipelines.video.ltx.ltx3 import i2v as pipeline_mod
+    from comfy_diffusion.pipelines.video.ltx.ltx23 import i2v as pipeline_mod
 
     with patch(
         _RUNTIME_PATCH,
@@ -480,7 +480,7 @@ def test_run_raises_on_runtime_error(tmp_path: Path) -> None:
 def test_download_models_idempotent_all_present(tmp_path: Path) -> None:
     """download_models(manifest()) completes without error when all 2 files exist."""
     from comfy_diffusion.downloader import download_models
-    from comfy_diffusion.pipelines.video.ltx.ltx3.i2v import manifest
+    from comfy_diffusion.pipelines.video.ltx.ltx23.i2v import manifest
 
     entries = manifest()
     assert len(entries) == 2

@@ -31,8 +31,8 @@ _PIPELINE_MODULES = [
     "ltx2_i2v",
     "ltx2_i2v_distilled",
     "ltx2_i2v_lora",
-    "ltx3_t2v",
-    "ltx3_i2v",
+    "ltx23_t2v",
+    "ltx23_i2v",
 ]
 
 # Maps legacy module name to relative path within _PIPELINES_DIR.
@@ -42,8 +42,8 @@ _PIPELINE_FILE_MAP: dict[str, str] = {
     "ltx2_i2v": "video/ltx/ltx2/i2v.py",
     "ltx2_i2v_distilled": "video/ltx/ltx2/i2v_distilled.py",
     "ltx2_i2v_lora": "video/ltx/ltx2/i2v_lora.py",
-    "ltx3_t2v": "video/ltx/ltx3/t2v.py",
-    "ltx3_i2v": "video/ltx/ltx3/i2v.py",
+    "ltx23_t2v": "video/ltx/ltx23/t2v.py",
+    "ltx23_i2v": "video/ltx/ltx23/i2v.py",
 }
 
 

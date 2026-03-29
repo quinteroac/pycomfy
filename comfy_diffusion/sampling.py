@@ -225,13 +225,13 @@ def video_triangle_cfg_guidance(model: Any, min_cfg: float) -> Any:
 def random_noise(noise_seed: int) -> Any:
     """Create a RandomNoise object compatible with ``sample_custom()``."""
     random_noise_type = _get_random_noise_type()
-    return random_noise_type(noise_seed)
+    return _unwrap_node_output(random_noise_type.execute(noise_seed))
 
 
 def disable_noise() -> Any:
     """Create a DisableNoise object compatible with ``sample_custom()``."""
     disable_noise_type = _get_disable_noise_type()
-    return disable_noise_type()
+    return _unwrap_node_output(disable_noise_type.execute())
 
 
 def basic_scheduler(

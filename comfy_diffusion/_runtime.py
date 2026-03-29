@@ -77,11 +77,43 @@ def ensure_comfyui_available() -> Path:
 
 
 def ensure_comfyui_on_path() -> Path:
-    """Ensure vendored ComfyUI is available and importable; return the inserted path."""
+    """Ensure vendored ComfyUI is available and importable; return the inserted path.
+
+    Respects the ``COMFY_VRAM_MODE`` environment variable to configure VRAM
+    management before ``comfy.model_management`` is first imported.  Accepted
+    values (case-insensitive): ``low``, ``no``, ``high``, ``normal``.
+    Must be set before any ``comfy.*`` import occurs in the process.
+    """
+    import os
+
     comfyui_root = ensure_comfyui_available()
     comfyui_root_str = str(comfyui_root)
 
     if comfyui_root_str not in sys.path:
         sys.path.insert(0, comfyui_root_str)
+
+    # Apply VRAM mode env-var override before model_management is imported.
+    vram_mode = os.environ.get("COMFY_VRAM_MODE", "").strip().lower()
+    reserve_vram = os.environ.get("COMFY_RESERVE_VRAM", "").strip()
+    if (vram_mode or reserve_vram) and "comfy.model_management" not in sys.modules:
+        try:
+            import comfy.cli_args as _cli_args  # noqa: PLC0415
+            _args = _cli_args.args
+            if vram_mode:
+                # Reset all vram flags first.
+                for _flag in ("lowvram", "novram", "highvram", "gpu_only"):
+                    if hasattr(_args, _flag):
+                        setattr(_args, _flag, False)
+                if vram_mode == "low":
+                    _args.lowvram = True
+                elif vram_mode == "no":
+                    _args.novram = True
+                elif vram_mode == "high":
+                    _args.highvram = True
+                # "normal" — already reset above
+            if reserve_vram:
+                _args.reserve_vram = float(reserve_vram)
+        except Exception:
+            pass  # Best-effort; don't crash if cli_args isn't importable yet.
 
     return comfyui_root

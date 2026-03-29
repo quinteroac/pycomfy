@@ -70,6 +70,47 @@
 - All other symbols: explicit submodule imports (e.g. `from comfy_diffusion.conditioning import encode_prompt`)
 - `textgen`, `audio`, `latent`, `image`, `mask`, `video`, `controlnet` — not re-exported at package level
 
+## Pipeline Authoring Rules
+
+When implementing a pipeline based on a ComfyUI workflow file, follow these rules strictly:
+
+### 1. Always read the workflow first with the workflow-reader skill
+Before writing any code, run:
+```bash
+python comfy_diffusion/skills/workflow-reader/tools/workflow.py <workflow.json>
+```
+This reveals the exact nodes, parameters, connections, execution order, and model downloads. Never assume — always read.
+
+### 2. The workflow is the source of truth
+- `manifest()` must list **exactly** the files declared in `get_model_downloads()` that belong to **active** (non-bypassed) nodes.
+- HF repos, filenames, and destination directories must match the `url` and `directory` fields in the workflow metadata — not guessed or inferred from model names.
+- `run()` must mirror the node execution order shown by `get_nodes()`. Do not reorder, skip, or combine steps unless the workflow itself does so.
+
+### 3. Check node mode before including in manifest or run()
+A node with `mode = "bypassed"` or `"muted"` is **not executed**. Do not add its models to `manifest()` and do not implement its logic in `run()`. This is the most common source of manifest drift.
+
+### 4. Sampler, sigmas, and CFG values come from the workflow
+- Sampler name: read from `KSamplerSelect` widget value.
+- Sigmas string: read from `ManualSigmas` widget value.
+- CFG: read from `CFGGuider` widget value.
+- Never substitute defaults from other pipelines without verifying against the workflow.
+
+### 5. Multi-pass pipelines must implement every pass
+If the workflow contains multiple `SamplerCustomAdvanced` nodes, each is a distinct sampling pass. Implement all of them in order, including any upscaling or image re-injection between passes.
+
+### 6. If a required node is not yet wrapped, implement it first
+Before writing the pipeline, check whether every node used in the workflow has a corresponding function in `comfy_diffusion/`. If a node is missing:
+- Implement it in the appropriate module (`conditioning.py`, `latent.py`, `audio.py`, `video.py`, etc.) following the standard lazy-import pattern.
+- Add it to the module's `__all__`.
+- Do **not** inline raw `comfy.*` calls inside a pipeline file — all ComfyUI node logic belongs in the library modules.
+- Only then proceed to write the pipeline.
+
+### 7. LoRA application order and strength matter
+Check each `LoraLoader` / `LoraLoaderModelOnly` node:
+- `LoraLoaderModelOnly` → `apply_lora(model, clip, path, strength, 0.0)` (clip strength = 0)
+- `LoraLoader` → `apply_lora(model, clip, path, strength_model, strength_clip)`
+- Apply in the order given by `order` field. Stack multiple calls when there are multiple LoRA nodes.
+
 ## Implemented Capabilities
 <!-- Updated at the end of each iteration -->
 

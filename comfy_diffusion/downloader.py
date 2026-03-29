@@ -281,6 +281,9 @@ def _download_hf_entry(
 
     token: str | None = os.environ.get("HF_TOKEN")
 
+    if not quiet:
+        print(f"downloading {entry.repo_id}/{entry.filename} → {dest_path}", flush=True)
+
     if quiet:
         huggingface_hub.disable_progress_bars()
     try:
@@ -309,6 +312,8 @@ def _download_hf_entry(
         if quiet:
             huggingface_hub.enable_progress_bars()
 
+    if not quiet:
+        print(f"copying to {dest_path}", flush=True)
     shutil.copy2(cached, dest_path)
 
     if entry.sha256 is not None:

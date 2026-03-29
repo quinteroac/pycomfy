@@ -14,7 +14,7 @@ Pipelines will be developed in the following order. API-based and LLM workflows 
 
 Covers all local video generation and editing workflows under `comfyui_official_workflows/video/`:
 
-- **LTX** — `ltx1/`, `ltx2/`, `ltx3/`
+- **LTX** — `ltx1/`, `ltx2/`, `ltx23/`
 - **WAN** — `wan2.1/`, `wan2.2/`, `fun/`, `vace/`, `ati/`, `move/`, `infinitetalk/`, `scail/`
 - **HunyuanVideo** — `hunyuan/`
 - **Others** — `others/`, `utility/`
@@ -51,13 +51,13 @@ Implement an automatic model download module (`comfy_diffusion/downloader.py`) t
 
 ### Phase 2 — Expose LTX Core Nodes [DONE]
 
-Expose the three nodes that block all ltx2 and ltx3 pipelines.
+Expose the three nodes that block all ltx2 and ltx23 pipelines.
 
 | Node | Scope |
 |---|---|
-| `LTXAVTextEncoderLoader` | All ltx2 and ltx3 workflows |
-| `LTXVAudioVAELoader` | All ltx2 and ltx3 workflows |
-| `LTXVImgToVideoInplace` | i2v, lora, canny, pose, all ltx3 |
+| `LTXAVTextEncoderLoader` | All ltx2 and ltx23 workflows |
+| `LTXVAudioVAELoader` | All ltx2 and ltx23 workflows |
+| `LTXVImgToVideoInplace` | i2v, lora, canny, pose, all ltx23 |
 
 ---
 
@@ -68,9 +68,9 @@ Expose the three nodes that block all ltx2 and ltx3 pipelines.
 - `ltx2/video_ltx2_i2v` — Image to Video
 - `ltx2/video_ltx2_i2v_distilled` — Image to Video distilled
 - `ltx2/video_ltx2_i2v_lora` — Image to Video with LoRA
-- `ltx3/video_ltx2_3_t2v` — Text to Video (LTX 2.3)
-- `ltx3/video_ltx2_3_i2v` — Image to Video (LTX 2.3)
-- `ltx3/video_ltx2_3_flf2v` — First-Last-Frame to Video ⚠️ deferred: requires Phase 4 nodes (LTXVAddGuide, LTXVCropGuides, LTXVConditioning, LTXVConcatAVLatent)
+- `ltx23/video_ltx2_3_t2v` — Text to Video (LTX 2.3)
+- `ltx23/video_ltx2_3_i2v` — Image to Video (LTX 2.3)
+- `ltx23/video_ltx2_3_flf2v` — First-Last-Frame to Video ⚠️ deferred: requires Phase 4 nodes (LTXVAddGuide, LTXVCropGuides, LTXVConditioning, LTXVConcatAVLatent)
 
 ---
 
@@ -80,10 +80,10 @@ Expose the three nodes that block all ltx2 and ltx3 pipelines.
 
 | Node | Workflows |
 |---|---|
-| `ResizeImageMaskNode` | i2v, canny, depth, pose, ltx3 |
-| `ResizeImagesByLongerEdge` | i2v, lora, ltx3 |
+| `ResizeImageMaskNode` | i2v, canny, depth, pose, ltx23 |
+| `ResizeImagesByLongerEdge` | i2v, lora, ltx23 |
 | `EmptyImage` | t2v, i2v, lora (ltx2) |
-| `ComfyMathExpression` | all ltx3 |
+| `ComfyMathExpression` | all ltx23 |
 | `GetVideoComponents` | canny, depth, pose |
 
 **ControlNet:**
@@ -97,7 +97,7 @@ Expose the three nodes that block all ltx2 and ltx3 pipelines.
 | `SetFirstSigma` | Depth workflow sampler adjustment |
 | `ImageInvert` | Depth map post-processing |
 
-**ltx3:**
+**ltx23:**
 
 | Node | Notes |
 |---|---|
@@ -110,7 +110,7 @@ Expose the three nodes that block all ltx2 and ltx3 pipelines.
 - `ltx2/video_ltx2_canny_to_video`
 - `ltx2/video_ltx2_depth_to_video`
 - `ltx2/video_ltx2_pose_to_video`
-- `ltx3/video_ltx2_3_ia2v` — Image+Audio to Video
+- `ltx23/video_ltx2_3_ia2v` — Image+Audio to Video
 
 ---
 
