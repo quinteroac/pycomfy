@@ -18,6 +18,7 @@ from comfy_diffusion.controlnet import (
     apply_controlnet,
     load_controlnet,
     load_diff_controlnet,
+    ltxv_add_guide,
     set_union_controlnet_type,
 )
 
@@ -81,6 +82,7 @@ def test_controlnet_module_exports_only_load_controlnet() -> None:
         "load_diff_controlnet",
         "apply_controlnet",
         "set_union_controlnet_type",
+        "ltxv_add_guide",
     ]
 
 
@@ -542,3 +544,139 @@ def test_import_comfy_diffusion_controlnet_has_no_heavy_import_side_effects() ->
         if module.startswith(("torch", "comfy.")) or module == "comfy"
     ]
     assert heavy == [], f"Unexpected heavy modules loaded on import: {heavy}"
+
+
+def test_ltxv_add_guide_signature_matches_contract() -> None:
+    signature = inspect.signature(ltxv_add_guide)
+    assert (
+        str(signature)
+        == "(conditioning: 'Any', image: 'Any', mask: 'Any', strength: 'float', "
+        "start_percent: 'float', end_percent: 'float') -> 'Any'"
+    )
+
+
+def test_ltxv_add_guide_lazily_imports_ltxv_add_guide_node(monkeypatch: Any) -> None:
+    import types
+
+    conditioning = [["token", {}]]
+    expected_result = [["updated-token", {}]]
+
+    class FakeLTXVAddGuide:
+        @classmethod
+        def execute(cls, *args: Any, **kwargs: Any) -> list[Any]:
+            return [expected_result]
+
+    fake_nodes_lt = types.ModuleType("comfy_extras.nodes_lt")
+    fake_nodes_lt.LTXVAddGuide = FakeLTXVAddGuide  # type: ignore[attr-defined]
+
+    monkeypatch.setitem(sys.modules, "comfy_extras", types.ModuleType("comfy_extras"))
+    monkeypatch.setitem(sys.modules, "comfy_extras.nodes_lt", fake_nodes_lt)
+
+    result = ltxv_add_guide(
+        conditioning=conditioning,
+        image=object(),
+        mask=None,
+        strength=0.8,
+        start_percent=0.0,
+        end_percent=1.0,
+    )
+
+    assert result is expected_result
+
+
+def test_ltxv_add_guide_returns_conditioning_tensor(monkeypatch: Any) -> None:
+    import types
+
+    conditioning = [["token", {"key": "value"}]]
+    expected_conditioning = [["updated-token", {"key": "updated-value"}]]
+
+    class FakeLTXVAddGuide:
+        @classmethod
+        def execute(cls, *args: Any, **kwargs: Any) -> list[Any]:
+            return [expected_conditioning, [["negative", {}]]]
+
+    fake_nodes_lt = types.ModuleType("comfy_extras.nodes_lt")
+    fake_nodes_lt.LTXVAddGuide = FakeLTXVAddGuide  # type: ignore[attr-defined]
+
+    monkeypatch.setitem(sys.modules, "comfy_extras", types.ModuleType("comfy_extras"))
+    monkeypatch.setitem(sys.modules, "comfy_extras.nodes_lt", fake_nodes_lt)
+
+    result = ltxv_add_guide(
+        conditioning=conditioning,
+        image=object(),
+        mask=object(),
+        strength=1.0,
+        start_percent=0.1,
+        end_percent=0.9,
+    )
+
+    assert result is expected_conditioning
+
+
+def test_ltxv_add_guide_passes_all_arguments_to_node(monkeypatch: Any) -> None:
+    import types
+
+    conditioning = object()
+    image = object()
+    mask = object()
+    strength = 0.75
+    start_percent = 0.2
+    end_percent = 0.8
+
+    captured: dict[str, Any] = {}
+    expected_out = object()
+
+    class FakeLTXVAddGuide:
+        @classmethod
+        def execute(cls, *args: Any, **kwargs: Any) -> list[Any]:
+            captured["args"] = args
+            captured["kwargs"] = kwargs
+            return [expected_out]
+
+    fake_nodes_lt = types.ModuleType("comfy_extras.nodes_lt")
+    fake_nodes_lt.LTXVAddGuide = FakeLTXVAddGuide  # type: ignore[attr-defined]
+
+    monkeypatch.setitem(sys.modules, "comfy_extras", types.ModuleType("comfy_extras"))
+    monkeypatch.setitem(sys.modules, "comfy_extras.nodes_lt", fake_nodes_lt)
+
+    result = ltxv_add_guide(conditioning, image, mask, strength, start_percent, end_percent)
+
+    assert result is expected_out
+    all_args = captured.get("args", ()) + tuple(captured.get("kwargs", {}).values())
+    assert conditioning in all_args
+    assert image in all_args
+    assert mask in all_args
+    assert strength in all_args
+    assert start_percent in all_args
+    assert end_percent in all_args
+
+
+def test_ltxv_add_guide_does_not_import_comfy_at_module_level() -> None:
+    result = _run_python(
+        "import json\n"
+        "import sys\n"
+        "import comfy_diffusion\n"
+        "baseline_modules = set(sys.modules)\n"
+        "from comfy_diffusion.controlnet import ltxv_add_guide\n"
+        "post_modules = set(sys.modules)\n"
+        "new_modules = sorted(post_modules - baseline_modules)\n"
+        "payload = {\n"
+        "  'func_name': ltxv_add_guide.__name__,\n"
+        "  'torch_loaded': 'torch' in sys.modules,\n"
+        "  'comfy_extras_loaded': 'comfy_extras.nodes_lt' in sys.modules,\n"
+        "  'new_modules': new_modules,\n"
+        "}\n"
+        "print(json.dumps(payload))\n"
+    )
+
+    payload = json.loads(result.stdout)
+    assert payload["func_name"] == "ltxv_add_guide"
+    assert payload["torch_loaded"] is False
+    assert payload["comfy_extras_loaded"] is False
+    heavy = [
+        module
+        for module in payload["new_modules"]
+        if module.startswith(("torch", "comfy.")) or module in ("comfy", "comfy_extras")
+    ]
+    assert heavy == [], f"Unexpected heavy modules loaded on import: {heavy}"
+

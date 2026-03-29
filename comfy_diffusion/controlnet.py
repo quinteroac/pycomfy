@@ -121,9 +121,41 @@ def set_union_controlnet_type(control_net: Any, type: str) -> Any:
     return control_net
 
 
+def ltxv_add_guide(
+    conditioning: Any,
+    image: Any,
+    mask: Any,
+    strength: float,
+    start_percent: float,
+    end_percent: float,
+) -> Any:
+    """Add guide-frame conditioning for spatially controlled LTXV video generation.
+
+    Wraps ComfyUI's ``LTXVAddGuide`` node. Injects a guide image into the
+    conditioning tensor so the sampler respects the spatial reference frames
+    (e.g. canny, depth, or pose control images).
+
+    Args:
+        conditioning: Positive conditioning tensor to attach guide frames to.
+        image: Guide image tensor (B, H, W, C).
+        mask: Guide mask tensor, or ``None`` for full-frame guidance.
+        strength: Guide strength in [0.0, 1.0].
+        start_percent: Temporal start fraction in [0.0, 1.0].
+        end_percent: Temporal end fraction in [0.0, 1.0].
+
+    Returns:
+        Updated conditioning tensor with guide frame metadata injected.
+    """
+    from comfy_extras.nodes_lt import LTXVAddGuide
+
+    result = LTXVAddGuide.execute(conditioning, image, mask, strength, start_percent, end_percent)
+    return result[0]
+
+
 __all__ = [
     "load_controlnet",
     "load_diff_controlnet",
     "apply_controlnet",
     "set_union_controlnet_type",
+    "ltxv_add_guide",
 ]
