@@ -249,6 +249,15 @@ def get_video_metadata(video_path: str | Path) -> dict[str, int | float]:
     }
 
 
+def _get_get_video_components_type() -> Any:
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    from comfy_extras.nodes_video import GetVideoComponents
+
+    return GetVideoComponents
+
+
 def get_video_components(video: Any) -> tuple[Any, Any]:
     """Decompose a video into its frame images and audio track.
 
@@ -256,10 +265,10 @@ def get_video_components(video: Any) -> tuple[Any, Any]:
 
     Returns ``(images_tensor, audio)`` matching the node's output order.
     """
-    from comfy_extras.nodes_video import GetVideoComponents  # type: ignore[import-untyped]
-
-    output = GetVideoComponents.execute(video)
-    return output.args[0], output.args[1]
+    get_video_components_type = _get_get_video_components_type()
+    result = get_video_components_type.execute(video)
+    raw = getattr(result, "result", result)
+    return raw[0], raw[1]
 
 
 def ltxv_img_to_video_inplace(

@@ -269,24 +269,17 @@ def test_get_video_components_lazily_imports_comfy_extras_node(
     monkeypatch: Any,
 ) -> None:
     """AC02 — lazily imports comfy_extras.nodes_video.GetVideoComponents."""
-    import types
-
     sentinel_images = object()
     sentinel_audio = object()
 
-    class FakeNodeOutput:
-        def __init__(self) -> None:
-            self.args = (sentinel_images, sentinel_audio, 24.0)
-
     class FakeGetVideoComponents:
         @classmethod
-        def execute(cls, video: Any) -> FakeNodeOutput:
-            return FakeNodeOutput()
+        def execute(cls, video: Any) -> tuple[Any, ...]:
+            return (sentinel_images, sentinel_audio, 24.0)
 
-    fake_nodes_video = types.ModuleType("comfy_extras.nodes_video")
-    fake_nodes_video.GetVideoComponents = FakeGetVideoComponents  # type: ignore[attr-defined]
-
-    monkeypatch.setitem(sys.modules, "comfy_extras.nodes_video", fake_nodes_video)
+    monkeypatch.setattr(
+        video_module, "_get_get_video_components_type", lambda: FakeGetVideoComponents
+    )
 
     result = get_video_components(object())
 
@@ -298,24 +291,17 @@ def test_get_video_components_returns_images_and_audio_tuple(
     monkeypatch: Any,
 ) -> None:
     """AC03 — returns a (images_tensor, audio) tuple."""
-    import types
-
     img_tensor = object()
     audio_obj = object()
 
-    class FakeNodeOutput:
-        def __init__(self) -> None:
-            self.args = (img_tensor, audio_obj, 30.0)
-
     class FakeGetVideoComponents:
         @classmethod
-        def execute(cls, video: Any) -> FakeNodeOutput:
-            return FakeNodeOutput()
+        def execute(cls, video: Any) -> tuple[Any, ...]:
+            return (img_tensor, audio_obj, 30.0)
 
-    fake_nodes_video = types.ModuleType("comfy_extras.nodes_video")
-    fake_nodes_video.GetVideoComponents = FakeGetVideoComponents  # type: ignore[attr-defined]
-
-    monkeypatch.setitem(sys.modules, "comfy_extras.nodes_video", fake_nodes_video)
+    monkeypatch.setattr(
+        video_module, "_get_get_video_components_type", lambda: FakeGetVideoComponents
+    )
 
     images, audio = get_video_components(object())
 

@@ -121,6 +121,29 @@ def set_union_controlnet_type(control_net: Any, type: str) -> Any:
     return control_net
 
 
+def _get_lotus_conditioning_type() -> Any:
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    from comfy_extras.nodes_lotus import LotusConditioning
+
+    return LotusConditioning
+
+
+def _get_ltxv_add_guide_type() -> Any:
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    from comfy_extras.nodes_lt import LTXVAddGuide
+
+    return LTXVAddGuide
+
+
+def _unwrap_node_output(output: Any) -> Any:
+    result = getattr(output, "result", output)
+    return result[0]
+
+
 def lotus_conditioning(model: Any, image: Any) -> Any:
     """Apply Lotus depth-model conditioning for depth-to-video generation.
 
@@ -137,10 +160,8 @@ def lotus_conditioning(model: Any, image: Any) -> Any:
     Returns:
         Conditioning tensor compatible with standard ComfyUI conditioning inputs.
     """
-    from comfy_extras.nodes_lotus import LotusConditioning
-
-    result = LotusConditioning.execute()
-    return result[0]
+    lotus_conditioning_type = _get_lotus_conditioning_type()
+    return _unwrap_node_output(lotus_conditioning_type.execute())
 
 
 def ltxv_add_guide(
@@ -168,10 +189,12 @@ def ltxv_add_guide(
     Returns:
         Updated conditioning tensor with guide frame metadata injected.
     """
-    from comfy_extras.nodes_lt import LTXVAddGuide
-
-    result = LTXVAddGuide.execute(conditioning, image, mask, strength, start_percent, end_percent)
-    return result[0]
+    ltxv_add_guide_type = _get_ltxv_add_guide_type()
+    return _unwrap_node_output(
+        ltxv_add_guide_type.execute(
+            conditioning, image, mask, strength, start_percent, end_percent
+        )
+    )
 
 
 __all__ = [

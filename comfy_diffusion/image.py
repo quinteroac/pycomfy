@@ -341,7 +341,7 @@ def math_expression(expression: str, **kwargs: float) -> int | float:
     math_expression_node_type = _get_math_expression_node_type()
     result = math_expression_node_type.execute(expression=expression, values=kwargs)
     raw = getattr(result, "result", result)
-    return raw[0]
+    return cast("int | float", raw[0])
 
 
 __all__ = [
