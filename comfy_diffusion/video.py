@@ -317,10 +317,319 @@ def ltxv_img_to_video_inplace(
     return {"samples": samples, "noise_mask": conditioning_latent_frames_mask}
 
 
+def ltx2_nag(
+    model: Any,
+    nag_scale: float,
+    nag_alpha: float,
+    nag_tau: float,
+    nag_cond_video: Any = None,
+    nag_cond_audio: Any = None,
+    inplace: bool = True,
+) -> Any:
+    """Patch a model clone with LTX2 Normalized Attention Guidance (NAG).
+
+    Mirrors ``LTX2_NAG.execute()`` from KJNodes (comfyui-kjnodes).
+
+    When ``nag_scale == 0``, the unmodified model is returned immediately.
+    ``nag_cond_video`` and ``nag_cond_audio`` are optional CONDITIONING tensors
+    that anchor the negative guidance direction.
+
+    Returns a patched model clone.
+    """
+    if nag_scale == 0:
+        return model
+
+    import types
+
+    import torch
+
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    import comfy.ldm.modules.attention as comfy_attention
+    import comfy.model_management as mm
+
+    device = mm.get_torch_device()
+    offload_device = mm.unet_offload_device()
+    dtype = model.model.manual_cast_dtype
+    if dtype is None:
+        dtype = model.model.diffusion_model.dtype
+
+    model_clone = model.clone()
+    diffusion_model = model_clone.get_model_object("diffusion_model")
+    img_dim = diffusion_model.inner_dim
+    audio_dim = diffusion_model.audio_inner_dim
+
+    def _compute_attention(self: Any, query: Any, context: Any, transformer_options: dict = {}) -> Any:  # noqa: B006
+        k = self.k_norm(self.to_k(context)).to(query.dtype)
+        v = self.to_v(context).to(query.dtype)
+        x = comfy_attention.optimized_attention(query, k, v, heads=self.heads, transformer_options=transformer_options).flatten(2)
+        del k, v
+        return x
+
+    def _normalized_attention_guidance(self: Any, x_positive: Any, x_negative: Any) -> Any:
+        if inplace:
+            nag_guidance = x_negative.mul_(nag_scale - 1).neg_().add_(x_positive, alpha=nag_scale)
+        else:
+            nag_guidance = x_positive * nag_scale - x_negative * (nag_scale - 1)
+        del x_negative
+
+        norm_positive = torch.norm(x_positive, p=1, dim=-1, keepdim=True)
+        norm_guidance = torch.norm(nag_guidance, p=1, dim=-1, keepdim=True)
+
+        scale = norm_guidance / norm_positive
+        torch.nan_to_num_(scale, nan=10.0)
+        mask = scale > nag_tau
+        del scale
+
+        adjustment = (norm_positive * nag_tau) / (norm_guidance + 1e-7)
+        del norm_positive, norm_guidance
+
+        nag_guidance.mul_(torch.where(mask, adjustment, 1.0))
+        del mask, adjustment
+
+        if inplace:
+            nag_guidance.sub_(x_positive).mul_(nag_alpha).add_(x_positive)
+        else:
+            nag_guidance = nag_guidance * nag_alpha + x_positive * (1 - nag_alpha)
+        del x_positive
+        return nag_guidance
+
+    def _make_forward(nag_ctx: Any) -> Any:
+        def wrapped_attention(self_module: Any, x: Any, context: Any, mask: Any = None, transformer_options: dict = {}, **kwargs: Any) -> Any:  # noqa: B006
+            if context.shape[0] == 1:
+                q_pos = self_module.q_norm(self_module.to_q(x))
+                x_positive = _compute_attention(self_module, q_pos, context, transformer_options)
+                x_negative = _compute_attention(self_module, q_pos, nag_ctx, transformer_options)
+                del q_pos
+                x_out = _normalized_attention_guidance(self_module, x_positive, x_negative)
+            else:
+                x_pos, x_neg = torch.chunk(x, 2, dim=0)
+                context_pos, context_neg = torch.chunk(context, 2, dim=0)
+                q_pos = self_module.q_norm(self_module.to_q(x_pos))
+                del x_pos
+                x_positive = _compute_attention(self_module, q_pos, context_pos, transformer_options)
+                x_negative = _compute_attention(self_module, q_pos, nag_ctx, transformer_options)
+                del q_pos, context_pos
+                x_pos_out = _normalized_attention_guidance(self_module, x_positive, x_negative)
+
+                q_neg = self_module.q_norm(self_module.to_q(x_neg))
+                k_neg = self_module.k_norm(self_module.to_k(context_neg))
+                v_neg = self_module.to_v(context_neg)
+                x_neg_out = comfy_attention.optimized_attention(q_neg, k_neg, v_neg, heads=self_module.heads, transformer_options=transformer_options)
+                x_out = torch.cat([x_pos_out, x_neg_out], dim=0)
+
+            return self_module.to_out(x_out)
+
+        return wrapped_attention
+
+    if nag_cond_video is not None:
+        diffusion_model.caption_projection.to(device)
+        context_video = nag_cond_video[0][0].to(device, dtype)
+        v_context, _ = torch.split(context_video, int(context_video.shape[-1] / 2), len(context_video.shape) - 1)
+        context_video = diffusion_model.caption_projection(v_context)
+        diffusion_model.caption_projection.to(offload_device)
+        context_video = context_video.view(1, -1, img_dim)
+        for idx, block in enumerate(diffusion_model.transformer_blocks):
+            forward_fn = types.MethodType(_make_forward(context_video), block.attn2)
+            model_clone.add_object_patch(f"diffusion_model.transformer_blocks.{idx}.attn2.forward", forward_fn)
+
+    if nag_cond_audio is not None and diffusion_model.audio_caption_projection is not None:
+        diffusion_model.audio_caption_projection.to(device)
+        context_audio = nag_cond_audio[0][0].to(device, dtype)
+        _, a_context = torch.split(context_audio, int(context_audio.shape[-1] / 2), len(context_audio.shape) - 1)
+        context_audio = diffusion_model.audio_caption_projection(a_context)
+        diffusion_model.audio_caption_projection.to(offload_device)
+        context_audio = context_audio.view(1, -1, audio_dim)
+        for idx, block in enumerate(diffusion_model.transformer_blocks):
+            forward_fn = types.MethodType(_make_forward(context_audio), block.audio_attn2)
+            model_clone.add_object_patch(f"diffusion_model.transformer_blocks.{idx}.audio_attn2.forward", forward_fn)
+
+    return model_clone
+
+
+def ltxv_img_to_video_inplace_kj(
+    vae: Any,
+    latent: dict[str, Any],
+    image: Any,
+    index: int = 0,
+    strength: float = 1.0,
+) -> dict[str, Any]:
+    """Inject a single image frame into a latent for LTX2 image-to-video pipelines.
+
+    Mirrors the single-image case of ``LTXVImgToVideoInplaceKJ.execute()`` from
+    KJNodes (comfyui-kjnodes).  Unlike ``ltxv_img_to_video_inplace``, this
+    variant supports inserting the image at an arbitrary latent frame ``index``
+    (in *pixel* space; negative indices count from the end).
+
+    Returns a new latent dict with updated ``samples`` and ``noise_mask``.
+    """
+    import torch
+
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    import comfy.utils
+
+    samples = latent["samples"].clone()
+    scale_factors = vae.downscale_index_formula
+    time_scale_factor, height_scale_factor, width_scale_factor = scale_factors
+
+    batch, _, latent_frames, latent_height, latent_width = samples.shape
+    width = latent_width * width_scale_factor
+    height = latent_height * height_scale_factor
+
+    if latent.get("noise_mask") is not None:
+        conditioning_latent_frames_mask = latent["noise_mask"].clone()
+    else:
+        conditioning_latent_frames_mask = torch.ones(
+            (batch, 1, latent_frames, 1, 1),
+            dtype=torch.float32,
+            device=samples.device,
+        )
+
+    if image.shape[1] != height or image.shape[2] != width:
+        pixels = comfy.utils.common_upscale(
+            image.movedim(-1, 1), width, height, "bilinear", "center"
+        ).movedim(1, -1)
+    else:
+        pixels = image
+
+    encode_pixels = pixels[:, :, :, :3]
+    t = vae.encode(encode_pixels)
+
+    # Resolve negative index and convert pixel index to latent index
+    pixel_frame_count = (latent_frames - 1) * time_scale_factor + 1
+    resolved_index = index if index >= 0 else pixel_frame_count + index
+    latent_idx = max(0, min(resolved_index // time_scale_factor, latent_frames - 1))
+
+    end_index = min(latent_idx + t.shape[2], latent_frames)
+    samples[:, :, latent_idx:end_index] = t[:, :, : end_index - latent_idx]
+    conditioning_latent_frames_mask[:, :, latent_idx:end_index] = 1.0 - strength
+
+    return {"samples": samples, "noise_mask": conditioning_latent_frames_mask}
+
+
+def ltx2_sampling_preview_override(
+    model: Any,
+    preview_rate: int = 8,
+    latent_upscale_model: Any = None,
+    vae: Any = None,
+) -> Any:
+    """Add an LTX2 sampling preview override wrapper to a model clone.
+
+    Mirrors ``LTX2SamplingPreviewOverride.execute()`` from KJNodes
+    (comfyui-kjnodes).  During sampling the preview is generated every
+    ``preview_rate`` steps using either a latent RGB approximation or, when a
+    ``latent_upscale_model`` / ``vae`` is supplied, a higher-quality decoder.
+
+    Returns a patched model clone.
+    """
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    import comfy.patcher_extension
+
+    model_clone = model.clone()
+
+    taeltx = False
+    if vae is not None and getattr(getattr(vae, "first_stage_model", None), "__class__", None) is not None:
+        if vae.first_stage_model.__class__.__name__ == "TAEHV":
+            taeltx = True
+            latent_upscale_model = None
+
+    class _PreviewWrapper:
+        def __init__(self) -> None:
+            self._latent_upscale_model = latent_upscale_model
+            self._vae = vae
+            self._preview_rate = preview_rate
+            self._taeltx = taeltx
+
+        def __call__(
+            self,
+            executor: Any,
+            noise: Any,
+            latent_image: Any,
+            sampler: Any,
+            sigmas: Any,
+            denoise_mask: Any,
+            callback: Any,
+            disable_pbar: bool,
+            seed: Any,
+            **kwargs: Any,
+        ) -> Any:
+            import comfy.latent_preview as latent_preview
+            import comfy.utils
+
+            guider = executor.class_obj
+            x0_output: dict[str, Any] = {}
+            total_steps = sigmas.shape[-1] - 1
+            pbar = comfy.utils.ProgressBar(total_steps)
+            step_counter = [0]
+
+            previewer = latent_preview.get_previewer(
+                guider.model_patcher.load_device,
+                guider.model_patcher.model.latent_format,
+            )
+
+            original_callback = callback
+
+            def _combined_callback(step: int, x0: Any, x: Any, total: int) -> None:
+                x0_output["x0"] = x0
+                preview_bytes = None
+                if previewer and step_counter[0] % self._preview_rate == 0:
+                    preview_bytes = previewer.decode_latent_to_preview_image("JPEG", x0)
+                step_counter[0] += 1
+                pbar.update_absolute(step_counter[0], total_steps, preview_bytes)
+                if original_callback is not None:
+                    original_callback(step, x0, x, total)
+
+            return executor(
+                noise,
+                latent_image,
+                sampler,
+                sigmas,
+                denoise_mask,
+                _combined_callback,
+                disable_pbar,
+                seed,
+                **kwargs,
+            )
+
+    model_clone.add_wrapper_with_key(
+        comfy.patcher_extension.WrappersMP.OUTER_SAMPLE,
+        "sampling_preview",
+        _PreviewWrapper(),
+    )
+    return model_clone
+
+
+def create_video(images: Any, audio: Any, fps: float) -> Any:
+    """Create a VIDEO object from a batch of images and an audio track.
+
+    Wraps ``CreateVideo.execute()`` from ``comfy_extras.nodes_video``.
+
+    Returns a VIDEO object that can be passed to ``get_video_components`` or
+    ``SaveVideo``.
+    """
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    from comfy_extras.nodes_video import CreateVideo
+
+    result = CreateVideo.execute(images=images, fps=float(fps), audio=audio)
+    raw = getattr(result, "result", result)
+    return raw[0]
+
+
 __all__ = [
     "load_video",
     "save_video",
     "get_video_metadata",
     "get_video_components",
     "ltxv_img_to_video_inplace",
+    "ltx2_nag",
+    "ltxv_img_to_video_inplace_kj",
+    "ltx2_sampling_preview_override",
+    "create_video",
 ]

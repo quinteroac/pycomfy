@@ -52,6 +52,10 @@ def test_video_module_exports_expected_entrypoints() -> None:
         "get_video_metadata",
         "get_video_components",
         "ltxv_img_to_video_inplace",
+        "ltx2_nag",
+        "ltxv_img_to_video_inplace_kj",
+        "ltx2_sampling_preview_override",
+        "create_video",
     ]
 
 
