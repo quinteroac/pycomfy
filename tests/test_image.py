@@ -20,6 +20,7 @@ from comfy_diffusion.image import (
     image_upscale_with_model,
     load_image,
     ltxv_preprocess,
+    math_expression,
     repeat_image_batch,
     resize_image_mask,
     resize_images_by_longer_edge,
@@ -213,6 +214,7 @@ def test_image_module_exports_expected_entrypoints() -> None:
         "resize_image_mask",
         "resize_images_by_longer_edge",
         "empty_image",
+        "math_expression",
     ]
 
 
@@ -1054,3 +1056,77 @@ def test_empty_image_supports_comfyui_v3_result_output(monkeypatch: Any) -> None
     result = empty_image(width=4, height=4)
 
     assert result is expected_output
+
+
+def test_math_expression_signature_matches_contract() -> None:
+    signature = inspect.signature(math_expression)
+    assert str(signature) == "(expression: 'str', **kwargs: 'float') -> 'int | float'"
+
+
+def test_math_expression_not_re_exported_from_package_root() -> None:
+    assert not hasattr(comfy_diffusion, "math_expression")
+
+
+def test_math_expression_evaluates_expression_with_kwargs(monkeypatch: Any) -> None:
+    class FakeMathExpressionNode:
+        @classmethod
+        def execute(cls, *, expression: str, values: dict) -> tuple:
+            result = eval(expression, {}, values)  # noqa: S307 — test-only eval
+            return (float(result), int(result))
+
+    monkeypatch.setattr(
+        image_module,
+        "_get_math_expression_node_type",
+        lambda: FakeMathExpressionNode,
+    )
+
+    result = math_expression("a * fps", a=10.0, fps=24.0)
+
+    assert result == pytest.approx(240.0)
+
+
+def test_math_expression_returns_numeric_type(monkeypatch: Any) -> None:
+    class FakeMathExpressionNode:
+        @classmethod
+        def execute(cls, *, expression: str, values: dict) -> tuple:
+            return (42.0, 42)
+
+    monkeypatch.setattr(
+        image_module,
+        "_get_math_expression_node_type",
+        lambda: FakeMathExpressionNode,
+    )
+
+    result = math_expression("42")
+
+    assert isinstance(result, (int, float))
+
+
+def test_math_expression_supports_comfyui_v3_node_output(monkeypatch: Any) -> None:
+    class FakeNodeOutput:
+        def __init__(self, result: tuple) -> None:
+            self.result = result
+
+    class FakeMathExpressionNode:
+        @classmethod
+        def execute(cls, *, expression: str, values: dict) -> Any:
+            return FakeNodeOutput((7.5, 7))
+
+    monkeypatch.setattr(
+        image_module,
+        "_get_math_expression_node_type",
+        lambda: FakeMathExpressionNode,
+    )
+
+    result = math_expression("x + y", x=3.0, y=4.5)
+
+    assert result == pytest.approx(7.5)
+
+
+def test_math_expression_lazy_import_uses_comfy_extras() -> None:
+    # Verify structurally that the getter defers the import to call time.
+    import inspect as _inspect
+
+    src = _inspect.getsource(image_module._get_math_expression_node_type)
+    assert "comfy_extras.nodes_math" in src
+    assert "MathExpressionNode" in src

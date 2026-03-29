@@ -75,6 +75,15 @@ def _get_empty_image_type() -> Any:
     return EmptyImage
 
 
+def _get_math_expression_node_type() -> Any:
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    from comfy_extras.nodes_math import MathExpressionNode
+
+    return MathExpressionNode
+
+
 def _get_resize_images_by_longer_edge_node_type() -> Any:
     from ._runtime import ensure_comfyui_on_path
 
@@ -291,6 +300,14 @@ def empty_image(width: int, height: int, batch_size: int = 1, color: int = 0) ->
     )
 
 
+def math_expression(expression: str, **kwargs: float) -> int | float:
+    """Evaluate a parameterised math expression via ComfyMathExpression."""
+    math_expression_node_type = _get_math_expression_node_type()
+    result = math_expression_node_type.execute(expression=expression, values=kwargs)
+    raw = getattr(result, "result", result)
+    return raw[0]
+
+
 __all__ = [
     "load_image",
     "image_to_tensor",
@@ -303,4 +320,5 @@ __all__ = [
     "resize_image_mask",
     "resize_images_by_longer_edge",
     "empty_image",
+    "math_expression",
 ]
