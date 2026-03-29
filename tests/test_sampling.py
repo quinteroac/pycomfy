@@ -423,28 +423,41 @@ def test_video_triangle_cfg_guidance_scales_from_min_cfg_to_middle_peak() -> Non
 def test_random_noise_wraps_random_noise_type(monkeypatch: pytest.MonkeyPatch) -> None:
     noise_seed = 1_234_567_890
 
+    class _FakeNoiseObj:
+        def __init__(self, seed: int) -> None:
+            self.received_noise_seed = seed
+
+    fake_obj = _FakeNoiseObj(noise_seed)
+
     class FakeRandomNoise:
-        def __init__(self, received_noise_seed: int) -> None:
-            self.received_noise_seed = received_noise_seed
+        @classmethod
+        def execute(cls, seed: int) -> tuple[Any, ...]:
+            return (fake_obj,)
 
     monkeypatch.setattr(sampling_module, "_get_random_noise_type", lambda: FakeRandomNoise)
 
     noise = random_noise(noise_seed)
 
-    assert isinstance(noise, FakeRandomNoise)
+    assert noise is fake_obj
     assert noise.received_noise_seed == noise_seed
 
 
 def test_disable_noise_wraps_disable_noise_type(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _FakeNoiseObj:
+        created = True
+
+    fake_obj = _FakeNoiseObj()
+
     class FakeDisableNoise:
-        def __init__(self) -> None:
-            self.created = True
+        @classmethod
+        def execute(cls) -> tuple[Any, ...]:
+            return (fake_obj,)
 
     monkeypatch.setattr(sampling_module, "_get_disable_noise_type", lambda: FakeDisableNoise)
 
     noise = disable_noise()
 
-    assert isinstance(noise, FakeDisableNoise)
+    assert noise is fake_obj
     assert noise.created is True
 
 
@@ -1041,9 +1054,14 @@ def test_sample_custom_extracts_from_nodeoutput_result(
 def test_sample_custom_end_to_end_dummy_latent_basic_guider_basic_scheduler(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    class _FakeNoiseObj:
+        def __init__(self, seed: int) -> None:
+            self.seed = seed
+
     class FakeRandomNoise:
-        def __init__(self, noise_seed: int) -> None:
-            self.seed = noise_seed
+        @classmethod
+        def execute(cls, noise_seed: int) -> tuple[Any, ...]:
+            return (_FakeNoiseObj(noise_seed),)
 
     class FakeBasicGuider:
         def __init__(self, model: Any) -> None:
