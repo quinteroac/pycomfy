@@ -84,6 +84,15 @@ def _get_canny_type() -> Any:
     return Canny
 
 
+def _get_image_invert_type() -> Any:
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    from nodes import ImageInvert
+
+    return ImageInvert
+
+
 def _get_math_expression_node_type() -> Any:
     from ._runtime import ensure_comfyui_on_path
 
@@ -321,6 +330,12 @@ def canny(image: Any, low_threshold: int = 100, high_threshold: int = 200) -> An
     )
 
 
+def image_invert(image: Any) -> Any:
+    """Invert pixel values (1 − pixel) of an image tensor."""
+    image_invert_type = _get_image_invert_type()
+    return _unwrap_node_output(image_invert_type.execute(image=image))
+
+
 def math_expression(expression: str, **kwargs: float) -> int | float:
     """Evaluate a parameterised math expression via ComfyMathExpression."""
     math_expression_node_type = _get_math_expression_node_type()
@@ -343,4 +358,5 @@ __all__ = [
     "empty_image",
     "math_expression",
     "canny",
+    "image_invert",
 ]

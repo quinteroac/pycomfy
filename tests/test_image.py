@@ -16,6 +16,7 @@ from comfy_diffusion.image import (
     empty_image,
     image_composite_masked,
     image_from_batch,
+    image_invert,
     image_pad_for_outpaint,
     image_to_tensor,
     image_upscale_with_model,
@@ -217,6 +218,7 @@ def test_image_module_exports_expected_entrypoints() -> None:
         "empty_image",
         "math_expression",
         "canny",
+        "image_invert",
     ]
 
 
@@ -1226,21 +1228,93 @@ def test_canny_default_threshold_values(monkeypatch: Any) -> None:
     assert captured["high_threshold"] == pytest.approx(200 / 255.0)
 
 
-def test_canny_supports_comfyui_v3_result_output(monkeypatch: Any) -> None:
+
+# ---------------------------------------------------------------------------
+# image_invert tests (US-010)
+# ---------------------------------------------------------------------------
+
+
+def test_image_invert_is_callable() -> None:
+    assert callable(image_invert)
+
+
+def test_image_invert_signature_matches_contract() -> None:
+    signature = inspect.signature(image_invert)
+    assert str(signature) == "(image: 'Any') -> 'Any'"
+
+
+def test_image_invert_not_re_exported_from_package_root() -> None:
+    assert not hasattr(comfy_diffusion, "image_invert")
+
+
+def test_image_invert_lazy_import_uses_nodes_image_invert() -> None:
+    import inspect as _inspect
+
+    src = _inspect.getsource(image_module._get_image_invert_type)
+    assert "nodes" in src
+    assert "ImageInvert" in src
+    assert "ensure_comfyui_on_path" in src
+
+
+def test_image_invert_delegates_to_comfy_node(monkeypatch: Any) -> None:
+    input_image = _FakeTorch.tensor(
+        [[[[0.2, 0.4, 0.6]]]],
+        dtype=_FakeTorch.float32,
+    )
+    expected_output = _FakeTorch.tensor(
+        [[[[0.8, 0.6, 0.4]]]],
+        dtype=_FakeTorch.float32,
+    )
+    captured: dict[str, Any] = {}
+
+    class FakeImageInvert:
+        @classmethod
+        def execute(cls, *, image: Any) -> tuple[Any]:
+            captured["image"] = image
+            return (expected_output,)
+
+    monkeypatch.setattr(image_module, "_get_image_invert_type", lambda: FakeImageInvert)
+
+    result = image_invert(input_image)
+
+    assert captured["image"] is input_image
+    assert result is expected_output
+
+
+def test_image_invert_returns_image_tensor(monkeypatch: Any) -> None:
+    output = _FakeTorch.tensor(
+        [[[[0.5, 0.5, 0.5]]]],
+        dtype=_FakeTorch.float32,
+    )
+
+    class FakeImageInvert:
+        @classmethod
+        def execute(cls, *, image: Any) -> tuple[Any]:
+            return (output,)
+
+    monkeypatch.setattr(image_module, "_get_image_invert_type", lambda: FakeImageInvert)
+
+    result = image_invert(object())
+
+    assert isinstance(result, _FakeTensor)
+    assert result.shape == (1, 1, 1, 3)
+
+
+def test_image_invert_supports_comfyui_v3_result_output(monkeypatch: Any) -> None:
     expected_output = object()
 
     class FakeNodeOutput:
         def __init__(self, result: tuple[Any, ...]) -> None:
             self.result = result
 
-    class FakeCanny:
+    class FakeImageInvert:
         @classmethod
-        def execute(cls, *, image: Any, low_threshold: float, high_threshold: float) -> Any:
+        def execute(cls, *, image: Any) -> Any:
             return FakeNodeOutput((expected_output,))
 
-    monkeypatch.setattr(image_module, "_get_canny_type", lambda: FakeCanny)
+    monkeypatch.setattr(image_module, "_get_image_invert_type", lambda: FakeImageInvert)
 
-    result = canny(object(), low_threshold=50, high_threshold=150)
+    result = image_invert(object())
 
     assert result is expected_output
 
