@@ -1,0 +1,34 @@
+{
+  "iteration": "000028",
+  "outcome": "follow_recommendations",
+  "refactorPlan": [
+    {
+      "id": "R-1",
+      "title": "Fix AST deprecation in test_pipelines_ltx2_pose.py",
+      "file": "tests/test_pipelines_ltx2_pose.py",
+      "description": "Replace all occurrences of `elt.s` with `elt.value` when accessing AST string constant nodes. The `.s` attribute on `ast.Constant` is deprecated since Python 3.12 and will be removed in Python 3.14, causing test failures on the next Python version upgrade.",
+      "priority": "high"
+    },
+    {
+      "id": "R-2",
+      "title": "Document magic seed constant in ia2v.py",
+      "file": "comfy_diffusion/pipelines/video/ltx/ltx23/ia2v.py",
+      "description": "Add an inline comment next to the fixed `seed=42` constant used in pass 2 of the ia2v pipeline, referencing the LTX 2.3 ia2v reference workflow as the source. Prevents future maintainers from assuming this is an arbitrary default.",
+      "priority": "low"
+    },
+    {
+      "id": "R-3",
+      "title": "Declare controlnet_aux as [pose] optional extra",
+      "file": "pyproject.toml",
+      "description": "Add a `[pose]` optional-dependencies group to pyproject.toml with `controlnet_aux>=0.0.20`. This makes the dependency for `dw_preprocessor` discoverable and installable, consistent with the existing `[cuda]`/`[cpu]` extras pattern.",
+      "priority": "medium"
+    },
+    {
+      "id": "R-4",
+      "title": "Group Lotus entries in depth.py manifest()",
+      "file": "comfy_diffusion/pipelines/video/ltx/ltx2/depth.py",
+      "description": "Add grouping comments `# --- Lotus depth estimation ---` and `# --- LTX 2.0 video generation ---` inside manifest() to separate the two sets of model entries. Clarifies pipeline stage ownership and eases future refactoring of the Lotus pass.",
+      "priority": "low"
+    }
+  ]
+}
