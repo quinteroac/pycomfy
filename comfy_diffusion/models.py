@@ -339,6 +339,69 @@ class ModelManager:
             embedding_directory=folder_paths.get_folder_paths("embeddings"),
         )
 
+    def load_vae_kj(
+        self,
+        path: str | Path,
+        device: str = "main_device",
+        dtype: str = "bf16",
+    ) -> Any:
+        """Load a standalone VAE with explicit device and dtype placement.
+
+        Mirrors ``VAELoaderKJ.load_vae()`` from KJNodes (comfyui-kjnodes).
+
+        ``path`` may be an absolute path to an existing file, or a filename
+        searched under the ``vae`` folder registered with this ``ModelManager``.
+
+        ``device`` must be ``"main_device"`` or ``"cpu"``.
+        ``dtype`` must be one of ``"bf16"``, ``"fp16"``, or ``"fp32"``.
+
+        Returns a ``comfy.sd.VAE`` instance loaded with the specified device and
+        dtype.  Audio VAEs (containing ``vocoder.conv_post.weight``) are loaded
+        as ``AudioVAE`` without applying the device/dtype overrides.
+        """
+        ensure_comfyui_on_path()
+
+        _dtype_map = {"bf16": None, "fp16": None, "fp32": None}
+        if dtype not in _dtype_map:
+            raise ValueError(f"invalid dtype '{dtype}'. valid values: {', '.join(_dtype_map)}")
+        if device not in ("main_device", "cpu"):
+            raise ValueError(f"invalid device '{device}'. valid values: main_device, cpu")
+
+        import torch
+
+        import comfy.model_management
+        import folder_paths
+        from comfy import sd as comfy_sd
+        from comfy import utils as comfy_utils
+
+        torch_dtype_map = {"bf16": torch.bfloat16, "fp16": torch.float16, "fp32": torch.float32}
+        torch_dtype = torch_dtype_map[dtype]
+
+        if device == "main_device":
+            torch_device = comfy.model_management.get_torch_device()
+        else:
+            torch_device = torch.device("cpu")
+
+        p = Path(path)
+        if p.is_absolute() and p.is_file():
+            vae_path = str(p.resolve())
+        elif p.is_absolute():
+            raise FileNotFoundError(f"vae file not found: {p}")
+        else:
+            name = path if isinstance(path, str) else p.name
+            vae_path = folder_paths.get_full_path_or_raise("vae", name)
+
+        sd, metadata = comfy_utils.load_torch_file(vae_path, return_metadata=True)
+
+        if "vocoder.conv_post.weight" in sd:
+            from comfy.ldm.lightricks.vae.audio_vae import AudioVAE
+
+            return AudioVAE(sd, metadata)
+
+        vae = comfy_sd.VAE(sd=sd, device=torch_device, dtype=torch_dtype, metadata=metadata)
+        vae.throw_exception_if_invalid()
+        return vae
+
     def load_latent_upscale_model(self, path: str | Path) -> Any:
         """Load a LATENT_UPSCALE_MODEL from a path or filename.
 

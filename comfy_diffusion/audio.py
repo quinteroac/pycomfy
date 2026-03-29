@@ -226,6 +226,159 @@ def empty_ace_step_15_latent_audio(seconds: float, batch_size: int = 1) -> dict[
     return {"samples": latent, "type": "audio"}
 
 
+def _get_trim_audio_duration_node() -> Any:
+    """Resolve ComfyUI TrimAudioDuration node at call time."""
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    from comfy_extras.nodes_audio import TrimAudioDuration
+
+    return TrimAudioDuration
+
+
+def audio_crop(
+    audio: dict[str, Any],
+    start_time: float,
+    end_time: float,
+) -> dict[str, Any]:
+    """Crop audio to the time range [start_time, end_time] in seconds.
+
+    Args:
+        audio: ComfyUI AUDIO dict with keys ``"waveform"`` and ``"sample_rate"``.
+        start_time: Start of the crop window in seconds (>=0).
+        end_time: End of the crop window in seconds (>start_time).
+
+    Returns:
+        ComfyUI AUDIO dict containing the cropped waveform.
+
+    Raises:
+        ValueError: If start_time >= end_time.
+    """
+    waveform = audio["waveform"]
+    sample_rate = audio["sample_rate"]
+    audio_length = waveform.shape[-1]
+
+    start_frame = max(0, int(round(start_time * sample_rate)))
+    end_frame = min(audio_length, int(round(end_time * sample_rate)))
+
+    if start_frame >= end_frame:
+        raise ValueError(
+            f"audio_crop: start_time ({start_time}) must be less than end_time ({end_time})."
+        )
+
+    return {"waveform": waveform[..., start_frame:end_frame], "sample_rate": sample_rate}
+
+
+def audio_separation(
+    audio: dict[str, Any],
+    mode: str = "harmonic",
+    fft_n: int = 2048,
+    win_length: int | None = None,
+) -> dict[str, Any]:
+    """Separate audio into its harmonic or percussive component using STFT-based HPSS.
+
+    Uses a Wiener filter built from median-filtered power spectrograms.
+
+    Args:
+        audio: ComfyUI AUDIO dict with keys ``"waveform"`` and ``"sample_rate"``.
+        mode: ``"harmonic"`` or ``"percussive"``.
+        fft_n: FFT window size (n_fft).
+        win_length: Analysis window length; defaults to ``fft_n``.
+
+    Returns:
+        ComfyUI AUDIO dict containing the separated component.
+
+    Raises:
+        ValueError: If mode is not ``"harmonic"`` or ``"percussive"``.
+    """
+    import torch
+
+    if mode not in ("harmonic", "percussive"):
+        raise ValueError(
+            f"audio_separation: mode must be 'harmonic' or 'percussive', got {mode!r}."
+        )
+
+    waveform = audio["waveform"]  # [B, C, N]
+    sample_rate = audio["sample_rate"]
+    _win_length = win_length if win_length is not None else fft_n
+    hop_length = _win_length // 4
+
+    B, C, N = waveform.shape
+    results = []
+    for b in range(B):
+        channels = []
+        for c in range(C):
+            signal = waveform[b, c]  # [N]
+            window = torch.hann_window(_win_length, device=signal.device)
+            spec = torch.stft(
+                signal,
+                n_fft=fft_n,
+                hop_length=hop_length,
+                win_length=_win_length,
+                window=window,
+                return_complex=True,
+            )  # [F, T]
+            power = spec.abs() ** 2  # [F, T]
+
+            k_h = 31  # harmonic: smooth across time frames
+            k_v = 31  # percussive: smooth across frequency bins
+
+            # Harmonic component via time-axis median filter
+            pad_h = k_h // 2
+            padded_h = torch.nn.functional.pad(
+                power.unsqueeze(0).unsqueeze(0), (pad_h, pad_h, 0, 0), mode="reflect"
+            )
+            harmonic = padded_h.unfold(-1, k_h, 1).median(-1).values.squeeze(0).squeeze(0)
+
+            # Percussive component via frequency-axis median filter
+            pad_v = k_v // 2
+            padded_v = torch.nn.functional.pad(
+                power.unsqueeze(0).unsqueeze(0), (0, 0, pad_v, pad_v), mode="reflect"
+            )
+            percussive = padded_v.unfold(-2, k_v, 1).median(-1).values.squeeze(0).squeeze(0)
+
+            total = harmonic + percussive + 1e-10
+            mask = harmonic / total if mode == "harmonic" else percussive / total
+
+            spec_separated = spec * mask
+            signal_out = torch.istft(
+                spec_separated,
+                n_fft=fft_n,
+                hop_length=hop_length,
+                win_length=_win_length,
+                window=window,
+                length=N,
+            )
+            channels.append(signal_out)
+        results.append(torch.stack(channels))
+    out_waveform = torch.stack(results)  # [B, C, N]
+    return {"waveform": out_waveform, "sample_rate": sample_rate}
+
+
+def trim_audio_duration(
+    audio: dict[str, Any],
+    start: float,
+    duration: float,
+) -> dict[str, Any]:
+    """Trim an audio dict to a specific duration starting at a given time.
+
+    Wraps ComfyUI's ``TrimAudioDuration`` node.
+
+    Args:
+        audio: ComfyUI AUDIO dict with keys ``"waveform"`` and ``"sample_rate"``.
+        start: Start time in seconds. Negative values count from the end of the audio.
+        duration: Duration in seconds to keep.
+
+    Returns:
+        ComfyUI AUDIO dict containing the trimmed waveform.
+    """
+    trim_node = _get_trim_audio_duration_node()
+    return cast(
+        dict[str, Any],
+        _unwrap_node_output(trim_node.execute(audio=audio, start_index=start, duration=duration)),
+    )
+
+
 def load_audio(
     path: str | "Path",
     start_time: float = 0.0,
@@ -265,6 +418,78 @@ def load_audio(
     return {"waveform": waveform, "sample_rate": sample_rate}
 
 
+def ltxv_audio_video_mask(
+    video_latent: dict[str, Any],
+    audio_latent: dict[str, Any],
+    video_fps: float,
+    video_end_time: float,
+    audio_start_time: float,
+    audio_end_time: float,
+    num_video_frames_to_guide: int = 10,
+    audio_overlap_latents: int = 10,
+    audio_overlap: int = 10,
+    pad_mode: str = "pad",
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Set noise masks on video and audio latents for AV extension sampling.
+
+    Mirrors ``LTXVAudioVideoMask.execute()`` from KJNodes (comfyui-kjnodes).
+    Applied before ``ltxv_concat_av_latent`` in video extension passes to
+    preserve overlap frames from the previous generation.
+
+    The first ``num_video_frames_to_guide`` pixel-frames of the video latent
+    and the first ``audio_overlap_latents`` audio latents are masked out
+    (``noise_mask = 0.0``), so the sampler treats them as fixed context.
+
+    Args:
+        video_latent: Video LATENT dict (``{"samples": tensor, ...}``).
+        audio_latent: Audio LATENT dict (``{"samples": tensor, ...}``).
+        video_fps: Frames per second of the video.
+        video_end_time: End time (seconds) of the current video segment.
+        audio_start_time: Start time (seconds) of the audio window.
+        audio_end_time: End time (seconds) of the audio window.
+        num_video_frames_to_guide: Pixel-frame count of the video overlap region.
+        audio_overlap_latents: Number of audio latents in the overlap region.
+        audio_overlap: Pixel-frame count of the audio overlap region (unused by
+            default; provided for API parity with the node).
+        pad_mode: Padding mode (``"pad"`` or ``"no_pad"``).  Currently unused.
+
+    Returns:
+        ``(video_latent_masked, audio_latent_masked)`` — copies of the input
+        latents with ``noise_mask`` set.
+    """
+    import torch
+
+    video_samples = video_latent["samples"]
+
+    # Video noise mask: shape [B, 1, T, H, W]
+    batch, _ch, latent_t, latent_h, latent_w = video_samples.shape
+    video_mask = torch.ones(
+        (batch, 1, latent_t, latent_h, latent_w),
+        dtype=torch.float32,
+        device=video_samples.device,
+    )
+    # LTX2 time scale factor: 8 pixel frames per latent frame
+    _time_scale = 8
+    guide_latent_t = max(1, num_video_frames_to_guide // _time_scale)
+    video_mask[:, :, :guide_latent_t, :, :] = 0.0
+
+    video_out: dict[str, Any] = dict(video_latent)
+    video_out["noise_mask"] = video_mask
+
+    # Audio noise mask: shape [B, 1, T_audio] (broadcast over frequency/channel)
+    audio_samples = audio_latent["samples"]
+    a_batch, a_ch, a_t = audio_samples.shape[:3]
+    audio_mask = torch.ones((a_batch, 1, a_t), dtype=torch.float32, device=audio_samples.device)
+    overlap = min(audio_overlap_latents, a_t)
+    if overlap > 0:
+        audio_mask[:, :, :overlap] = 0.0
+
+    audio_out: dict[str, Any] = dict(audio_latent)
+    audio_out["noise_mask"] = audio_mask
+
+    return video_out, audio_out
+
+
 __all__ = [
     "ltxv_audio_vae_encode",
     "ltxv_audio_vae_decode",
@@ -274,4 +499,8 @@ __all__ = [
     "ltxv_concat_av_latent",
     "ltxv_separate_av_latent",
     "load_audio",
+    "audio_crop",
+    "audio_separation",
+    "trim_audio_duration",
+    "ltxv_audio_video_mask",
 ]

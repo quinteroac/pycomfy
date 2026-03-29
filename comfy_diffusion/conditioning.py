@@ -429,6 +429,28 @@ def ltxv_add_guide(
     return r[0], r[1], r[2]
 
 
+def conditioning_zero_out(conditioning: Any) -> list[Any]:
+    """Zero out conditioning tensors.
+
+    Mirrors ``ConditioningZeroOut.zero_out()`` from ComfyUI.  All conditioning
+    tensors and any pooled / lyrics auxiliary tensors are replaced with zeros.
+    Used to create a null conditioning object for negative guidance.
+    """
+    import torch
+
+    result = []
+    for entry in conditioning:
+        d = entry[1].copy()
+        pooled = d.get("pooled_output", None)
+        if pooled is not None:
+            d["pooled_output"] = torch.zeros_like(pooled)
+        lyrics = d.get("conditioning_lyrics", None)
+        if lyrics is not None:
+            d["conditioning_lyrics"] = torch.zeros_like(lyrics)
+        result.append([torch.zeros_like(entry[0]), d])
+    return result
+
+
 def conditioning_combine(
     cond_a: Any,
     cond_b: Any | None = None,
@@ -1806,6 +1828,7 @@ __all__ = [
     "ltxv_img_to_video",
     "ltxv_conditioning",
     "ltxv_crop_guides",
+    "conditioning_zero_out",
     "conditioning_combine",
     "conditioning_set_mask",
     "conditioning_set_timestep_range",

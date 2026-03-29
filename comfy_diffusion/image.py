@@ -381,6 +381,258 @@ def image_scale_by(image: Any, upscale_method: str = "lanczos", scale_by: float 
     return scaled.movedim(1, -1)
 
 
+def image_resize_kj(
+    image: Any,
+    width: int,
+    height: int,
+    upscale_method: str = "lanczos",
+    keep_proportion: str = "crop",
+    pad_color: str = "0, 0, 0",
+    crop_position: str = "center",
+    divisible_by: int = 2,
+    device: str = "cpu",
+) -> tuple[Any, int, int]:
+    """Resize an image using KJ-style resizing.
+
+    Mirrors ``ImageResizeKJv2.resize()`` from KJNodes (comfyui-kjnodes).
+
+    ``keep_proportion`` options:
+
+    - ``"stretch"`` — direct resize, ignoring aspect ratio.
+    - ``"crop"`` — center-crop to match target aspect ratio, then scale.
+    - ``"resize"`` — scale to fit within target bounds (letterbox, no pad).
+    - ``"total_pixels"`` — scale to match ``width * height`` total pixels.
+    - ``"pad"`` / ``"pad_edge"`` / ``"pad_edge_pixel"`` — scale to fit, then
+      fill remaining space with ``pad_color`` / edge pixels respectively.
+
+    The MASK (4th output of the node) is discarded.
+
+    Returns ``(IMAGE, out_width: int, out_height: int)``.
+    """
+    comfy_utils = _get_comfy_utils()
+    torch = _get_torch_module()
+
+    B, H, W, C = image.shape
+
+    target_w = width
+    target_h = height
+    pad_left = pad_right = pad_top = pad_bottom = 0
+
+    is_pad_mode = keep_proportion.startswith("pad") or keep_proportion == "pillarbox_blur"
+
+    if keep_proportion in ("resize", "total_pixels") or is_pad_mode:
+        if keep_proportion == "total_pixels":
+            total_pixels = target_w * target_h
+            aspect = W / H
+            new_h = int(math.sqrt(total_pixels / aspect))
+            new_w = int(math.sqrt(total_pixels * aspect))
+        elif target_w == 0 and target_h == 0:
+            new_w, new_h = W, H
+        elif target_w == 0:
+            ratio = target_h / H
+            new_w = round(W * ratio)
+            new_h = target_h
+        elif target_h == 0:
+            ratio = target_w / W
+            new_w = target_w
+            new_h = round(H * ratio)
+        else:
+            ratio = min(target_w / W, target_h / H)
+            new_w = round(W * ratio)
+            new_h = round(H * ratio)
+
+        if is_pad_mode:
+            if crop_position == "center":
+                pad_left = (target_w - new_w) // 2
+                pad_right = target_w - new_w - pad_left
+                pad_top = (target_h - new_h) // 2
+                pad_bottom = target_h - new_h - pad_top
+            elif crop_position == "top":
+                pad_left = (target_w - new_w) // 2
+                pad_right = target_w - new_w - pad_left
+                pad_top = 0
+                pad_bottom = target_h - new_h
+            elif crop_position == "bottom":
+                pad_left = (target_w - new_w) // 2
+                pad_right = target_w - new_w - pad_left
+                pad_top = target_h - new_h
+                pad_bottom = 0
+            elif crop_position == "left":
+                pad_left = 0
+                pad_right = target_w - new_w
+                pad_top = (target_h - new_h) // 2
+                pad_bottom = target_h - new_h - pad_top
+            elif crop_position == "right":
+                pad_left = target_w - new_w
+                pad_right = 0
+                pad_top = (target_h - new_h) // 2
+                pad_bottom = target_h - new_h - pad_top
+
+        target_w = new_w
+        target_h = new_h
+    elif keep_proportion == "crop":
+        pass  # cropping is applied below after divisible_by
+    else:  # "stretch"
+        if target_w == 0:
+            target_w = W
+        if target_h == 0:
+            target_h = H
+
+    if divisible_by > 1:
+        target_w = target_w - (target_w % divisible_by)
+        target_h = target_h - (target_h % divisible_by)
+
+    out = image
+
+    if keep_proportion == "crop":
+        old_aspect = W / H
+        new_aspect = target_w / target_h
+        if old_aspect > new_aspect:
+            crop_w = round(H * new_aspect)
+            crop_h = H
+        else:
+            crop_w = W
+            crop_h = round(W / new_aspect)
+        if crop_position == "center":
+            x = (W - crop_w) // 2
+            y = (H - crop_h) // 2
+        elif crop_position == "top":
+            x = (W - crop_w) // 2
+            y = 0
+        elif crop_position == "bottom":
+            x = (W - crop_w) // 2
+            y = H - crop_h
+        elif crop_position == "left":
+            x = 0
+            y = (H - crop_h) // 2
+        elif crop_position == "right":
+            x = W - crop_w
+            y = (H - crop_h) // 2
+        else:
+            x = (W - crop_w) // 2
+            y = (H - crop_h) // 2
+        out = out.narrow(1, y, crop_h).narrow(2, x, crop_w)
+
+    out = comfy_utils.common_upscale(
+        out.movedim(-1, 1), target_w, target_h, upscale_method, "disabled"
+    ).movedim(1, -1)
+
+    if is_pad_mode and (pad_left > 0 or pad_right > 0 or pad_top > 0 or pad_bottom > 0):
+        # Ensure padded dims are also divisible_by-aligned
+        if divisible_by > 1:
+            final_w = target_w + pad_left + pad_right
+            final_h = target_h + pad_top + pad_bottom
+            w_rem = final_w % divisible_by
+            h_rem = final_h % divisible_by
+            if w_rem > 0:
+                pad_right += divisible_by - w_rem
+            if h_rem > 0:
+                pad_bottom += divisible_by - h_rem
+
+        color_vals = [int(v.strip()) for v in pad_color.split(",")]
+        color_f = [c / 255.0 for c in color_vals[:3]]
+        final_w = target_w + pad_left + pad_right
+        final_h = target_h + pad_top + pad_bottom
+        color_t = torch.tensor(color_f, dtype=out.dtype, device=out.device)
+        padded = color_t.view(1, 1, 1, 3).expand(B, final_h, final_w, 3).clone()
+        padded[:, pad_top : pad_top + target_h, pad_left : pad_left + target_w, :] = out
+        out = padded
+
+    return out, int(out.shape[2]), int(out.shape[1])
+
+
+def image_batch_extend_with_overlap(
+    source_images: Any,
+    new_images: Any = None,
+    overlap: int = 13,
+    overlap_side: str = "source",
+    overlap_mode: str = "filmic_crossfade",
+) -> Any:
+    """Stitch video extension frames with cross-fade overlap.
+
+    Mirrors ``ImageBatchExtendWithOverlap.imagesfrombatch()`` from KJNodes
+    (comfyui-kjnodes).
+
+    Returns the ``extended_images`` IMAGE tensor (the 3rd of 3 outputs —
+    ``source_images`` and ``start_images`` passthroughs are discarded).
+
+    ``overlap_mode`` options: ``"linear_blend"``, ``"filmic_crossfade"``,
+    ``"ease_in_out"``, ``"cut"``, ``"perceptual_crossfade"``.
+    The ``"perceptual_crossfade"`` mode requires ``kornia``.
+    """
+    torch = _get_torch_module()
+
+    if overlap > len(source_images):
+        return source_images
+
+    if new_images is None:
+        return torch.zeros((1, 64, 64, 3))
+
+    if source_images.shape[1:3] != new_images.shape[1:3]:
+        raise ValueError(
+            f"Source and new images must have the same spatial dimensions: "
+            f"{tuple(source_images.shape[1:3])} vs {tuple(new_images.shape[1:3])}"
+        )
+
+    prefix = source_images[:-overlap]
+
+    if overlap_side == "source":
+        blend_src = source_images[-overlap:]
+        blend_dst = new_images[:overlap]
+    else:  # "new_images"
+        blend_src = new_images[:overlap]
+        blend_dst = source_images[-overlap:]
+
+    suffix = new_images[overlap:]
+
+    if overlap_mode == "linear_blend":
+        alpha = torch.linspace(0, 1, overlap + 2, device=blend_src.device, dtype=blend_src.dtype)[1:-1]
+        alpha = alpha.view(-1, 1, 1, 1)
+        blended = (1 - alpha) * blend_src + alpha * blend_dst
+
+    elif overlap_mode == "filmic_crossfade":
+        gamma = 2.2
+        alpha = torch.linspace(0, 1, overlap + 2, device=blend_src.device, dtype=blend_src.dtype)[1:-1]
+        alpha = alpha.view(-1, 1, 1, 1)
+        lin_src = torch.pow(blend_src, gamma)
+        lin_dst = torch.pow(blend_dst, gamma)
+        blended = torch.pow((1 - alpha) * lin_src + alpha * lin_dst, 1.0 / gamma)
+
+    elif overlap_mode == "ease_in_out":
+        t = torch.linspace(0, 1, overlap + 2, device=blend_src.device, dtype=blend_src.dtype)[1:-1]
+        eased = 3 * t * t - 2 * t * t * t
+        eased = eased.view(-1, 1, 1, 1)
+        blended = (1 - eased) * blend_src + eased * blend_dst
+
+    elif overlap_mode == "cut":
+        if overlap_side == "new_images":
+            return torch.cat((source_images, new_images[overlap:]), dim=0)
+        else:
+            return torch.cat((source_images[:-overlap], new_images), dim=0)
+
+    elif overlap_mode == "perceptual_crossfade":
+        try:
+            import kornia
+        except ImportError as exc:
+            raise ImportError(
+                "kornia is required for perceptual_crossfade overlap mode. "
+                "Install it with: pip install kornia"
+            ) from exc
+        alpha = torch.linspace(0, 1, overlap + 2, device=blend_src.device, dtype=blend_src.dtype)[1:-1]
+        src_nchw = blend_src.movedim(-1, 1)
+        dst_nchw = blend_dst.movedim(-1, 1)
+        lab_src = kornia.color.rgb_to_lab(src_nchw)
+        lab_dst = kornia.color.rgb_to_lab(dst_nchw)
+        alpha = alpha.view(-1, 1, 1, 1)
+        blended_lab = (1 - alpha) * lab_src + alpha * lab_dst
+        blended = kornia.color.lab_to_rgb(blended_lab).movedim(1, -1)
+
+    else:
+        raise ValueError(f"Unknown overlap_mode: {overlap_mode!r}")
+
+    return torch.cat((prefix, blended, suffix), dim=0)
+
+
 def dw_preprocessor(
     image: Any,
     detect_hand: bool = True,
@@ -434,4 +686,6 @@ __all__ = [
     "image_invert",
     "image_scale_by",
     "dw_preprocessor",
+    "image_resize_kj",
+    "image_batch_extend_with_overlap",
 ]

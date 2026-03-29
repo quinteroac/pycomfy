@@ -12,6 +12,8 @@ from typing import Any
 
 import comfy_diffusion.audio as audio_module
 from comfy_diffusion.audio import (
+    audio_crop,
+    audio_separation,
     empty_ace_step_15_latent_audio,
     encode_ace_step_15_audio,
     load_audio,
@@ -20,6 +22,7 @@ from comfy_diffusion.audio import (
     ltxv_concat_av_latent,
     ltxv_empty_latent_audio,
     ltxv_separate_av_latent,
+    trim_audio_duration,
 )
 
 
@@ -53,6 +56,10 @@ def test_audio_module_exports_ltxv_audio_vae_helpers() -> None:
         "ltxv_concat_av_latent",
         "ltxv_separate_av_latent",
         "load_audio",
+        "audio_crop",
+        "audio_separation",
+        "trim_audio_duration",
+        "ltxv_audio_video_mask",
     ]
 
 
@@ -789,6 +796,192 @@ def test_load_audio_is_importable() -> None:
         "from comfy_diffusion.audio import load_audio; "
         "assert load_audio.__name__ == 'load_audio'; "
         "print('ok')"
+    )
+    assert result.returncode == 0
+    assert result.stdout.strip() == "ok"
+
+
+# ---------------------------------------------------------------------------
+# audio_crop tests
+# ---------------------------------------------------------------------------
+
+
+def test_audio_crop_signature_matches_contract() -> None:
+    signature = inspect.signature(audio_crop)
+    assert (
+        str(signature)
+        == "(audio: 'dict[str, Any]', start_time: 'float', end_time: 'float') -> 'dict[str, Any]'"
+    )
+
+
+def test_audio_crop_slices_waveform_by_time() -> None:
+    import torch
+
+    sample_rate = 8000
+    num_samples = 8000  # 1 second
+    waveform = torch.arange(num_samples, dtype=torch.float32).unsqueeze(0).unsqueeze(0)  # [1, 1, N]
+    audio: dict[str, Any] = {"waveform": waveform, "sample_rate": sample_rate}
+
+    result = audio_crop(audio, start_time=0.25, end_time=0.75)
+
+    assert result["sample_rate"] == sample_rate
+    expected_start = int(round(0.25 * sample_rate))
+    expected_end = int(round(0.75 * sample_rate))
+    assert result["waveform"].shape[-1] == expected_end - expected_start
+    torch.testing.assert_close(result["waveform"], waveform[..., expected_start:expected_end])
+
+
+def test_audio_crop_clamps_to_audio_bounds() -> None:
+    import torch
+
+    sample_rate = 4000
+    num_samples = 4000  # 1 second
+    waveform = torch.zeros(1, 1, num_samples)
+    audio: dict[str, Any] = {"waveform": waveform, "sample_rate": sample_rate}
+
+    result = audio_crop(audio, start_time=0.0, end_time=10.0)
+
+    assert result["waveform"].shape[-1] == num_samples
+
+
+def test_audio_crop_raises_for_invalid_range() -> None:
+    import pytest
+    import torch
+
+    sample_rate = 8000
+    waveform = torch.zeros(1, 1, 8000)
+    audio: dict[str, Any] = {"waveform": waveform, "sample_rate": sample_rate}
+
+    with pytest.raises(ValueError, match="start_time"):
+        audio_crop(audio, start_time=0.5, end_time=0.5)
+
+
+def test_audio_crop_is_in_all() -> None:
+    assert "audio_crop" in audio_module.__all__
+
+
+# ---------------------------------------------------------------------------
+# audio_separation tests
+# ---------------------------------------------------------------------------
+
+
+def test_audio_separation_signature_matches_contract() -> None:
+    signature = inspect.signature(audio_separation)
+    params = signature.parameters
+    assert list(params.keys()) == ["audio", "mode", "fft_n", "win_length"]
+    assert params["mode"].default == "harmonic"
+    assert params["fft_n"].default == 2048
+    assert params["win_length"].default is None
+
+
+def test_audio_separation_returns_dict_with_waveform_and_sample_rate() -> None:
+    import torch
+
+    sample_rate = 16000
+    num_samples = 16000  # 1 second
+    waveform = torch.randn(1, 1, num_samples)
+    audio: dict[str, Any] = {"waveform": waveform, "sample_rate": sample_rate}
+
+    result = audio_separation(audio, mode="harmonic", fft_n=512, win_length=512)
+
+    assert "waveform" in result
+    assert "sample_rate" in result
+    assert result["sample_rate"] == sample_rate
+    assert result["waveform"].shape == waveform.shape
+
+
+def test_audio_separation_harmonic_and_percussive_differ() -> None:
+    import torch
+
+    sample_rate = 16000
+    num_samples = 16000
+    torch.manual_seed(0)
+    waveform = torch.randn(1, 1, num_samples)
+    audio: dict[str, Any] = {"waveform": waveform, "sample_rate": sample_rate}
+
+    harmonic = audio_separation(audio, mode="harmonic", fft_n=512, win_length=512)
+    percussive = audio_separation(audio, mode="percussive", fft_n=512, win_length=512)
+
+    assert not torch.allclose(harmonic["waveform"], percussive["waveform"])
+
+
+def test_audio_separation_raises_on_invalid_mode() -> None:
+    import pytest
+    import torch
+
+    waveform = torch.zeros(1, 1, 4096)
+    audio: dict[str, Any] = {"waveform": waveform, "sample_rate": 8000}
+
+    with pytest.raises(ValueError, match="mode"):
+        audio_separation(audio, mode="invalid")
+
+
+def test_audio_separation_is_in_all() -> None:
+    assert "audio_separation" in audio_module.__all__
+
+
+# ---------------------------------------------------------------------------
+# trim_audio_duration tests
+# ---------------------------------------------------------------------------
+
+
+def test_trim_audio_duration_signature_matches_contract() -> None:
+    signature = inspect.signature(trim_audio_duration)
+    assert (
+        str(signature)
+        == "(audio: 'dict[str, Any]', start: 'float', duration: 'float') -> 'dict[str, Any]'"
+    )
+
+
+def test_trim_audio_duration_wraps_trim_audio_duration_node(monkeypatch: Any) -> None:
+    expected_waveform = object()
+    expected_output: dict[str, Any] = {"waveform": expected_waveform, "sample_rate": 44100}
+    call_log: list[dict[str, Any]] = []
+
+    class FakeTrimAudioDurationNode:
+        @classmethod
+        def execute(cls, *, audio: Any, start_index: float, duration: float) -> tuple[dict[str, Any], ...]:
+            call_log.append({"audio": audio, "start_index": start_index, "duration": duration})
+            return (expected_output,)
+
+    monkeypatch.setattr(
+        audio_module,
+        "_get_trim_audio_duration_node",
+        lambda: FakeTrimAudioDurationNode,
+    )
+
+    input_audio: dict[str, Any] = {"waveform": object(), "sample_rate": 44100}
+    result = trim_audio_duration(input_audio, start=2.5, duration=10.0)
+
+    assert result is expected_output
+    assert len(call_log) == 1
+    assert call_log[0]["audio"] is input_audio
+    assert call_log[0]["start_index"] == 2.5
+    assert call_log[0]["duration"] == 10.0
+
+
+def test_trim_audio_duration_is_in_all() -> None:
+    assert "trim_audio_duration" in audio_module.__all__
+
+
+def test_trim_audio_duration_is_importable() -> None:
+    result = _run_python(
+        "from comfy_diffusion.audio import trim_audio_duration; "
+        "assert trim_audio_duration.__name__ == 'trim_audio_duration'; "
+        "print('ok')"
+    )
+    assert result.returncode == 0
+    assert result.stdout.strip() == "ok"
+
+
+def test_audio_preprocessing_has_no_top_level_comfy_or_torch_imports() -> None:
+    result = _run_python(
+        "import sys\n"
+        "import comfy_diffusion\n"
+        "from comfy_diffusion.audio import audio_crop, audio_separation, trim_audio_duration\n"
+        "assert 'torch' not in sys.modules, 'torch was imported at module level'\n"
+        "assert 'comfy' not in sys.modules, 'comfy was imported at module level'\n"
+        "print('ok')\n"
     )
     assert result.returncode == 0
     assert result.stdout.strip() == "ok"
