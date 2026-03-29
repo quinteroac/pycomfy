@@ -12,6 +12,7 @@ from PIL import Image, ImageOps, features
 import comfy_diffusion
 import comfy_diffusion.image as image_module
 from comfy_diffusion.image import (
+    empty_image,
     image_composite_masked,
     image_from_batch,
     image_pad_for_outpaint,
@@ -211,6 +212,7 @@ def test_image_module_exports_expected_entrypoints() -> None:
         "ltxv_preprocess",
         "resize_image_mask",
         "resize_images_by_longer_edge",
+        "empty_image",
     ]
 
 
@@ -945,5 +947,110 @@ def test_resize_images_by_longer_edge_supports_comfyui_v3_result_output(
     )
 
     result = resize_images_by_longer_edge(object(), 768)
+
+    assert result is expected_output
+
+
+# ---------------------------------------------------------------------------
+# empty_image tests (US-003)
+# ---------------------------------------------------------------------------
+
+
+def test_empty_image_is_callable() -> None:
+    assert callable(empty_image)
+
+
+def test_empty_image_signature_matches_contract() -> None:
+    signature = inspect.signature(empty_image)
+    assert str(signature) == "(width: 'int', height: 'int', batch_size: 'int' = 1, color: 'int' = 0) -> 'Any'"
+
+
+def test_empty_image_not_re_exported_from_package_root() -> None:
+    assert not hasattr(comfy_diffusion, "empty_image")
+
+
+def test_empty_image_delegates_to_nodes_empty_image(monkeypatch: Any) -> None:
+    expected_output = _FakeTorch.tensor(
+        [[[[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]]],
+        dtype=_FakeTorch.float32,
+    )
+    captured: dict[str, Any] = {}
+
+    class FakeEmptyImage:
+        @classmethod
+        def execute(cls, *, width: int, height: int, batch_size: int, color: int) -> tuple[Any]:
+            captured["width"] = width
+            captured["height"] = height
+            captured["batch_size"] = batch_size
+            captured["color"] = color
+            return (expected_output,)
+
+    monkeypatch.setattr(
+        image_module,
+        "_get_empty_image_type",
+        lambda: FakeEmptyImage,
+    )
+
+    result = empty_image(width=64, height=32, batch_size=2, color=0xFF0000)
+
+    assert captured["width"] == 64
+    assert captured["height"] == 32
+    assert captured["batch_size"] == 2
+    assert captured["color"] == 0xFF0000
+    assert result is expected_output
+
+
+def test_empty_image_default_args(monkeypatch: Any) -> None:
+    captured: dict[str, Any] = {}
+
+    class FakeEmptyImage:
+        @classmethod
+        def execute(cls, *, width: int, height: int, batch_size: int, color: int) -> tuple[Any]:
+            captured["batch_size"] = batch_size
+            captured["color"] = color
+            return (object(),)
+
+    monkeypatch.setattr(image_module, "_get_empty_image_type", lambda: FakeEmptyImage)
+
+    empty_image(width=8, height=8)
+
+    assert captured["batch_size"] == 1
+    assert captured["color"] == 0
+
+
+def test_empty_image_returns_tensor(monkeypatch: Any) -> None:
+    expected = _FakeTorch.tensor(
+        [[[[1.0, 1.0, 1.0]]]],
+        dtype=_FakeTorch.float32,
+    )
+
+    class FakeEmptyImage:
+        @classmethod
+        def execute(cls, *, width: int, height: int, batch_size: int, color: int) -> tuple[Any]:
+            return (expected,)
+
+    monkeypatch.setattr(image_module, "_get_empty_image_type", lambda: FakeEmptyImage)
+
+    result = empty_image(width=1, height=1)
+
+    assert result is expected
+    assert result.shape == (1, 1, 1, 3)
+
+
+def test_empty_image_supports_comfyui_v3_result_output(monkeypatch: Any) -> None:
+    expected_output = object()
+
+    class FakeNodeOutput:
+        def __init__(self, result: tuple[Any, ...]) -> None:
+            self.result = result
+
+    class FakeEmptyImage:
+        @classmethod
+        def execute(cls, *, width: int, height: int, batch_size: int, color: int) -> Any:
+            return FakeNodeOutput((expected_output,))
+
+    monkeypatch.setattr(image_module, "_get_empty_image_type", lambda: FakeEmptyImage)
+
+    result = empty_image(width=4, height=4)
 
     assert result is expected_output

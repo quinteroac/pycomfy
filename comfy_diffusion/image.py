@@ -66,6 +66,15 @@ def _get_resize_image_mask_node_type() -> Any:
     return ResizeImageMaskNode
 
 
+def _get_empty_image_type() -> Any:
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    from nodes import EmptyImage
+
+    return EmptyImage
+
+
 def _get_resize_images_by_longer_edge_node_type() -> Any:
     from ._runtime import ensure_comfyui_on_path
 
@@ -274,6 +283,14 @@ def resize_images_by_longer_edge(images: Any, size: int) -> Any:
     )
 
 
+def empty_image(width: int, height: int, batch_size: int = 1, color: int = 0) -> Any:
+    """Create a solid-color blank image tensor with shape (batch_size, height, width, 3)."""
+    empty_image_type = _get_empty_image_type()
+    return _unwrap_node_output(
+        empty_image_type.execute(width=width, height=height, batch_size=batch_size, color=color)
+    )
+
+
 __all__ = [
     "load_image",
     "image_to_tensor",
@@ -285,4 +302,5 @@ __all__ = [
     "ltxv_preprocess",
     "resize_image_mask",
     "resize_images_by_longer_edge",
+    "empty_image",
 ]
