@@ -237,38 +237,32 @@ def vae_decode_batch_tiled(
 
     try:
         if sample_dims == 5:
-            # 5D latents: (B, C, T, H, W) — video VAE (e.g. LTX-2). Decode the
-            # full video at once via decode_tiled_3d. Output: (B, T, H, W, C).
-            images = vae.decode_tiled(samples, tile_x=tile_size, tile_y=tile_size, overlap=overlap)
-            if hasattr(images, "detach"):
-                images = images.detach().cpu()
-            # images: (B, T, H, W, C)
-            for b in range(images.shape[0]):
+            # (B, T, C, H, W) video latent — flatten batch×time, then decode frame-by-frame.
+            samples = samples.reshape(-1, samples.shape[-3], samples.shape[-2], samples.shape[-1])
+            sample_dims = 4
+
+        # 4D latents: (B, C, H, W). Decode one item at a time, adding a
+        # temporal dim so video VAEs can call decode_tiled_3d internally.
+        for index in range(samples.shape[0]):
+            frame_samples = samples[index : index + 1]
+            if hasattr(frame_samples, "unsqueeze"):
+                # (1, C, H, W) -> (1, C, 1, H, W)
+                frame_samples = frame_samples.unsqueeze(2)
+            images = vae.decode_tiled(frame_samples, tile_x=tile_size, tile_y=tile_size, overlap=overlap)
+            image_dims = len(images.shape)
+            if image_dims == 5:
+                # (B, T, H, W, C) — extract frames
+                if hasattr(images, "detach"):
+                    images = images.detach().cpu()
                 for t in range(images.shape[1]):
-                    result.append(_tensor_like_to_pil(images[b, t]))
-        else:
-            # 4D latents: (B, C, H, W). Decode one item at a time, adding a
-            # temporal dim so video VAEs can call decode_tiled_3d internally.
-            for index in range(samples.shape[0]):
-                frame_samples = samples[index : index + 1]
-                if hasattr(frame_samples, "unsqueeze"):
-                    # (1, C, H, W) -> (1, C, 1, H, W)
-                    frame_samples = frame_samples.unsqueeze(2)
-                images = vae.decode_tiled(frame_samples, tile_x=tile_size, tile_y=tile_size, overlap=overlap)
-                image_dims = len(images.shape)
-                if image_dims == 5:
-                    # (B, T, H, W, C) — extract frames
-                    if hasattr(images, "detach"):
-                        images = images.detach().cpu()
-                    for t in range(images.shape[1]):
-                        result.append(_tensor_like_to_pil(images[0, t]))
-                elif image_dims == 4:
-                    # (B, C, H, W) — single frame
-                    if hasattr(images, "detach"):
-                        images = images.detach().cpu()
-                    result.append(_tensor_like_to_pil(images[0].permute(1, 2, 0)))
-                else:
-                    raise ValueError("unsupported decoded image shape")
+                    result.append(_tensor_like_to_pil(images[0][t]))
+            elif image_dims == 4:
+                # (B, H, W, C) — single frame
+                if hasattr(images, "detach"):
+                    images = images.detach().cpu()
+                result.append(_tensor_like_to_pil(images[0]))
+            else:
+                raise ValueError("unsupported decoded image shape")
     finally:
         if _orig_process_output is not None:
             vae.process_output = _orig_process_output
