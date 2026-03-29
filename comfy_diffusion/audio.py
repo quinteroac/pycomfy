@@ -418,6 +418,78 @@ def load_audio(
     return {"waveform": waveform, "sample_rate": sample_rate}
 
 
+def ltxv_audio_video_mask(
+    video_latent: dict[str, Any],
+    audio_latent: dict[str, Any],
+    video_fps: float,
+    video_end_time: float,
+    audio_start_time: float,
+    audio_end_time: float,
+    num_video_frames_to_guide: int = 10,
+    audio_overlap_latents: int = 10,
+    audio_overlap: int = 10,
+    pad_mode: str = "pad",
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Set noise masks on video and audio latents for AV extension sampling.
+
+    Mirrors ``LTXVAudioVideoMask.execute()`` from KJNodes (comfyui-kjnodes).
+    Applied before ``ltxv_concat_av_latent`` in video extension passes to
+    preserve overlap frames from the previous generation.
+
+    The first ``num_video_frames_to_guide`` pixel-frames of the video latent
+    and the first ``audio_overlap_latents`` audio latents are masked out
+    (``noise_mask = 0.0``), so the sampler treats them as fixed context.
+
+    Args:
+        video_latent: Video LATENT dict (``{"samples": tensor, ...}``).
+        audio_latent: Audio LATENT dict (``{"samples": tensor, ...}``).
+        video_fps: Frames per second of the video.
+        video_end_time: End time (seconds) of the current video segment.
+        audio_start_time: Start time (seconds) of the audio window.
+        audio_end_time: End time (seconds) of the audio window.
+        num_video_frames_to_guide: Pixel-frame count of the video overlap region.
+        audio_overlap_latents: Number of audio latents in the overlap region.
+        audio_overlap: Pixel-frame count of the audio overlap region (unused by
+            default; provided for API parity with the node).
+        pad_mode: Padding mode (``"pad"`` or ``"no_pad"``).  Currently unused.
+
+    Returns:
+        ``(video_latent_masked, audio_latent_masked)`` — copies of the input
+        latents with ``noise_mask`` set.
+    """
+    import torch
+
+    video_samples = video_latent["samples"]
+
+    # Video noise mask: shape [B, 1, T, H, W]
+    batch, _ch, latent_t, latent_h, latent_w = video_samples.shape
+    video_mask = torch.ones(
+        (batch, 1, latent_t, latent_h, latent_w),
+        dtype=torch.float32,
+        device=video_samples.device,
+    )
+    # LTX2 time scale factor: 8 pixel frames per latent frame
+    _time_scale = 8
+    guide_latent_t = max(1, num_video_frames_to_guide // _time_scale)
+    video_mask[:, :, :guide_latent_t, :, :] = 0.0
+
+    video_out: dict[str, Any] = dict(video_latent)
+    video_out["noise_mask"] = video_mask
+
+    # Audio noise mask: shape [B, 1, T_audio] (broadcast over frequency/channel)
+    audio_samples = audio_latent["samples"]
+    a_batch, a_ch, a_t = audio_samples.shape[:3]
+    audio_mask = torch.ones((a_batch, 1, a_t), dtype=torch.float32, device=audio_samples.device)
+    overlap = min(audio_overlap_latents, a_t)
+    if overlap > 0:
+        audio_mask[:, :, :overlap] = 0.0
+
+    audio_out: dict[str, Any] = dict(audio_latent)
+    audio_out["noise_mask"] = audio_mask
+
+    return video_out, audio_out
+
+
 __all__ = [
     "ltxv_audio_vae_encode",
     "ltxv_audio_vae_decode",
@@ -430,4 +502,5 @@ __all__ = [
     "audio_crop",
     "audio_separation",
     "trim_audio_duration",
+    "ltxv_audio_video_mask",
 ]

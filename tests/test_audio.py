@@ -59,6 +59,7 @@ def test_audio_module_exports_ltxv_audio_vae_helpers() -> None:
         "audio_crop",
         "audio_separation",
         "trim_audio_duration",
+        "ltxv_audio_video_mask",
     ]
 
 

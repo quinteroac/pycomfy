@@ -317,6 +317,53 @@ def ltxv_img_to_video_inplace(
     return {"samples": samples, "noise_mask": conditioning_latent_frames_mask}
 
 
+def ltxv_chunk_feed_forward(
+    model: Any,
+    min_chunk_size: int = 4,
+    chunk_threshold: int = 4096,
+) -> Any:
+    """Return a model clone with chunked feed-forward enabled.
+
+    Mirrors ``LTXVChunkFeedForward.execute()`` from KJNodes (comfyui-kjnodes).
+    Splits feed-forward layers into memory-efficient chunks during sampling.
+    ``min_chunk_size`` controls the minimum number of tokens per chunk;
+    ``chunk_threshold`` is the token-count above which chunking is triggered.
+
+    When ``chunk_threshold == 0`` the model is returned unchanged.
+    """
+    if chunk_threshold == 0:
+        return model
+
+    import torch
+
+    model_clone = model.clone()
+    diffusion_model = model_clone.get_model_object("diffusion_model")
+
+    def _make_chunked_ff(orig_forward: Any) -> Any:
+        def _chunked(x: Any, **kwargs: Any) -> Any:
+            B, T, C = x.shape
+            if T <= chunk_threshold:
+                return orig_forward(x, **kwargs)
+            chunk_size = max(min_chunk_size, (T + chunk_threshold - 1) // chunk_threshold * min_chunk_size)
+            chunks = x.split(chunk_size, dim=1)
+            out_chunks = [orig_forward(c, **kwargs) for c in chunks]
+            return torch.cat(out_chunks, dim=1)
+
+        return _chunked
+
+    for idx, block in enumerate(diffusion_model.transformer_blocks):
+        ff = getattr(block, "ff", None)
+        if ff is not None:
+            orig = ff.forward
+            block.ff.forward = _make_chunked_ff(orig)
+            model_clone.add_object_patch(
+                f"diffusion_model.transformer_blocks.{idx}.ff.forward",
+                block.ff.forward,
+            )
+
+    return model_clone
+
+
 def ltx2_nag(
     model: Any,
     nag_scale: float,
@@ -628,6 +675,7 @@ __all__ = [
     "get_video_metadata",
     "get_video_components",
     "ltxv_img_to_video_inplace",
+    "ltxv_chunk_feed_forward",
     "ltx2_nag",
     "ltxv_img_to_video_inplace_kj",
     "ltx2_sampling_preview_override",
