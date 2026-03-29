@@ -20,6 +20,7 @@ from comfy_diffusion.image import (
     load_image,
     ltxv_preprocess,
     repeat_image_batch,
+    resize_image_mask,
 )
 
 
@@ -207,6 +208,7 @@ def test_image_module_exports_expected_entrypoints() -> None:
         "repeat_image_batch",
         "image_composite_masked",
         "ltxv_preprocess",
+        "resize_image_mask",
     ]
 
 
@@ -765,3 +767,119 @@ def test_image_pad_for_outpaint_applies_feathering_gradient() -> None:
     assert mask_values[1][1] == 1.0
     assert mask_values[2][2] == 0.25
     assert mask_values[3][3] == 0.0
+
+
+def test_resize_image_mask_signature_matches_contract() -> None:
+    signature = inspect.signature(resize_image_mask)
+    expected = (
+        "(image: 'Any', mask: 'Any', width: 'int', height: 'int',"
+        " interpolation: 'str' = 'bilinear') -> 'tuple[Any, Any]'"
+    )
+    assert str(signature) == expected
+
+
+def test_resize_image_mask_not_re_exported_from_package_root() -> None:
+    assert not hasattr(comfy_diffusion, "resize_image_mask")
+
+
+def test_resize_image_mask_calls_comfy_node_and_returns_image_mask_tuple(
+    monkeypatch: Any,
+) -> None:
+    image_in = object()
+    mask_in = object()
+    image_out = object()
+    mask_out = object()
+
+    received: dict[str, Any] = {}
+
+    class FakeResizeImageMaskNode:
+        @classmethod
+        def execute(
+            cls,
+            *,
+            image: Any,
+            mask: Any,
+            width: int,
+            height: int,
+            interpolation: str,
+        ) -> tuple[Any, Any]:
+            received["image"] = image
+            received["mask"] = mask
+            received["width"] = width
+            received["height"] = height
+            received["interpolation"] = interpolation
+            return (image_out, mask_out)
+
+    monkeypatch.setattr(
+        image_module,
+        "_get_resize_image_mask_node_type",
+        lambda: FakeResizeImageMaskNode,
+    )
+
+    result_image, result_mask = resize_image_mask(image_in, mask_in, 512, 768)
+
+    assert result_image is image_out
+    assert result_mask is mask_out
+    assert received["image"] is image_in
+    assert received["mask"] is mask_in
+    assert received["width"] == 512
+    assert received["height"] == 768
+    assert received["interpolation"] == "bilinear"
+
+
+def test_resize_image_mask_passes_custom_interpolation(monkeypatch: Any) -> None:
+    image_in = object()
+    mask_in = object()
+    image_out = object()
+    mask_out = object()
+
+    received: dict[str, Any] = {}
+
+    class FakeResizeImageMaskNode:
+        @classmethod
+        def execute(
+            cls,
+            *,
+            image: Any,
+            mask: Any,
+            width: int,
+            height: int,
+            interpolation: str,
+        ) -> tuple[Any, Any]:
+            received["interpolation"] = interpolation
+            return (image_out, mask_out)
+
+    monkeypatch.setattr(
+        image_module,
+        "_get_resize_image_mask_node_type",
+        lambda: FakeResizeImageMaskNode,
+    )
+
+    resize_image_mask(image_in, mask_in, 256, 256, interpolation="nearest")
+
+    assert received["interpolation"] == "nearest"
+
+
+def test_resize_image_mask_supports_comfyui_v3_result_output(monkeypatch: Any) -> None:
+    image_out = object()
+    mask_out = object()
+
+    class FakeNodeOutput:
+        def __init__(self, result: tuple[Any, ...]) -> None:
+            self.result = result
+
+    class FakeResizeImageMaskNode:
+        @classmethod
+        def execute(cls, *, image: Any, mask: Any, width: int, height: int, interpolation: str) -> Any:
+            return FakeNodeOutput((image_out, mask_out))
+
+    monkeypatch.setattr(
+        image_module,
+        "_get_resize_image_mask_node_type",
+        lambda: FakeResizeImageMaskNode,
+    )
+
+    result_image, result_mask = resize_image_mask(object(), object(), 64, 64)
+
+    assert result_image is image_out
+    assert result_mask is mask_out

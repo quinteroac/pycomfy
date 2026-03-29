@@ -57,6 +57,15 @@ def _get_image_composite_masked_type() -> Any:
     return ImageCompositeMasked
 
 
+def _get_resize_image_mask_node_type() -> Any:
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    from comfy_extras.nodes_post_processing import ResizeImageMaskNode
+
+    return ResizeImageMaskNode
+
+
 def _get_ltxv_preprocess_dependencies() -> tuple[Any, Any]:
     from ._runtime import ensure_comfyui_on_path
 
@@ -228,6 +237,26 @@ def ltxv_preprocess(image: Any, width: int, height: int) -> Any:
     return _unwrap_node_output(ltxv_preprocess_type.execute(resized, img_compression=35))
 
 
+def resize_image_mask(
+    image: Any,
+    mask: Any,
+    width: int,
+    height: int,
+    interpolation: str = "bilinear",
+) -> tuple[Any, Any]:
+    """Resize an image and its mask to the given dimensions in a single call."""
+    resize_image_mask_node_type = _get_resize_image_mask_node_type()
+    result = resize_image_mask_node_type.execute(
+        image=image,
+        mask=mask,
+        width=width,
+        height=height,
+        interpolation=interpolation,
+    )
+    raw = getattr(result, "result", result)
+    return raw[0], raw[1]
+
+
 __all__ = [
     "load_image",
     "image_to_tensor",
@@ -237,4 +266,5 @@ __all__ = [
     "repeat_image_batch",
     "image_composite_masked",
     "ltxv_preprocess",
+    "resize_image_mask",
 ]
