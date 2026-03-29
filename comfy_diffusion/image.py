@@ -131,6 +131,20 @@ def _get_comfy_utils() -> Any:
     return comfy.utils
 
 
+def _get_dw_preprocessor_deps() -> tuple[Any, Any, Any]:
+    try:
+        from controlnet_aux import DWposeDetector
+    except ImportError as exc:
+        raise ImportError(
+            "controlnet_aux is required for dw_preprocessor. "
+            "Install it with: pip install controlnet-aux"
+        ) from exc
+    import numpy as np
+    import torch
+
+    return DWposeDetector, torch, np
+
+
 def _unwrap_node_output(output: Any) -> Any:
     result = getattr(output, "result", output)
     return result[0]
@@ -367,6 +381,42 @@ def image_scale_by(image: Any, upscale_method: str = "lanczos", scale_by: float 
     return scaled.movedim(1, -1)
 
 
+def dw_preprocessor(
+    image: Any,
+    detect_hand: bool = True,
+    detect_body: bool = True,
+    detect_face: bool = True,
+    resolution: int = 512,
+) -> Any:
+    """Estimate human pose from an IMAGE tensor using DWposeDetector.
+
+    Processes each frame in the batch through the DWpose model and returns an
+    IMAGE tensor (BHWC float32) with the same batch dimension as the input.
+
+    Requires ``controlnet-aux`` to be installed::
+
+        pip install controlnet-aux
+    """
+    DWposeDetector, torch, np = _get_dw_preprocessor_deps()
+
+    detector = DWposeDetector()
+    batch_size = image.shape[0]
+    pose_frames = []
+    for i in range(batch_size):
+        frame_np = (image[i].cpu().numpy() * 255.0).clip(0, 255).astype(np.uint8)
+        result = detector(
+            frame_np,
+            detect_resolution=resolution,
+            image_resolution=resolution,
+            include_body=detect_body,
+            include_hand=detect_hand,
+            include_face=detect_face,
+            return_pil=False,
+        )
+        pose_frames.append(torch.from_numpy(result).float() / 255.0)
+    return torch.stack(pose_frames, dim=0)
+
+
 __all__ = [
     "load_image",
     "image_to_tensor",
@@ -383,4 +433,5 @@ __all__ = [
     "canny",
     "image_invert",
     "image_scale_by",
+    "dw_preprocessor",
 ]
