@@ -75,6 +75,15 @@ def _get_empty_image_type() -> Any:
     return EmptyImage
 
 
+def _get_canny_type() -> Any:
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    from comfy_extras.nodes_canny import Canny
+
+    return Canny
+
+
 def _get_math_expression_node_type() -> Any:
     from ._runtime import ensure_comfyui_on_path
 
@@ -300,6 +309,18 @@ def empty_image(width: int, height: int, batch_size: int = 1, color: int = 0) ->
     )
 
 
+def canny(image: Any, low_threshold: int = 100, high_threshold: int = 200) -> Any:
+    """Apply Canny edge detection and return an image tensor of the same spatial dimensions."""
+    canny_type = _get_canny_type()
+    return _unwrap_node_output(
+        canny_type.execute(
+            image=image,
+            low_threshold=low_threshold / 255.0,
+            high_threshold=high_threshold / 255.0,
+        )
+    )
+
+
 def math_expression(expression: str, **kwargs: float) -> int | float:
     """Evaluate a parameterised math expression via ComfyMathExpression."""
     math_expression_node_type = _get_math_expression_node_type()
@@ -321,4 +342,5 @@ __all__ = [
     "resize_images_by_longer_edge",
     "empty_image",
     "math_expression",
+    "canny",
 ]

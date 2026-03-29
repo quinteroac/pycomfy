@@ -12,6 +12,7 @@ from PIL import Image, ImageOps, features
 import comfy_diffusion
 import comfy_diffusion.image as image_module
 from comfy_diffusion.image import (
+    canny,
     empty_image,
     image_composite_masked,
     image_from_batch,
@@ -215,6 +216,7 @@ def test_image_module_exports_expected_entrypoints() -> None:
         "resize_images_by_longer_edge",
         "empty_image",
         "math_expression",
+        "canny",
     ]
 
 
@@ -1130,3 +1132,115 @@ def test_math_expression_lazy_import_uses_comfy_extras() -> None:
     src = _inspect.getsource(image_module._get_math_expression_node_type)
     assert "comfy_extras.nodes_math" in src
     assert "MathExpressionNode" in src
+
+
+# ---------------------------------------------------------------------------
+# canny tests (US-007)
+# ---------------------------------------------------------------------------
+
+
+def test_canny_is_callable() -> None:
+    assert callable(canny)
+
+
+def test_canny_signature_matches_contract() -> None:
+    signature = inspect.signature(canny)
+    assert str(signature) == (
+        "(image: 'Any', low_threshold: 'int' = 100, high_threshold: 'int' = 200) -> 'Any'"
+    )
+
+
+def test_canny_not_re_exported_from_package_root() -> None:
+    assert not hasattr(comfy_diffusion, "canny")
+
+
+def test_canny_lazy_import_uses_comfy_extras_nodes_canny() -> None:
+    import inspect as _inspect
+
+    src = _inspect.getsource(image_module._get_canny_type)
+    assert "comfy_extras.nodes_canny" in src
+    assert "Canny" in src
+
+
+def test_canny_returns_same_spatial_dimensions(monkeypatch: Any) -> None:
+    input_image = _FakeTorch.tensor(
+        [[[[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]], [[0.7, 0.8, 0.9], [0.0, 0.1, 0.2]]]],
+        dtype=_FakeTorch.float32,
+    )
+    # Output has the same (B, H, W, C) shape as input.
+    expected_output = _FakeTorch.tensor(
+        [[[[0.5, 0.5, 0.5], [0.5, 0.5, 0.5]], [[0.5, 0.5, 0.5], [0.5, 0.5, 0.5]]]],
+        dtype=_FakeTorch.float32,
+    )
+    captured: dict[str, Any] = {}
+
+    class FakeCanny:
+        @classmethod
+        def execute(cls, *, image: Any, low_threshold: float, high_threshold: float) -> tuple[Any]:
+            captured["image"] = image
+            captured["low_threshold"] = low_threshold
+            captured["high_threshold"] = high_threshold
+            return (expected_output,)
+
+    monkeypatch.setattr(image_module, "_get_canny_type", lambda: FakeCanny)
+
+    result = canny(input_image)
+
+    assert result is expected_output
+    assert result.shape == input_image.shape
+
+
+def test_canny_normalises_thresholds_to_zero_one_range(monkeypatch: Any) -> None:
+    captured: dict[str, Any] = {}
+
+    class FakeCanny:
+        @classmethod
+        def execute(cls, *, image: Any, low_threshold: float, high_threshold: float) -> tuple[Any]:
+            captured["low_threshold"] = low_threshold
+            captured["high_threshold"] = high_threshold
+            return (image,)
+
+    monkeypatch.setattr(image_module, "_get_canny_type", lambda: FakeCanny)
+
+    canny(object(), low_threshold=100, high_threshold=200)
+
+    assert captured["low_threshold"] == pytest.approx(100 / 255.0)
+    assert captured["high_threshold"] == pytest.approx(200 / 255.0)
+
+
+def test_canny_default_threshold_values(monkeypatch: Any) -> None:
+    captured: dict[str, Any] = {}
+
+    class FakeCanny:
+        @classmethod
+        def execute(cls, *, image: Any, low_threshold: float, high_threshold: float) -> tuple[Any]:
+            captured["low_threshold"] = low_threshold
+            captured["high_threshold"] = high_threshold
+            return (image,)
+
+    monkeypatch.setattr(image_module, "_get_canny_type", lambda: FakeCanny)
+
+    canny(object())
+
+    assert captured["low_threshold"] == pytest.approx(100 / 255.0)
+    assert captured["high_threshold"] == pytest.approx(200 / 255.0)
+
+
+def test_canny_supports_comfyui_v3_result_output(monkeypatch: Any) -> None:
+    expected_output = object()
+
+    class FakeNodeOutput:
+        def __init__(self, result: tuple[Any, ...]) -> None:
+            self.result = result
+
+    class FakeCanny:
+        @classmethod
+        def execute(cls, *, image: Any, low_threshold: float, high_threshold: float) -> Any:
+            return FakeNodeOutput((expected_output,))
+
+    monkeypatch.setattr(image_module, "_get_canny_type", lambda: FakeCanny)
+
+    result = canny(object(), low_threshold=50, high_threshold=150)
+
+    assert result is expected_output
+
