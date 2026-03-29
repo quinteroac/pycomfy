@@ -15,10 +15,12 @@ from comfy_diffusion.image import (
     canny,
     dw_preprocessor,
     empty_image,
+    image_batch_extend_with_overlap,
     image_composite_masked,
     image_from_batch,
     image_invert,
     image_pad_for_outpaint,
+    image_resize_kj,
     image_scale_by,
     image_to_tensor,
     image_upscale_with_model,
@@ -223,6 +225,8 @@ def test_image_module_exports_expected_entrypoints() -> None:
         "image_invert",
         "image_scale_by",
         "dw_preprocessor",
+        "image_resize_kj",
+        "image_batch_extend_with_overlap",
     ]
 
 
@@ -1654,3 +1658,395 @@ def test_dw_preprocessor_lazy_import_no_top_level_controlnet_aux() -> None:
             assert "controlnet_aux" not in imp.module, (
                 "controlnet_aux must not be imported at module top level"
             )
+
+
+# ---------------------------------------------------------------------------
+# image_resize_kj tests (US-003-AC01)
+# ---------------------------------------------------------------------------
+
+
+def test_image_resize_kj_is_callable() -> None:
+    assert callable(image_resize_kj)
+
+
+def test_image_resize_kj_signature_matches_contract() -> None:
+    signature = inspect.signature(image_resize_kj)
+    assert str(signature) == (
+        "(image: 'Any', width: 'int', height: 'int', upscale_method: 'str' = 'lanczos', "
+        "keep_proportion: 'str' = 'crop', pad_color: 'str' = '0, 0, 0', "
+        "crop_position: 'str' = 'center', divisible_by: 'int' = 2, "
+        "device: 'str' = 'cpu') -> 'tuple[Any, int, int]'"
+    )
+
+
+def test_image_resize_kj_in_dunder_all() -> None:
+    assert "image_resize_kj" in image_module.__all__
+
+
+def test_image_resize_kj_not_re_exported_from_package_root() -> None:
+    assert not hasattr(comfy_diffusion, "image_resize_kj")
+
+
+def test_image_resize_kj_stretch_calls_common_upscale_with_target_dims(
+    monkeypatch: Any,
+) -> None:
+    """AC01: stretch mode passes width/height directly to common_upscale."""
+    calls: dict[str, Any] = {}
+
+    class _FakeOut:
+        @property
+        def shape(self) -> tuple[int, int, int, int]:
+            return (1, 256, 512, 3)
+
+    class _FakeMovedTensor:
+        def movedim(self, src: int, dst: int) -> _FakeOut:
+            return _FakeOut()
+
+    class _FakeInputMovedTensor:
+        def movedim(self, src: int, dst: int) -> _FakeMovedTensor:
+            return _FakeMovedTensor()
+
+    class _FakeInputTensor:
+        @property
+        def shape(self) -> tuple[int, int, int, int]:
+            return (1, 64, 128, 3)
+
+        def narrow(self, dim: int, start: int, length: int) -> "_FakeInputTensor":
+            return self
+
+        def movedim(self, src: int, dst: int) -> _FakeInputMovedTensor:
+            return _FakeInputMovedTensor()
+
+    class _FakeComfyUtils:
+        @staticmethod
+        def common_upscale(
+            samples: Any, width: int, height: int, upscale_method: str, crop: str
+        ) -> _FakeMovedTensor:
+            calls["width"] = width
+            calls["height"] = height
+            calls["upscale_method"] = upscale_method
+            calls["crop"] = crop
+            return _FakeMovedTensor()
+
+    monkeypatch.setattr(image_module, "_get_comfy_utils", lambda: _FakeComfyUtils)
+    monkeypatch.setattr(image_module, "_get_torch_module", lambda: None)
+
+    image_resize_kj(
+        _FakeInputTensor(),
+        width=512,
+        height=256,
+        upscale_method="lanczos",
+        keep_proportion="stretch",
+        divisible_by=1,
+    )
+
+    assert calls["width"] == 512
+    assert calls["height"] == 256
+    assert calls["upscale_method"] == "lanczos"
+    assert calls["crop"] == "disabled"
+
+
+def test_image_resize_kj_crop_mode_crops_before_upscale(monkeypatch: Any) -> None:
+    """AC01: crop mode performs narrow() before calling common_upscale."""
+    narrow_calls: list[tuple[int, int, int]] = []
+
+    class _FakeOut:
+        @property
+        def shape(self) -> tuple[int, int, int, int]:
+            return (1, 100, 100, 3)
+
+    class _FakeMovedTensor:
+        def movedim(self, src: int, dst: int) -> _FakeOut:
+            return _FakeOut()
+
+    class _FakeInputTensor:
+        @property
+        def shape(self) -> tuple[int, int, int, int]:
+            # 1x100x200x3 — wider than target, so width will be cropped
+            return (1, 100, 200, 3)
+
+        def narrow(self, dim: int, start: int, length: int) -> "_FakeInputTensor":
+            narrow_calls.append((dim, start, length))
+            return self
+
+        def movedim(self, src: int, dst: int) -> _FakeMovedTensor:
+            return _FakeMovedTensor()
+
+    class _FakeComfyUtils:
+        @staticmethod
+        def common_upscale(
+            samples: Any, width: int, height: int, upscale_method: str, crop: str
+        ) -> _FakeMovedTensor:
+            return _FakeMovedTensor()
+
+    monkeypatch.setattr(image_module, "_get_comfy_utils", lambda: _FakeComfyUtils)
+    monkeypatch.setattr(image_module, "_get_torch_module", lambda: None)
+
+    image_resize_kj(
+        _FakeInputTensor(),
+        width=100,
+        height=100,
+        keep_proportion="crop",
+        crop_position="center",
+        divisible_by=1,
+    )
+
+    # narrow should have been called to crop width and/or height
+    assert len(narrow_calls) >= 1
+
+
+def test_image_resize_kj_returns_tuple_with_int_dims(monkeypatch: Any) -> None:
+    """AC01: return value is (IMAGE, int, int)."""
+
+    class _FakeMovedTensor:
+        @property
+        def shape(self) -> tuple[int, int, int, int]:
+            return (1, 3, 64, 128)
+
+        def movedim(self, src: int, dst: int) -> "_FakeMovedTensor":
+            return self
+
+    class _FakeInputTensor:
+        @property
+        def shape(self) -> tuple[int, int, int, int]:
+            return (1, 64, 128, 3)
+
+        def narrow(self, dim: int, start: int, length: int) -> "_FakeInputTensor":
+            return self
+
+        def movedim(self, src: int, dst: int) -> _FakeMovedTensor:
+            return _FakeMovedTensor()
+
+    class _FakeComfyUtils:
+        @staticmethod
+        def common_upscale(
+            samples: Any, width: int, height: int, upscale_method: str, crop: str
+        ) -> _FakeMovedTensor:
+            return _FakeMovedTensor()
+
+    monkeypatch.setattr(image_module, "_get_comfy_utils", lambda: _FakeComfyUtils)
+    monkeypatch.setattr(image_module, "_get_torch_module", lambda: None)
+
+    result = image_resize_kj(
+        _FakeInputTensor(),
+        width=128,
+        height=64,
+        keep_proportion="stretch",
+        divisible_by=1,
+    )
+
+    assert isinstance(result, tuple) and len(result) == 3
+    _img, w, h = result
+    assert isinstance(w, int)
+    assert isinstance(h, int)
+
+
+def test_image_resize_kj_divisible_by_rounds_down(monkeypatch: Any) -> None:
+    """AC01: divisible_by truncates the target dimensions."""
+    calls: dict[str, Any] = {}
+
+    class _FakeOut:
+        @property
+        def shape(self) -> tuple[int, int, int, int]:
+            return (1, 256, 512, 3)
+
+    class _FakeMovedTensor:
+        def movedim(self, src: int, dst: int) -> _FakeOut:
+            return _FakeOut()
+
+    class _FakeInputTensor:
+        @property
+        def shape(self) -> tuple[int, int, int, int]:
+            return (1, 64, 64, 3)
+
+        def narrow(self, dim: int, start: int, length: int) -> "_FakeInputTensor":
+            return self
+
+        def movedim(self, src: int, dst: int) -> _FakeMovedTensor:
+            return _FakeMovedTensor()
+
+    class _FakeComfyUtils:
+        @staticmethod
+        def common_upscale(
+            samples: Any, width: int, height: int, upscale_method: str, crop: str
+        ) -> _FakeMovedTensor:
+            calls["width"] = width
+            calls["height"] = height
+            return _FakeMovedTensor()
+
+    monkeypatch.setattr(image_module, "_get_comfy_utils", lambda: _FakeComfyUtils)
+    monkeypatch.setattr(image_module, "_get_torch_module", lambda: None)
+
+    image_resize_kj(
+        _FakeInputTensor(),
+        width=513,
+        height=257,
+        keep_proportion="stretch",
+        divisible_by=8,
+    )
+
+    # 513 - (513 % 8) = 513 - 1 = 512; 257 - (257 % 8) = 257 - 1 = 256
+    assert calls["width"] == 512
+    assert calls["height"] == 256
+
+
+def test_image_resize_kj_lazy_import_no_top_level_torch_or_comfy() -> None:
+    """AC03: image_resize_kj follows the lazy-import pattern."""
+    import ast
+    import pathlib
+
+    source = pathlib.Path(image_module.__file__).read_text()
+    tree = ast.parse(source)
+    top_level_imports = [n for n in tree.body if isinstance(n, (ast.Import, ast.ImportFrom))]
+    forbidden = {"torch", "comfy"}
+    for imp in top_level_imports:
+        if isinstance(imp, ast.Import):
+            for alias in imp.names:
+                assert alias.name.split(".")[0] not in forbidden, (
+                    f"Forbidden top-level import: {alias.name}"
+                )
+        elif isinstance(imp, ast.ImportFrom) and imp.module:
+            assert imp.module.split(".")[0] not in forbidden, (
+                f"Forbidden top-level import: {imp.module}"
+            )
+
+
+# ---------------------------------------------------------------------------
+# image_batch_extend_with_overlap tests (US-003-AC02)
+# ---------------------------------------------------------------------------
+
+
+def test_image_batch_extend_with_overlap_is_callable() -> None:
+    assert callable(image_batch_extend_with_overlap)
+
+
+def test_image_batch_extend_with_overlap_signature_matches_contract() -> None:
+    signature = inspect.signature(image_batch_extend_with_overlap)
+    assert str(signature) == (
+        "(source_images: 'Any', new_images: 'Any' = None, overlap: 'int' = 13, "
+        "overlap_side: 'str' = 'source', overlap_mode: 'str' = 'filmic_crossfade') -> 'Any'"
+    )
+
+
+def test_image_batch_extend_with_overlap_in_dunder_all() -> None:
+    assert "image_batch_extend_with_overlap" in image_module.__all__
+
+
+def test_image_batch_extend_with_overlap_not_re_exported_from_package_root() -> None:
+    assert not hasattr(comfy_diffusion, "image_batch_extend_with_overlap")
+
+
+def test_image_batch_extend_with_overlap_no_new_images_returns_zeros(
+    monkeypatch: Any,
+) -> None:
+    """AC02: when new_images is None, returns a placeholder zero tensor."""
+    import torch
+
+    monkeypatch.setattr(image_module, "_get_torch_module", lambda: torch)
+    source = torch.zeros((20, 64, 64, 3))
+    result = image_batch_extend_with_overlap(source, new_images=None, overlap=5)
+    assert result.shape == (1, 64, 64, 3)
+    assert float(result.sum()) == 0.0
+
+
+def test_image_batch_extend_with_overlap_overlap_exceeds_source_returns_source(
+    monkeypatch: Any,
+) -> None:
+    """AC02: when overlap > len(source_images), source_images is returned unchanged."""
+    import torch
+
+    source = torch.ones((3, 8, 8, 3))
+    result = image_batch_extend_with_overlap(source, new_images=None, overlap=10)
+    assert result is source
+
+
+def test_image_batch_extend_with_overlap_shape_mismatch_raises(
+    monkeypatch: Any,
+) -> None:
+    """AC02: spatial dim mismatch raises ValueError."""
+    import torch
+
+    source = torch.zeros((10, 64, 64, 3))
+    new = torch.zeros((5, 32, 32, 3))
+    with pytest.raises(ValueError, match="same spatial dimensions"):
+        image_batch_extend_with_overlap(source, new_images=new, overlap=3)
+
+
+def test_image_batch_extend_with_overlap_filmic_crossfade_output_shape(
+    monkeypatch: Any,
+) -> None:
+    """AC02: filmic_crossfade extended output has correct frame count."""
+    import torch
+
+    monkeypatch.setattr(image_module, "_get_torch_module", lambda: torch)
+    B_src, B_new, overlap = 20, 15, 5
+    source = torch.rand((B_src, 8, 8, 3))
+    new = torch.rand((B_new, 8, 8, 3))
+    result = image_batch_extend_with_overlap(
+        source, new_images=new, overlap=overlap, overlap_mode="filmic_crossfade"
+    )
+    # prefix = source[:-overlap] = 15 frames
+    # blended = overlap = 5 frames
+    # suffix = new[overlap:] = 10 frames
+    # total = 15 + 5 + 10 = 30
+    expected_frames = (B_src - overlap) + overlap + (B_new - overlap)
+    assert result.shape[0] == expected_frames
+    assert result.shape[1:] == (8, 8, 3)
+
+
+def test_image_batch_extend_with_overlap_linear_blend_midpoint(
+    monkeypatch: Any,
+) -> None:
+    """AC02: linear_blend midpoint frame is 50% mix of src and dst."""
+    import torch
+
+    monkeypatch.setattr(image_module, "_get_torch_module", lambda: torch)
+    overlap = 2  # odd overlap not needed; linspace[1:-1] gives 2 values for overlap=2
+    source = torch.zeros((5, 4, 4, 3))  # source frames are 0
+    new_imgs = torch.ones((5, 4, 4, 3))  # new frames are 1
+
+    result = image_batch_extend_with_overlap(
+        source, new_images=new_imgs, overlap=overlap,
+        overlap_side="source", overlap_mode="linear_blend"
+    )
+    # alpha = linspace(0,1, overlap+2)[1:-1] → for overlap=2: [0.333..., 0.666...]
+    # blended[0] = 1-0.333... * 0 + 0.333... * 1 ≈ 0.333
+    prefix_len = len(source) - overlap  # = 3
+    blended_frame_0 = result[prefix_len]  # first blended frame
+    expected_alpha = torch.linspace(0, 1, overlap + 2)[1:-1][0].item()
+    assert abs(float(blended_frame_0.mean()) - expected_alpha) < 1e-5
+
+
+def test_image_batch_extend_with_overlap_cut_mode_source_side(
+    monkeypatch: Any,
+) -> None:
+    """AC02: cut mode with overlap_side=source drops source tail."""
+    import torch
+
+    monkeypatch.setattr(image_module, "_get_torch_module", lambda: torch)
+    overlap = 3
+    source = torch.arange(10, dtype=torch.float32).view(10, 1, 1, 1).expand(-1, 4, 4, 3)
+    new = torch.arange(100, 110, dtype=torch.float32).view(10, 1, 1, 1).expand(-1, 4, 4, 3)
+    result = image_batch_extend_with_overlap(
+        source, new_images=new, overlap=overlap,
+        overlap_side="source", overlap_mode="cut"
+    )
+    # expect source[:-3] (7 frames) + new (10 frames) = 17 frames
+    assert result.shape[0] == 10 - overlap + 10
+
+
+def test_image_batch_extend_with_overlap_lazy_import_no_top_level_torch() -> None:
+    """AC03: image_batch_extend_with_overlap follows the lazy-import pattern."""
+    import ast
+    import pathlib
+
+    source = pathlib.Path(image_module.__file__).read_text()
+    tree = ast.parse(source)
+    top_level_imports = [n for n in tree.body if isinstance(n, (ast.Import, ast.ImportFrom))]
+    forbidden = {"torch", "comfy"}
+    for imp in top_level_imports:
+        if isinstance(imp, ast.Import):
+            for alias in imp.names:
+                assert alias.name.split(".")[0] not in forbidden
+        elif isinstance(imp, ast.ImportFrom) and imp.module:
+            assert imp.module.split(".")[0] not in forbidden
