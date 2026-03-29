@@ -121,6 +121,28 @@ def set_union_controlnet_type(control_net: Any, type: str) -> Any:
     return control_net
 
 
+def lotus_conditioning(model: Any, image: Any) -> Any:
+    """Apply Lotus depth-model conditioning for depth-to-video generation.
+
+    Wraps ComfyUI's ``LotusConditioning`` node, which uses a frozen CLIP encoder
+    and inlined null-conditioning tensors to produce the required conditioning
+    format for Lotus-based depth pipelines (e.g. LTX depth-to-video).
+
+    Args:
+        model: The diffusion model (accepted for API consistency; Lotus conditioning
+            is model-architecture-agnostic and uses hardcoded frozen encoder values).
+        image: The input image tensor (accepted for API consistency; conditioning
+            values are pre-computed from the frozen Lotus encoder).
+
+    Returns:
+        Conditioning tensor compatible with standard ComfyUI conditioning inputs.
+    """
+    from comfy_extras.nodes_lotus import LotusConditioning
+
+    result = LotusConditioning.execute()
+    return result[0]
+
+
 def ltxv_add_guide(
     conditioning: Any,
     image: Any,
@@ -157,5 +179,6 @@ __all__ = [
     "load_diff_controlnet",
     "apply_controlnet",
     "set_union_controlnet_type",
+    "lotus_conditioning",
     "ltxv_add_guide",
 ]

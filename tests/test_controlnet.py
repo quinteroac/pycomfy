@@ -18,6 +18,7 @@ from comfy_diffusion.controlnet import (
     apply_controlnet,
     load_controlnet,
     load_diff_controlnet,
+    lotus_conditioning,
     ltxv_add_guide,
     set_union_controlnet_type,
 )
@@ -82,6 +83,7 @@ def test_controlnet_module_exports_only_load_controlnet() -> None:
         "load_diff_controlnet",
         "apply_controlnet",
         "set_union_controlnet_type",
+        "lotus_conditioning",
         "ltxv_add_guide",
     ]
 
@@ -671,6 +673,95 @@ def test_ltxv_add_guide_does_not_import_comfy_at_module_level() -> None:
 
     payload = json.loads(result.stdout)
     assert payload["func_name"] == "ltxv_add_guide"
+    assert payload["torch_loaded"] is False
+    assert payload["comfy_extras_loaded"] is False
+    heavy = [
+        module
+        for module in payload["new_modules"]
+        if module.startswith(("torch", "comfy.")) or module in ("comfy", "comfy_extras")
+    ]
+    assert heavy == [], f"Unexpected heavy modules loaded on import: {heavy}"
+
+
+# ---------------------------------------------------------------------------
+# lotus_conditioning tests
+# ---------------------------------------------------------------------------
+
+
+def _install_fake_nodes_lotus(monkeypatch: Any, fake_execute: Any) -> None:
+    import types
+
+    fake_nodes_lotus = types.ModuleType("comfy_extras.nodes_lotus")
+
+    class FakeLotusConditioning:
+        @classmethod
+        def execute(cls) -> list[Any]:
+            return fake_execute()
+
+    fake_nodes_lotus.LotusConditioning = FakeLotusConditioning  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "comfy_extras", types.ModuleType("comfy_extras"))
+    monkeypatch.setitem(sys.modules, "comfy_extras.nodes_lotus", fake_nodes_lotus)
+
+
+def test_lotus_conditioning_is_callable() -> None:
+    from comfy_diffusion.controlnet import lotus_conditioning
+
+    assert callable(lotus_conditioning)
+
+
+def test_lotus_conditioning_signature_matches_contract() -> None:
+    from comfy_diffusion.controlnet import lotus_conditioning
+
+    signature = inspect.signature(lotus_conditioning)
+    assert str(signature) == "(model: 'Any', image: 'Any') -> 'Any'"
+
+
+def test_lotus_conditioning_lazily_imports_lotus_node(monkeypatch: Any) -> None:
+    expected_cond = [["prompt_embeds", {}]]
+
+    _install_fake_nodes_lotus(monkeypatch, lambda: [expected_cond])
+
+    from comfy_diffusion.controlnet import lotus_conditioning
+
+    result = lotus_conditioning(model=object(), image=object())
+    assert result is expected_cond
+
+
+def test_lotus_conditioning_returns_conditioning_tensor(monkeypatch: Any) -> None:
+    conditioning = [["embed", {"pooled": "value"}]]
+
+    _install_fake_nodes_lotus(monkeypatch, lambda: [conditioning])
+
+    from comfy_diffusion.controlnet import lotus_conditioning
+
+    result = lotus_conditioning(model=object(), image=object())
+    assert result is conditioning
+
+
+def test_lotus_conditioning_in_module_all() -> None:
+    assert "lotus_conditioning" in controlnet_module.__all__
+
+
+def test_lotus_conditioning_does_not_import_comfy_at_module_level() -> None:
+    result = _run_python(
+        "import json\n"
+        "import sys\n"
+        "import comfy_diffusion\n"
+        "baseline_modules = set(sys.modules)\n"
+        "from comfy_diffusion.controlnet import lotus_conditioning\n"
+        "post_modules = set(sys.modules)\n"
+        "new_modules = sorted(post_modules - baseline_modules)\n"
+        "payload = {\n"
+        "  'func_name': lotus_conditioning.__name__,\n"
+        "  'torch_loaded': 'torch' in sys.modules,\n"
+        "  'comfy_extras_loaded': 'comfy_extras.nodes_lotus' in sys.modules,\n"
+        "  'new_modules': new_modules,\n"
+        "}\n"
+        "print(json.dumps(payload))\n"
+    )
+
+    payload = json.loads(result.stdout)
+    assert payload["func_name"] == "lotus_conditioning"
     assert payload["torch_loaded"] is False
     assert payload["comfy_extras_loaded"] is False
     heavy = [
