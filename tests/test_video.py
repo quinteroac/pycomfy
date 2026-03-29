@@ -18,6 +18,7 @@ import comfy_diffusion
 import comfy_diffusion.video as video_module
 from comfy_diffusion.video import (
     get_video_components,
+    get_video_metadata,
     load_video,
     ltxv_img_to_video_inplace,
     save_video,
@@ -48,6 +49,7 @@ def test_video_module_exports_expected_entrypoints() -> None:
     assert video_module.__all__ == [
         "load_video",
         "save_video",
+        "get_video_metadata",
         "get_video_components",
         "ltxv_img_to_video_inplace",
     ]
@@ -63,14 +65,20 @@ def test_save_video_signature_matches_contract() -> None:
     assert str(signature) == "(frames: 'Any', path: 'str | Path', fps: 'float') -> 'None'"
 
 
+def test_get_video_metadata_signature_matches_contract() -> None:
+    signature = inspect.signature(get_video_metadata)
+    assert str(signature) == "(video_path: 'str | Path') -> 'dict[str, int | float]'"
+
+
 def test_get_video_components_signature_matches_contract() -> None:
     signature = inspect.signature(get_video_components)
-    assert str(signature) == "(video_path: 'str | Path') -> 'dict[str, int | float]'"
+    assert str(signature) == "(video: 'Any') -> 'tuple[Any, Any]'"
 
 
 def test_video_helpers_not_re_exported_from_package_root() -> None:
     assert not hasattr(comfy_diffusion, "load_video")
     assert not hasattr(comfy_diffusion, "save_video")
+    assert not hasattr(comfy_diffusion, "get_video_metadata")
     assert not hasattr(comfy_diffusion, "get_video_components")
 
 
@@ -208,7 +216,7 @@ def test_save_video_selects_fourcc_based_on_extension(
     assert "".join(fourcc_args[0]) == expected_fourcc
 
 
-def test_get_video_components_returns_frame_count_fps_width_height(
+def test_get_video_metadata_returns_frame_count_fps_width_height(
     monkeypatch: Any,
     tmp_path: Path,
 ) -> None:
@@ -246,10 +254,59 @@ def test_get_video_components_returns_frame_count_fps_width_height(
 
     monkeypatch.setattr(video_module, "_get_video_backend", lambda: ("cv2", FakeCv2()))
 
-    metadata = get_video_components(video_path)
+    metadata = get_video_metadata(video_path)
 
     assert metadata == {"frame_count": 300, "fps": 30.0, "width": 640, "height": 360}
     assert fake_capture.released is True
+
+
+def test_get_video_components_is_callable() -> None:
+    """AC01 — get_video_components is accessible from comfy_diffusion.video."""
+    assert callable(get_video_components)
+
+
+def test_get_video_components_lazily_imports_comfy_extras_node(
+    monkeypatch: Any,
+) -> None:
+    """AC02 — lazily imports comfy_extras.nodes_video.GetVideoComponents."""
+    sentinel_images = object()
+    sentinel_audio = object()
+
+    class FakeGetVideoComponents:
+        @classmethod
+        def execute(cls, video: Any) -> tuple[Any, ...]:
+            return (sentinel_images, sentinel_audio, 24.0)
+
+    monkeypatch.setattr(
+        video_module, "_get_get_video_components_type", lambda: FakeGetVideoComponents
+    )
+
+    result = get_video_components(object())
+
+    assert result[0] is sentinel_images
+    assert result[1] is sentinel_audio
+
+
+def test_get_video_components_returns_images_and_audio_tuple(
+    monkeypatch: Any,
+) -> None:
+    """AC03 — returns a (images_tensor, audio) tuple."""
+    img_tensor = object()
+    audio_obj = object()
+
+    class FakeGetVideoComponents:
+        @classmethod
+        def execute(cls, video: Any) -> tuple[Any, ...]:
+            return (img_tensor, audio_obj, 30.0)
+
+    monkeypatch.setattr(
+        video_module, "_get_get_video_components_type", lambda: FakeGetVideoComponents
+    )
+
+    images, audio = get_video_components(object())
+
+    assert images is img_tensor
+    assert audio is audio_obj
 
 
 def test_get_video_backend_raises_clear_error_when_video_extra_is_missing(
@@ -405,12 +462,13 @@ def test_import_comfy_diffusion_video_has_no_cv2_or_imageio_side_effects() -> No
         "import sys\n"
         "import comfy_diffusion\n"
         "baseline_modules = set(sys.modules)\n"
-        "from comfy_diffusion.video import load_video, save_video, get_video_components\n"
+        "from comfy_diffusion.video import load_video, save_video, get_video_metadata, get_video_components\n"
         "post_modules = set(sys.modules)\n"
         "new_modules = sorted(post_modules - baseline_modules)\n"
         "payload = {\n"
         "  'load_video': load_video.__name__,\n"
         "  'save_video': save_video.__name__,\n"
+        "  'get_video_metadata': get_video_metadata.__name__,\n"
         "  'get_video_components': get_video_components.__name__,\n"
         "  'cv2_loaded': 'cv2' in sys.modules,\n"
         "  'imageio_loaded': any(m.startswith('imageio') for m in sys.modules),\n"
@@ -422,6 +480,7 @@ def test_import_comfy_diffusion_video_has_no_cv2_or_imageio_side_effects() -> No
     payload = json.loads(result.stdout)
     assert payload["load_video"] == "load_video"
     assert payload["save_video"] == "save_video"
+    assert payload["get_video_metadata"] == "get_video_metadata"
     assert payload["get_video_components"] == "get_video_components"
     assert payload["cv2_loaded"] is False
     assert payload["imageio_loaded"] is False

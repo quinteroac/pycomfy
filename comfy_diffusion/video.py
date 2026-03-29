@@ -24,7 +24,7 @@ def _get_video_backend() -> tuple[str, Any]:
         raise ModuleNotFoundError(
             "Video I/O requires optional dependencies. Install with "
             "`comfy-diffusion[video]` to enable `load_video`, `save_video`, "
-            "and `get_video_components`."
+            "and `get_video_metadata`."
         ) from error
 
 
@@ -198,7 +198,7 @@ def save_video(frames: Any, path: str | Path, fps: float) -> None:
         writer.close()
 
 
-def get_video_components(video_path: str | Path) -> dict[str, int | float]:
+def get_video_metadata(video_path: str | Path) -> dict[str, int | float]:
     """Return frame count, fps, width, and height for a video."""
     path = Path(video_path)
     backend_name, backend = _get_video_backend()
@@ -247,6 +247,28 @@ def get_video_components(video_path: str | Path) -> dict[str, int | float]:
         "width": int(width),
         "height": int(height),
     }
+
+
+def _get_get_video_components_type() -> Any:
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    from comfy_extras.nodes_video import GetVideoComponents
+
+    return GetVideoComponents
+
+
+def get_video_components(video: Any) -> tuple[Any, Any]:
+    """Decompose a video into its frame images and audio track.
+
+    Lazily imports and calls ``comfy_extras.nodes_video.GetVideoComponents``.
+
+    Returns ``(images_tensor, audio)`` matching the node's output order.
+    """
+    get_video_components_type = _get_get_video_components_type()
+    result = get_video_components_type.execute(video)
+    raw = getattr(result, "result", result)
+    return raw[0], raw[1]
 
 
 def ltxv_img_to_video_inplace(
@@ -298,6 +320,7 @@ def ltxv_img_to_video_inplace(
 __all__ = [
     "load_video",
     "save_video",
+    "get_video_metadata",
     "get_video_components",
     "ltxv_img_to_video_inplace",
 ]

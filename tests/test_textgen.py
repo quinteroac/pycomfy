@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 import comfy_diffusion.textgen as textgen_module
-from comfy_diffusion.textgen import generate_ltx2_prompt, generate_text
+from comfy_diffusion.textgen import generate_ltx2_prompt, generate_text, text_generate_ltx2_prompt
 
 
 def _repo_root() -> Path:
@@ -38,7 +38,8 @@ def _run_python(code: str) -> subprocess.CompletedProcess[str]:
 def test_textgen_module_exports_generate_text() -> None:
     assert generate_text.__name__ == "generate_text"
     assert generate_ltx2_prompt.__name__ == "generate_ltx2_prompt"
-    assert textgen_module.__all__ == ["generate_text", "generate_ltx2_prompt"]
+    assert text_generate_ltx2_prompt.__name__ == "text_generate_ltx2_prompt"
+    assert textgen_module.__all__ == ["generate_text", "generate_ltx2_prompt", "text_generate_ltx2_prompt"]
 
 
 def test_generate_text_signature_matches_contract() -> None:
@@ -295,3 +296,118 @@ def test_textgen_import_has_no_torch_or_comfy_side_effects() -> None:
     assert payload["torch_loaded"] is False
     assert payload["comfy_loaded"] is False
     assert payload["heavy"] == []
+
+
+def test_text_generate_ltx2_prompt_is_callable() -> None:
+    assert callable(text_generate_ltx2_prompt)
+
+
+def test_text_generate_ltx2_prompt_lazy_imports_node(monkeypatch: Any) -> None:
+    """The node is imported inside the function body, not at module import time."""
+    import sys
+
+    # Ensure the module is not already loaded
+    monkeypatch.delitem(sys.modules, "comfy_extras.nodes_textgen", raising=False)
+
+    # Confirm module not loaded before call
+    assert "comfy_extras.nodes_textgen" not in sys.modules
+
+    class FakeNodeOutput:
+        def __init__(self, value: str) -> None:
+            self._value = value
+
+        def __getitem__(self, index: int) -> str:
+            return self._value
+
+    class FakeTextGenerateLTX2Prompt:
+        calls: list[dict[str, Any]] = []
+
+        @classmethod
+        def execute(cls, **kwargs: Any) -> FakeNodeOutput:
+            cls.calls.append(kwargs)
+            return FakeNodeOutput("enhanced prompt")
+
+    fake_module = type(sys)("comfy_extras.nodes_textgen")
+    fake_module.TextGenerateLTX2Prompt = FakeTextGenerateLTX2Prompt  # type: ignore[attr-defined]
+    fake_parent = type(sys)("comfy_extras")
+    fake_parent.nodes_textgen = fake_module  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "comfy_extras", fake_parent)
+    monkeypatch.setitem(sys.modules, "comfy_extras.nodes_textgen", fake_module)
+
+    result = text_generate_ltx2_prompt("a cat", "clip_model", seed=7)
+
+    assert result == "enhanced prompt"
+    assert len(FakeTextGenerateLTX2Prompt.calls) == 1
+    call = FakeTextGenerateLTX2Prompt.calls[0]
+    assert call["clip"] == "clip_model"
+    assert call["prompt"] == "a cat"
+    assert call["max_length"] == 256
+    assert call["image"] is None
+    assert call["sampling_mode"]["sampling_mode"] == "on"
+    assert call["sampling_mode"]["seed"] == 7
+
+
+def test_text_generate_ltx2_prompt_returns_node_result(monkeypatch: Any) -> None:
+    """Returns the first element from the node output."""
+    import sys
+
+    class FakeNodeOutput:
+        def __getitem__(self, index: int) -> str:
+            return "node_output_string"
+
+    class FakeNode:
+        @classmethod
+        def execute(cls, **kwargs: Any) -> FakeNodeOutput:
+            return FakeNodeOutput()
+
+    fake_module = type(sys)("comfy_extras.nodes_textgen")
+    fake_module.TextGenerateLTX2Prompt = FakeNode  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "comfy_extras", type(sys)("comfy_extras"))
+    monkeypatch.setitem(sys.modules, "comfy_extras.nodes_textgen", fake_module)
+
+    result = text_generate_ltx2_prompt("prompt", "clip")
+    assert result == "node_output_string"
+
+
+def test_text_generate_ltx2_prompt_with_do_sample_false(monkeypatch: Any) -> None:
+    """When do_sample=False, sampling_mode key is 'off' and no sampling params forwarded."""
+    import sys
+
+    captured: list[dict[str, Any]] = []
+
+    class FakeNodeOutput:
+        def __getitem__(self, index: int) -> str:
+            return "result"
+
+    class FakeNode:
+        @classmethod
+        def execute(cls, **kwargs: Any) -> FakeNodeOutput:
+            captured.append(kwargs)
+            return FakeNodeOutput()
+
+    fake_module = type(sys)("comfy_extras.nodes_textgen")
+    fake_module.TextGenerateLTX2Prompt = FakeNode  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "comfy_extras", type(sys)("comfy_extras"))
+    monkeypatch.setitem(sys.modules, "comfy_extras.nodes_textgen", fake_module)
+
+    text_generate_ltx2_prompt("prompt", "clip", do_sample=False)
+
+    assert captured[0]["sampling_mode"] == {"sampling_mode": "off"}
+
+
+def test_text_generate_ltx2_prompt_no_comfy_import_at_module_level() -> None:
+    """Importing textgen must not trigger comfy_extras.nodes_textgen import."""
+    result = _run_python(
+        "import json\n"
+        "import sys\n"
+        "import comfy_diffusion\n"
+        "baseline_modules = set(sys.modules)\n"
+        "from comfy_diffusion import textgen\n"
+        "post_modules = set(sys.modules)\n"
+        "new_modules = sorted(post_modules - baseline_modules)\n"
+        "nodes_textgen_loaded = 'comfy_extras.nodes_textgen' in post_modules\n"
+        "payload = {'nodes_textgen_loaded': nodes_textgen_loaded}\n"
+        "print(json.dumps(payload))\n"
+    )
+    payload = json.loads(result.stdout)
+    assert payload["nodes_textgen_loaded"] is False

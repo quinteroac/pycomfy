@@ -121,9 +121,87 @@ def set_union_controlnet_type(control_net: Any, type: str) -> Any:
     return control_net
 
 
+def _get_lotus_conditioning_type() -> Any:
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    from comfy_extras.nodes_lotus import LotusConditioning
+
+    return LotusConditioning
+
+
+def _get_ltxv_add_guide_type() -> Any:
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    from comfy_extras.nodes_lt import LTXVAddGuide
+
+    return LTXVAddGuide
+
+
+def _unwrap_node_output(output: Any) -> Any:
+    result = getattr(output, "result", output)
+    return result[0]
+
+
+def lotus_conditioning(model: Any, image: Any) -> Any:
+    """Apply Lotus depth-model conditioning for depth-to-video generation.
+
+    Wraps ComfyUI's ``LotusConditioning`` node, which uses a frozen CLIP encoder
+    and inlined null-conditioning tensors to produce the required conditioning
+    format for Lotus-based depth pipelines (e.g. LTX depth-to-video).
+
+    Args:
+        model: The diffusion model (accepted for API consistency; Lotus conditioning
+            is model-architecture-agnostic and uses hardcoded frozen encoder values).
+        image: The input image tensor (accepted for API consistency; conditioning
+            values are pre-computed from the frozen Lotus encoder).
+
+    Returns:
+        Conditioning tensor compatible with standard ComfyUI conditioning inputs.
+    """
+    lotus_conditioning_type = _get_lotus_conditioning_type()
+    return _unwrap_node_output(lotus_conditioning_type.execute())
+
+
+def ltxv_add_guide(
+    conditioning: Any,
+    image: Any,
+    mask: Any,
+    strength: float,
+    start_percent: float,
+    end_percent: float,
+) -> Any:
+    """Add guide-frame conditioning for spatially controlled LTXV video generation.
+
+    Wraps ComfyUI's ``LTXVAddGuide`` node. Injects a guide image into the
+    conditioning tensor so the sampler respects the spatial reference frames
+    (e.g. canny, depth, or pose control images).
+
+    Args:
+        conditioning: Positive conditioning tensor to attach guide frames to.
+        image: Guide image tensor (B, H, W, C).
+        mask: Guide mask tensor, or ``None`` for full-frame guidance.
+        strength: Guide strength in [0.0, 1.0].
+        start_percent: Temporal start fraction in [0.0, 1.0].
+        end_percent: Temporal end fraction in [0.0, 1.0].
+
+    Returns:
+        Updated conditioning tensor with guide frame metadata injected.
+    """
+    ltxv_add_guide_type = _get_ltxv_add_guide_type()
+    return _unwrap_node_output(
+        ltxv_add_guide_type.execute(
+            conditioning, image, mask, strength, start_percent, end_percent
+        )
+    )
+
+
 __all__ = [
     "load_controlnet",
     "load_diff_controlnet",
     "apply_controlnet",
     "set_union_controlnet_type",
+    "lotus_conditioning",
+    "ltxv_add_guide",
 ]

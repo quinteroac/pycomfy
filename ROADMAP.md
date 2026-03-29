@@ -61,7 +61,7 @@ Expose the three nodes that block all ltx2 and ltx23 pipelines.
 
 ---
 
-### Phase 3 — LTX2 / LTX3 Base Pipelines
+### Phase 3 — LTX2 / LTX3 Base Pipelines [DONE]
 
 - `ltx2/video_ltx2_t2v` — Text to Video (LTX 2.0) ✅ it_000024
 - `ltx2/video_ltx2_t2v_distilled` — Text to Video distilled
@@ -70,7 +70,7 @@ Expose the three nodes that block all ltx2 and ltx23 pipelines.
 - `ltx2/video_ltx2_i2v_lora` — Image to Video with LoRA
 - `ltx23/video_ltx2_3_t2v` — Text to Video (LTX 2.3)
 - `ltx23/video_ltx2_3_i2v` — Image to Video (LTX 2.3)
-- `ltx23/video_ltx2_3_flf2v` — First-Last-Frame to Video ⚠️ deferred: requires Phase 4 nodes (LTXVAddGuide, LTXVCropGuides, LTXVConditioning, LTXVConcatAVLatent)
+- `ltx23/video_ltx2_3_flf2v` — First-Last-Frame to Video 
 
 ---
 

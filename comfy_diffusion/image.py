@@ -57,6 +57,60 @@ def _get_image_composite_masked_type() -> Any:
     return ImageCompositeMasked
 
 
+def _get_resize_image_mask_node_type() -> Any:
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    from comfy_extras.nodes_post_processing import ResizeImageMaskNode
+
+    return ResizeImageMaskNode
+
+
+def _get_empty_image_type() -> Any:
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    from nodes import EmptyImage
+
+    return EmptyImage
+
+
+def _get_canny_type() -> Any:
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    from comfy_extras.nodes_canny import Canny
+
+    return Canny
+
+
+def _get_image_invert_type() -> Any:
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    from nodes import ImageInvert
+
+    return ImageInvert
+
+
+def _get_math_expression_node_type() -> Any:
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    from comfy_extras.nodes_math import MathExpressionNode
+
+    return MathExpressionNode
+
+
+def _get_resize_images_by_longer_edge_node_type() -> Any:
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    from comfy_extras.nodes_dataset import ResizeImagesByLongerEdgeNode
+
+    return ResizeImagesByLongerEdgeNode
+
+
 def _get_ltxv_preprocess_dependencies() -> tuple[Any, Any]:
     from ._runtime import ensure_comfyui_on_path
 
@@ -228,6 +282,68 @@ def ltxv_preprocess(image: Any, width: int, height: int) -> Any:
     return _unwrap_node_output(ltxv_preprocess_type.execute(resized, img_compression=35))
 
 
+def resize_image_mask(
+    image: Any,
+    mask: Any,
+    width: int,
+    height: int,
+    interpolation: str = "bilinear",
+) -> tuple[Any, Any]:
+    """Resize an image and its mask to the given dimensions in a single call."""
+    resize_image_mask_node_type = _get_resize_image_mask_node_type()
+    result = resize_image_mask_node_type.execute(
+        image=image,
+        mask=mask,
+        width=width,
+        height=height,
+        interpolation=interpolation,
+    )
+    raw = getattr(result, "result", result)
+    return raw[0], raw[1]
+
+
+def resize_images_by_longer_edge(images: Any, size: int) -> Any:
+    """Resize images so the longer dimension equals `size`, preserving aspect ratio."""
+    resize_images_by_longer_edge_node_type = _get_resize_images_by_longer_edge_node_type()
+    return _unwrap_node_output(
+        resize_images_by_longer_edge_node_type.execute(images=images, size=size)
+    )
+
+
+def empty_image(width: int, height: int, batch_size: int = 1, color: int = 0) -> Any:
+    """Create a solid-color blank image tensor with shape (batch_size, height, width, 3)."""
+    empty_image_type = _get_empty_image_type()
+    return _unwrap_node_output(
+        empty_image_type.execute(width=width, height=height, batch_size=batch_size, color=color)
+    )
+
+
+def canny(image: Any, low_threshold: int = 100, high_threshold: int = 200) -> Any:
+    """Apply Canny edge detection and return an image tensor of the same spatial dimensions."""
+    canny_type = _get_canny_type()
+    return _unwrap_node_output(
+        canny_type.execute(
+            image=image,
+            low_threshold=low_threshold / 255.0,
+            high_threshold=high_threshold / 255.0,
+        )
+    )
+
+
+def image_invert(image: Any) -> Any:
+    """Invert pixel values (1 − pixel) of an image tensor."""
+    image_invert_type = _get_image_invert_type()
+    return _unwrap_node_output(image_invert_type.execute(image=image))
+
+
+def math_expression(expression: str, **kwargs: float) -> int | float:
+    """Evaluate a parameterised math expression via ComfyMathExpression."""
+    math_expression_node_type = _get_math_expression_node_type()
+    result = math_expression_node_type.execute(expression=expression, values=kwargs)
+    raw = getattr(result, "result", result)
+    return cast("int | float", raw[0])
+
+
 __all__ = [
     "load_image",
     "image_to_tensor",
@@ -237,4 +353,10 @@ __all__ = [
     "repeat_image_batch",
     "image_composite_masked",
     "ltxv_preprocess",
+    "resize_image_mask",
+    "resize_images_by_longer_edge",
+    "empty_image",
+    "math_expression",
+    "canny",
+    "image_invert",
 ]

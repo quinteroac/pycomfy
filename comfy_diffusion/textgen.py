@@ -158,4 +158,54 @@ def generate_ltx2_prompt(
     )
 
 
-__all__ = ["generate_text", "generate_ltx2_prompt"]
+def _get_text_generate_ltx2_prompt_type() -> Any:
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    from comfy_extras.nodes_textgen import TextGenerateLTX2Prompt
+
+    return TextGenerateLTX2Prompt
+
+
+def text_generate_ltx2_prompt(
+    text: str,
+    model: Any,
+    seed: int = 0,
+    *,
+    image: Any | None = None,
+    max_length: int = 256,
+    do_sample: bool = True,
+    temperature: float = 0.7,
+    top_k: int = 64,
+    top_p: float = 0.95,
+    min_p: float = 0.05,
+    repetition_penalty: float = 1.05,
+) -> Any:
+    """Expand or refine a prompt for LTX23 via the ComfyUI TextGenerateLTX2Prompt node."""
+    text_generate_ltx2_prompt_type = _get_text_generate_ltx2_prompt_type()
+
+    if do_sample:
+        sampling_mode = {
+            "sampling_mode": "on",
+            "temperature": temperature,
+            "top_k": top_k,
+            "top_p": top_p,
+            "min_p": min_p,
+            "repetition_penalty": repetition_penalty,
+            "seed": seed,
+        }
+    else:
+        sampling_mode = {"sampling_mode": "off"}
+
+    result = text_generate_ltx2_prompt_type.execute(
+        clip=model,
+        prompt=text,
+        max_length=max_length,
+        sampling_mode=sampling_mode,
+        image=image,
+    )
+    raw = getattr(result, "result", result)
+    return raw[0]
+
+
+__all__ = ["generate_text", "generate_ltx2_prompt", "text_generate_ltx2_prompt"]

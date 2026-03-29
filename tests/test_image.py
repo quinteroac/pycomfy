@@ -12,14 +12,20 @@ from PIL import Image, ImageOps, features
 import comfy_diffusion
 import comfy_diffusion.image as image_module
 from comfy_diffusion.image import (
+    canny,
+    empty_image,
     image_composite_masked,
     image_from_batch,
+    image_invert,
     image_pad_for_outpaint,
     image_to_tensor,
     image_upscale_with_model,
     load_image,
     ltxv_preprocess,
+    math_expression,
     repeat_image_batch,
+    resize_image_mask,
+    resize_images_by_longer_edge,
 )
 
 
@@ -207,6 +213,12 @@ def test_image_module_exports_expected_entrypoints() -> None:
         "repeat_image_batch",
         "image_composite_masked",
         "ltxv_preprocess",
+        "resize_image_mask",
+        "resize_images_by_longer_edge",
+        "empty_image",
+        "math_expression",
+        "canny",
+        "image_invert",
     ]
 
 
@@ -765,3 +777,544 @@ def test_image_pad_for_outpaint_applies_feathering_gradient() -> None:
     assert mask_values[1][1] == 1.0
     assert mask_values[2][2] == 0.25
     assert mask_values[3][3] == 0.0
+
+
+def test_resize_image_mask_signature_matches_contract() -> None:
+    signature = inspect.signature(resize_image_mask)
+    expected = (
+        "(image: 'Any', mask: 'Any', width: 'int', height: 'int',"
+        " interpolation: 'str' = 'bilinear') -> 'tuple[Any, Any]'"
+    )
+    assert str(signature) == expected
+
+
+def test_resize_image_mask_not_re_exported_from_package_root() -> None:
+    assert not hasattr(comfy_diffusion, "resize_image_mask")
+
+
+def test_resize_image_mask_calls_comfy_node_and_returns_image_mask_tuple(
+    monkeypatch: Any,
+) -> None:
+    image_in = object()
+    mask_in = object()
+    image_out = object()
+    mask_out = object()
+
+    received: dict[str, Any] = {}
+
+    class FakeResizeImageMaskNode:
+        @classmethod
+        def execute(
+            cls,
+            *,
+            image: Any,
+            mask: Any,
+            width: int,
+            height: int,
+            interpolation: str,
+        ) -> tuple[Any, Any]:
+            received["image"] = image
+            received["mask"] = mask
+            received["width"] = width
+            received["height"] = height
+            received["interpolation"] = interpolation
+            return (image_out, mask_out)
+
+    monkeypatch.setattr(
+        image_module,
+        "_get_resize_image_mask_node_type",
+        lambda: FakeResizeImageMaskNode,
+    )
+
+    result_image, result_mask = resize_image_mask(image_in, mask_in, 512, 768)
+
+    assert result_image is image_out
+    assert result_mask is mask_out
+    assert received["image"] is image_in
+    assert received["mask"] is mask_in
+    assert received["width"] == 512
+    assert received["height"] == 768
+    assert received["interpolation"] == "bilinear"
+
+
+def test_resize_image_mask_passes_custom_interpolation(monkeypatch: Any) -> None:
+    image_in = object()
+    mask_in = object()
+    image_out = object()
+    mask_out = object()
+
+    received: dict[str, Any] = {}
+
+    class FakeResizeImageMaskNode:
+        @classmethod
+        def execute(
+            cls,
+            *,
+            image: Any,
+            mask: Any,
+            width: int,
+            height: int,
+            interpolation: str,
+        ) -> tuple[Any, Any]:
+            received["interpolation"] = interpolation
+            return (image_out, mask_out)
+
+    monkeypatch.setattr(
+        image_module,
+        "_get_resize_image_mask_node_type",
+        lambda: FakeResizeImageMaskNode,
+    )
+
+    resize_image_mask(image_in, mask_in, 256, 256, interpolation="nearest")
+
+    assert received["interpolation"] == "nearest"
+
+
+def test_resize_image_mask_supports_comfyui_v3_result_output(monkeypatch: Any) -> None:
+    image_out = object()
+    mask_out = object()
+
+    class FakeNodeOutput:
+        def __init__(self, result: tuple[Any, ...]) -> None:
+            self.result = result
+
+    class FakeResizeImageMaskNode:
+        @classmethod
+        def execute(cls, *, image: Any, mask: Any, width: int, height: int, interpolation: str) -> Any:
+            return FakeNodeOutput((image_out, mask_out))
+
+    monkeypatch.setattr(
+        image_module,
+        "_get_resize_image_mask_node_type",
+        lambda: FakeResizeImageMaskNode,
+    )
+
+    result_image, result_mask = resize_image_mask(object(), object(), 64, 64)
+
+    assert result_image is image_out
+    assert result_mask is mask_out
+
+
+def test_resize_images_by_longer_edge_signature_matches_contract() -> None:
+    signature = inspect.signature(resize_images_by_longer_edge)
+    assert str(signature) == "(images: 'Any', size: 'int') -> 'Any'"
+
+
+def test_resize_images_by_longer_edge_not_re_exported_from_package_root() -> None:
+    assert not hasattr(comfy_diffusion, "resize_images_by_longer_edge")
+
+
+def test_resize_images_by_longer_edge_delegates_to_comfyui_node(monkeypatch: Any) -> None:
+    input_images = object()
+    expected_output = _FakeTorch.tensor(
+        [[[[0.5, 0.5, 0.5], [0.5, 0.5, 0.5]]]],
+        dtype=_FakeTorch.float32,
+    )
+    captured: dict[str, Any] = {}
+
+    class FakeResizeImagesByLongerEdgeNode:
+        @classmethod
+        def execute(cls, *, images: Any, size: int) -> tuple[Any]:
+            captured["images"] = images
+            captured["size"] = size
+            return (expected_output,)
+
+    monkeypatch.setattr(
+        image_module,
+        "_get_resize_images_by_longer_edge_node_type",
+        lambda: FakeResizeImagesByLongerEdgeNode,
+    )
+
+    result = resize_images_by_longer_edge(input_images, 512)
+
+    assert captured["images"] is input_images
+    assert captured["size"] == 512
+    assert result is expected_output
+
+
+def test_resize_images_by_longer_edge_supports_comfyui_v3_result_output(
+    monkeypatch: Any,
+) -> None:
+    expected_output = object()
+
+    class FakeNodeOutput:
+        def __init__(self, result: tuple[Any, ...]) -> None:
+            self.result = result
+
+    class FakeResizeImagesByLongerEdgeNode:
+        @classmethod
+        def execute(cls, *, images: Any, size: int) -> Any:
+            return FakeNodeOutput((expected_output,))
+
+    monkeypatch.setattr(
+        image_module,
+        "_get_resize_images_by_longer_edge_node_type",
+        lambda: FakeResizeImagesByLongerEdgeNode,
+    )
+
+    result = resize_images_by_longer_edge(object(), 768)
+
+    assert result is expected_output
+
+
+# ---------------------------------------------------------------------------
+# empty_image tests (US-003)
+# ---------------------------------------------------------------------------
+
+
+def test_empty_image_is_callable() -> None:
+    assert callable(empty_image)
+
+
+def test_empty_image_signature_matches_contract() -> None:
+    signature = inspect.signature(empty_image)
+    assert str(signature) == "(width: 'int', height: 'int', batch_size: 'int' = 1, color: 'int' = 0) -> 'Any'"
+
+
+def test_empty_image_not_re_exported_from_package_root() -> None:
+    assert not hasattr(comfy_diffusion, "empty_image")
+
+
+def test_empty_image_delegates_to_nodes_empty_image(monkeypatch: Any) -> None:
+    expected_output = _FakeTorch.tensor(
+        [[[[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]]],
+        dtype=_FakeTorch.float32,
+    )
+    captured: dict[str, Any] = {}
+
+    class FakeEmptyImage:
+        @classmethod
+        def execute(cls, *, width: int, height: int, batch_size: int, color: int) -> tuple[Any]:
+            captured["width"] = width
+            captured["height"] = height
+            captured["batch_size"] = batch_size
+            captured["color"] = color
+            return (expected_output,)
+
+    monkeypatch.setattr(
+        image_module,
+        "_get_empty_image_type",
+        lambda: FakeEmptyImage,
+    )
+
+    result = empty_image(width=64, height=32, batch_size=2, color=0xFF0000)
+
+    assert captured["width"] == 64
+    assert captured["height"] == 32
+    assert captured["batch_size"] == 2
+    assert captured["color"] == 0xFF0000
+    assert result is expected_output
+
+
+def test_empty_image_default_args(monkeypatch: Any) -> None:
+    captured: dict[str, Any] = {}
+
+    class FakeEmptyImage:
+        @classmethod
+        def execute(cls, *, width: int, height: int, batch_size: int, color: int) -> tuple[Any]:
+            captured["batch_size"] = batch_size
+            captured["color"] = color
+            return (object(),)
+
+    monkeypatch.setattr(image_module, "_get_empty_image_type", lambda: FakeEmptyImage)
+
+    empty_image(width=8, height=8)
+
+    assert captured["batch_size"] == 1
+    assert captured["color"] == 0
+
+
+def test_empty_image_returns_tensor(monkeypatch: Any) -> None:
+    expected = _FakeTorch.tensor(
+        [[[[1.0, 1.0, 1.0]]]],
+        dtype=_FakeTorch.float32,
+    )
+
+    class FakeEmptyImage:
+        @classmethod
+        def execute(cls, *, width: int, height: int, batch_size: int, color: int) -> tuple[Any]:
+            return (expected,)
+
+    monkeypatch.setattr(image_module, "_get_empty_image_type", lambda: FakeEmptyImage)
+
+    result = empty_image(width=1, height=1)
+
+    assert result is expected
+    assert result.shape == (1, 1, 1, 3)
+
+
+def test_empty_image_supports_comfyui_v3_result_output(monkeypatch: Any) -> None:
+    expected_output = object()
+
+    class FakeNodeOutput:
+        def __init__(self, result: tuple[Any, ...]) -> None:
+            self.result = result
+
+    class FakeEmptyImage:
+        @classmethod
+        def execute(cls, *, width: int, height: int, batch_size: int, color: int) -> Any:
+            return FakeNodeOutput((expected_output,))
+
+    monkeypatch.setattr(image_module, "_get_empty_image_type", lambda: FakeEmptyImage)
+
+    result = empty_image(width=4, height=4)
+
+    assert result is expected_output
+
+
+def test_math_expression_signature_matches_contract() -> None:
+    signature = inspect.signature(math_expression)
+    assert str(signature) == "(expression: 'str', **kwargs: 'float') -> 'int | float'"
+
+
+def test_math_expression_not_re_exported_from_package_root() -> None:
+    assert not hasattr(comfy_diffusion, "math_expression")
+
+
+def test_math_expression_evaluates_expression_with_kwargs(monkeypatch: Any) -> None:
+    class FakeMathExpressionNode:
+        @classmethod
+        def execute(cls, *, expression: str, values: dict) -> tuple:
+            result = eval(expression, {}, values)  # noqa: S307 — test-only eval
+            return (float(result), int(result))
+
+    monkeypatch.setattr(
+        image_module,
+        "_get_math_expression_node_type",
+        lambda: FakeMathExpressionNode,
+    )
+
+    result = math_expression("a * fps", a=10.0, fps=24.0)
+
+    assert result == pytest.approx(240.0)
+
+
+def test_math_expression_returns_numeric_type(monkeypatch: Any) -> None:
+    class FakeMathExpressionNode:
+        @classmethod
+        def execute(cls, *, expression: str, values: dict) -> tuple:
+            return (42.0, 42)
+
+    monkeypatch.setattr(
+        image_module,
+        "_get_math_expression_node_type",
+        lambda: FakeMathExpressionNode,
+    )
+
+    result = math_expression("42")
+
+    assert isinstance(result, (int, float))
+
+
+def test_math_expression_supports_comfyui_v3_node_output(monkeypatch: Any) -> None:
+    class FakeNodeOutput:
+        def __init__(self, result: tuple) -> None:
+            self.result = result
+
+    class FakeMathExpressionNode:
+        @classmethod
+        def execute(cls, *, expression: str, values: dict) -> Any:
+            return FakeNodeOutput((7.5, 7))
+
+    monkeypatch.setattr(
+        image_module,
+        "_get_math_expression_node_type",
+        lambda: FakeMathExpressionNode,
+    )
+
+    result = math_expression("x + y", x=3.0, y=4.5)
+
+    assert result == pytest.approx(7.5)
+
+
+def test_math_expression_lazy_import_uses_comfy_extras() -> None:
+    # Verify structurally that the getter defers the import to call time.
+    import inspect as _inspect
+
+    src = _inspect.getsource(image_module._get_math_expression_node_type)
+    assert "comfy_extras.nodes_math" in src
+    assert "MathExpressionNode" in src
+
+
+# ---------------------------------------------------------------------------
+# canny tests (US-007)
+# ---------------------------------------------------------------------------
+
+
+def test_canny_is_callable() -> None:
+    assert callable(canny)
+
+
+def test_canny_signature_matches_contract() -> None:
+    signature = inspect.signature(canny)
+    assert str(signature) == (
+        "(image: 'Any', low_threshold: 'int' = 100, high_threshold: 'int' = 200) -> 'Any'"
+    )
+
+
+def test_canny_not_re_exported_from_package_root() -> None:
+    assert not hasattr(comfy_diffusion, "canny")
+
+
+def test_canny_lazy_import_uses_comfy_extras_nodes_canny() -> None:
+    import inspect as _inspect
+
+    src = _inspect.getsource(image_module._get_canny_type)
+    assert "comfy_extras.nodes_canny" in src
+    assert "Canny" in src
+
+
+def test_canny_returns_same_spatial_dimensions(monkeypatch: Any) -> None:
+    input_image = _FakeTorch.tensor(
+        [[[[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]], [[0.7, 0.8, 0.9], [0.0, 0.1, 0.2]]]],
+        dtype=_FakeTorch.float32,
+    )
+    # Output has the same (B, H, W, C) shape as input.
+    expected_output = _FakeTorch.tensor(
+        [[[[0.5, 0.5, 0.5], [0.5, 0.5, 0.5]], [[0.5, 0.5, 0.5], [0.5, 0.5, 0.5]]]],
+        dtype=_FakeTorch.float32,
+    )
+    captured: dict[str, Any] = {}
+
+    class FakeCanny:
+        @classmethod
+        def execute(cls, *, image: Any, low_threshold: float, high_threshold: float) -> tuple[Any]:
+            captured["image"] = image
+            captured["low_threshold"] = low_threshold
+            captured["high_threshold"] = high_threshold
+            return (expected_output,)
+
+    monkeypatch.setattr(image_module, "_get_canny_type", lambda: FakeCanny)
+
+    result = canny(input_image)
+
+    assert result is expected_output
+    assert result.shape == input_image.shape
+
+
+def test_canny_normalises_thresholds_to_zero_one_range(monkeypatch: Any) -> None:
+    captured: dict[str, Any] = {}
+
+    class FakeCanny:
+        @classmethod
+        def execute(cls, *, image: Any, low_threshold: float, high_threshold: float) -> tuple[Any]:
+            captured["low_threshold"] = low_threshold
+            captured["high_threshold"] = high_threshold
+            return (image,)
+
+    monkeypatch.setattr(image_module, "_get_canny_type", lambda: FakeCanny)
+
+    canny(object(), low_threshold=100, high_threshold=200)
+
+    assert captured["low_threshold"] == pytest.approx(100 / 255.0)
+    assert captured["high_threshold"] == pytest.approx(200 / 255.0)
+
+
+def test_canny_default_threshold_values(monkeypatch: Any) -> None:
+    captured: dict[str, Any] = {}
+
+    class FakeCanny:
+        @classmethod
+        def execute(cls, *, image: Any, low_threshold: float, high_threshold: float) -> tuple[Any]:
+            captured["low_threshold"] = low_threshold
+            captured["high_threshold"] = high_threshold
+            return (image,)
+
+    monkeypatch.setattr(image_module, "_get_canny_type", lambda: FakeCanny)
+
+    canny(object())
+
+    assert captured["low_threshold"] == pytest.approx(100 / 255.0)
+    assert captured["high_threshold"] == pytest.approx(200 / 255.0)
+
+
+
+# ---------------------------------------------------------------------------
+# image_invert tests (US-010)
+# ---------------------------------------------------------------------------
+
+
+def test_image_invert_is_callable() -> None:
+    assert callable(image_invert)
+
+
+def test_image_invert_signature_matches_contract() -> None:
+    signature = inspect.signature(image_invert)
+    assert str(signature) == "(image: 'Any') -> 'Any'"
+
+
+def test_image_invert_not_re_exported_from_package_root() -> None:
+    assert not hasattr(comfy_diffusion, "image_invert")
+
+
+def test_image_invert_lazy_import_uses_nodes_image_invert() -> None:
+    import inspect as _inspect
+
+    src = _inspect.getsource(image_module._get_image_invert_type)
+    assert "nodes" in src
+    assert "ImageInvert" in src
+    assert "ensure_comfyui_on_path" in src
+
+
+def test_image_invert_delegates_to_comfy_node(monkeypatch: Any) -> None:
+    input_image = _FakeTorch.tensor(
+        [[[[0.2, 0.4, 0.6]]]],
+        dtype=_FakeTorch.float32,
+    )
+    expected_output = _FakeTorch.tensor(
+        [[[[0.8, 0.6, 0.4]]]],
+        dtype=_FakeTorch.float32,
+    )
+    captured: dict[str, Any] = {}
+
+    class FakeImageInvert:
+        @classmethod
+        def execute(cls, *, image: Any) -> tuple[Any]:
+            captured["image"] = image
+            return (expected_output,)
+
+    monkeypatch.setattr(image_module, "_get_image_invert_type", lambda: FakeImageInvert)
+
+    result = image_invert(input_image)
+
+    assert captured["image"] is input_image
+    assert result is expected_output
+
+
+def test_image_invert_returns_image_tensor(monkeypatch: Any) -> None:
+    output = _FakeTorch.tensor(
+        [[[[0.5, 0.5, 0.5]]]],
+        dtype=_FakeTorch.float32,
+    )
+
+    class FakeImageInvert:
+        @classmethod
+        def execute(cls, *, image: Any) -> tuple[Any]:
+            return (output,)
+
+    monkeypatch.setattr(image_module, "_get_image_invert_type", lambda: FakeImageInvert)
+
+    result = image_invert(object())
+
+    assert isinstance(result, _FakeTensor)
+    assert result.shape == (1, 1, 1, 3)
+
+
+def test_image_invert_supports_comfyui_v3_result_output(monkeypatch: Any) -> None:
+    expected_output = object()
+
+    class FakeNodeOutput:
+        def __init__(self, result: tuple[Any, ...]) -> None:
+            self.result = result
+
+    class FakeImageInvert:
+        @classmethod
+        def execute(cls, *, image: Any) -> Any:
+            return FakeNodeOutput((expected_output,))
+
+    monkeypatch.setattr(image_module, "_get_image_invert_type", lambda: FakeImageInvert)
+
+    result = image_invert(object())
+
+    assert result is expected_output
+
