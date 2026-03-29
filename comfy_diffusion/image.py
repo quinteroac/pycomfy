@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 from typing import Any, cast
 
@@ -119,6 +120,15 @@ def _get_ltxv_preprocess_dependencies() -> tuple[Any, Any]:
     from comfy_extras.nodes_lt import LTXVPreprocess
 
     return comfy.utils, LTXVPreprocess
+
+
+def _get_comfy_utils() -> Any:
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    import comfy.utils
+
+    return comfy.utils
 
 
 def _unwrap_node_output(output: Any) -> Any:
@@ -344,6 +354,19 @@ def math_expression(expression: str, **kwargs: float) -> int | float:
     return cast("int | float", raw[0])
 
 
+def image_scale_by(image: Any, upscale_method: str = "lanczos", scale_by: float = 1.0) -> Any:
+    """Scale an IMAGE tensor by a float factor using the specified upscale method.
+
+    Output dimensions are ``floor(input_h * scale_by)`` × ``floor(input_w * scale_by)``.
+    """
+    comfy_utils = _get_comfy_utils()
+    samples = image.movedim(-1, 1)
+    width = math.floor(samples.shape[3] * scale_by)
+    height = math.floor(samples.shape[2] * scale_by)
+    scaled = comfy_utils.common_upscale(samples, width, height, upscale_method, "disabled")
+    return scaled.movedim(1, -1)
+
+
 __all__ = [
     "load_image",
     "image_to_tensor",
@@ -359,4 +382,5 @@ __all__ = [
     "math_expression",
     "canny",
     "image_invert",
+    "image_scale_by",
 ]
