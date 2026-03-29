@@ -85,6 +85,7 @@ def test_controlnet_module_exports_only_load_controlnet() -> None:
         "set_union_controlnet_type",
         "lotus_conditioning",
         "ltxv_add_guide",
+        "lotus_depth_pass",
     ]
 
 
