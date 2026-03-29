@@ -28,6 +28,7 @@ from comfy_diffusion.sampling import (
     sample,
     sample_advanced,
     sample_custom,
+    set_first_sigma,
     split_sigmas,
     split_sigmas_denoise,
     video_linear_cfg_guidance,
@@ -91,6 +92,7 @@ def test_sampling_public_api_exports_all_entrypoints() -> None:
         "split_sigmas",
         "split_sigmas_denoise",
         "get_sampler",
+        "set_first_sigma",
         "manual_sigmas",
     ]
 
@@ -1638,3 +1640,73 @@ def test_manual_sigmas_torch_import_is_deferred() -> None:
     payload = _json.loads(result.stdout)
     assert payload["func_name"] == "manual_sigmas"
     assert payload["torch_loaded"] is False
+
+
+def test_set_first_sigma_signature_matches_contract() -> None:
+    signature = inspect.signature(set_first_sigma)
+
+    assert str(signature) == "(sigmas: 'Any', sigma_override: 'float') -> 'Any'"
+
+
+def test_set_first_sigma_wraps_set_first_sigma_execute(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sigmas = object()
+    modified_sigmas = object()
+    recorded: dict[str, Any] = {}
+
+    class FakeSetFirstSigma:
+        @classmethod
+        def execute(cls, received_sigmas: Any, received_sigma_override: float) -> tuple[Any]:
+            recorded["args"] = (received_sigmas, received_sigma_override)
+            return (modified_sigmas,)
+
+    monkeypatch.setattr(
+        sampling_module,
+        "_get_set_first_sigma_type",
+        lambda: FakeSetFirstSigma,
+    )
+    result = set_first_sigma(sigmas, 14.5)
+
+    assert recorded["args"] == (sigmas, 14.5)
+    assert result is modified_sigmas
+
+
+def test_set_first_sigma_extracts_from_nodeoutput_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    modified_sigmas = object()
+
+    class FakeNodeOutput:
+        def __init__(self, value: Any) -> None:
+            self.result = (value,)
+
+    class FakeSetFirstSigma:
+        @classmethod
+        def execute(cls, *args: Any) -> FakeNodeOutput:
+            return FakeNodeOutput(modified_sigmas)
+
+    monkeypatch.setattr(
+        sampling_module,
+        "_get_set_first_sigma_type",
+        lambda: FakeSetFirstSigma,
+    )
+    result = set_first_sigma(object(), 7.25)
+
+    assert result is modified_sigmas
+
+
+def test_set_first_sigma_lazy_import_does_not_load_comfy_at_module_level() -> None:
+    result = _run_python(
+        "import json, sys\n"
+        "from comfy_diffusion.sampling import set_first_sigma\n"
+        "comfy_extras_loaded = 'comfy_extras' in sys.modules\n"
+        "print(json.dumps({'comfy_extras_loaded': comfy_extras_loaded, 'func_name': set_first_sigma.__name__}))\n"
+    )
+
+    import json as _json
+
+    payload = _json.loads(result.stdout)
+    assert payload["func_name"] == "set_first_sigma"
+    assert payload["comfy_extras_loaded"] is False
+

@@ -147,6 +147,16 @@ def _get_ksampler_select_type() -> Any:
     return KSamplerSelect
 
 
+def _get_set_first_sigma_type() -> Any:
+    """Resolve ComfyUI SetFirstSigma implementation at call time."""
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    from comfy_extras.nodes_custom_sampler import SetFirstSigma
+
+    return SetFirstSigma
+
+
 def _unwrap_node_output(output: Any) -> Any:
     """Return the first node output value from ComfyUI V3 or tuple-style APIs."""
     result = getattr(output, "result", output)
@@ -317,6 +327,12 @@ def get_sampler(sampler_name: str) -> Any:
     return _unwrap_node_output(ksampler_select_type.execute(sampler_name))
 
 
+def set_first_sigma(sigmas: Any, sigma_override: float) -> Any:
+    """Override the first sigma in a sigmas tensor using ComfyUI SetFirstSigma."""
+    set_first_sigma_type = _get_set_first_sigma_type()
+    return _unwrap_node_output(set_first_sigma_type.execute(sigmas, sigma_override))
+
+
 def manual_sigmas(sigmas: str) -> Any:
     """Parse a string of numeric values into a ``torch.FloatTensor`` of sigmas.
 
@@ -449,5 +465,6 @@ __all__ = [
     "split_sigmas",
     "split_sigmas_denoise",
     "get_sampler",
+    "set_first_sigma",
     "manual_sigmas",
 ]
