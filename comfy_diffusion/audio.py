@@ -226,6 +226,45 @@ def empty_ace_step_15_latent_audio(seconds: float, batch_size: int = 1) -> dict[
     return {"samples": latent, "type": "audio"}
 
 
+def load_audio(
+    path: str | "Path",
+    start_time: float = 0.0,
+    duration: float | None = None,
+) -> dict[str, Any]:
+    """Load an audio file from disk into the ComfyUI AUDIO dict format.
+
+    Args:
+        path: Path to the audio file.
+        start_time: Start offset in seconds (default 0.0).
+        duration: Duration in seconds to load, or ``None`` to load until end of file.
+
+    Returns:
+        A dict with keys ``"waveform"`` (torch.Tensor, shape ``[1, C, N]``) and
+        ``"sample_rate"`` (int), compatible with ``ltxv_audio_vae_encode``.
+    """
+    import math
+    from pathlib import Path as _Path
+
+    import torchaudio
+
+    audio_path = _Path(path)
+    # Load full audio first to get sample_rate, then slice.
+    # torchaudio.info() is not available in torchaudio >=2.9 so we avoid it.
+    waveform, sample_rate = torchaudio.load(str(audio_path))
+
+    if start_time > 0.0 or duration is not None:
+        start_frame = max(0, math.floor(start_time * sample_rate))
+        if duration is not None:
+            end_frame = start_frame + max(0, math.ceil(duration * sample_rate))
+            waveform = waveform[:, start_frame:end_frame]
+        else:
+            waveform = waveform[:, start_frame:]
+
+    # Shape: [C, N] → [1, C, N]
+    waveform = waveform.unsqueeze(0)
+    return {"waveform": waveform, "sample_rate": sample_rate}
+
+
 __all__ = [
     "ltxv_audio_vae_encode",
     "ltxv_audio_vae_decode",
@@ -234,4 +273,5 @@ __all__ = [
     "empty_ace_step_15_latent_audio",
     "ltxv_concat_av_latent",
     "ltxv_separate_av_latent",
+    "load_audio",
 ]

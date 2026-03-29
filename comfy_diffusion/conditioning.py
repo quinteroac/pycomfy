@@ -1805,7 +1805,6 @@ __all__ = [
     "wan22_image_to_video_latent",
     "ltxv_img_to_video",
     "ltxv_conditioning",
-    "ltxv_add_guide",
     "ltxv_crop_guides",
     "conditioning_combine",
     "conditioning_set_mask",

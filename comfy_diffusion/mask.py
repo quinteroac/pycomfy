@@ -234,10 +234,28 @@ def _feather_mask_loop(
     return torch.tensor(feathered_values, dtype=torch.float32)
 
 
+def solid_mask(value: float, width: int, height: int) -> Any:
+    """Create a solid (uniform value) mask tensor of shape ``(1, height, width)``.
+
+    Args:
+        value: Fill value in ``[0.0, 1.0]``.  ``0.0`` = preserve original
+            latent during inpainting; ``1.0`` = fully denoise.
+        width: Mask width in pixels (or latent columns).
+        height: Mask height in pixels (or latent rows).
+
+    Returns:
+        A ``torch.Tensor`` of shape ``(1, height, width)`` filled with *value*.
+    """
+    import torch
+
+    return torch.full((1, height, width), value, dtype=torch.float32)
+
+
 __all__ = [
     "load_image_mask",
     "image_to_mask",
     "mask_to_image",
     "grow_mask",
     "feather_mask",
+    "solid_mask",
 ]

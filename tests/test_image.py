@@ -13,11 +13,13 @@ import comfy_diffusion
 import comfy_diffusion.image as image_module
 from comfy_diffusion.image import (
     canny,
+    dw_preprocessor,
     empty_image,
     image_composite_masked,
     image_from_batch,
     image_invert,
     image_pad_for_outpaint,
+    image_scale_by,
     image_to_tensor,
     image_upscale_with_model,
     load_image,
@@ -219,6 +221,8 @@ def test_image_module_exports_expected_entrypoints() -> None:
         "math_expression",
         "canny",
         "image_invert",
+        "image_scale_by",
+        "dw_preprocessor",
     ]
 
 
@@ -308,7 +312,7 @@ def test_image_composite_masked_not_re_exported_from_package_root() -> None:
 
 def test_ltxv_preprocess_signature_matches_contract() -> None:
     signature = inspect.signature(ltxv_preprocess)
-    assert str(signature) == "(image: 'Any', width: 'int', height: 'int') -> 'Any'"
+    assert str(signature) == "(image: 'Any', width: 'int', height: 'int', img_compression: 'int' = 35) -> 'Any'"
 
 
 def test_ltxv_preprocess_not_re_exported_from_package_root() -> None:
@@ -1318,3 +1322,335 @@ def test_image_invert_supports_comfyui_v3_result_output(monkeypatch: Any) -> Non
 
     assert result is expected_output
 
+
+
+# ---------------------------------------------------------------------------
+# image_scale_by tests (US-001)
+# ---------------------------------------------------------------------------
+
+
+def test_image_scale_by_is_callable() -> None:
+    assert callable(image_scale_by)
+
+
+def test_image_scale_by_signature_matches_contract() -> None:
+    signature = inspect.signature(image_scale_by)
+    assert str(signature) == "(image: 'Any', upscale_method: 'str' = 'lanczos', scale_by: 'float' = 1.0) -> 'Any'"
+
+
+def test_image_scale_by_in_dunder_all() -> None:
+    assert "image_scale_by" in image_module.__all__
+
+
+def test_image_scale_by_not_re_exported_from_package_root() -> None:
+    assert not hasattr(comfy_diffusion, "image_scale_by")
+
+
+def test_image_scale_by_uses_floor_for_dimensions(monkeypatch: Any) -> None:
+    """AC02: result dimensions are floor(h * scale_by) × floor(w * scale_by)."""
+    import math
+
+    calls: dict[str, Any] = {}
+
+    # Input tensor: batch=1, h=7, w=5, channels=3 → movedim(-1,1) → (1,3,7,5)
+    class _FakeInputTensor:
+        @property
+        def shape(self) -> tuple[int, int, int, int]:
+            return (1, 3, 7, 5)
+
+        def movedim(self, src: int, dst: int) -> _FakeMovedTensor:
+            return _FakeMovedTensor()
+
+    class _FakeMovedTensor:
+        @property
+        def shape(self) -> tuple[int, int, int, int]:
+            # After movedim(-1,1): (1, 3, h, w) = (1, 3, 7, 5)
+            return (1, 3, 7, 5)
+
+        def movedim(self, src: int, dst: int) -> object:
+            return _FakeOutput()
+
+    class _FakeOutput:
+        pass
+
+    class _FakeComfyUtils:
+        @staticmethod
+        def common_upscale(
+            samples: Any, width: int, height: int, upscale_method: str, crop: str
+        ) -> _FakeMovedTensor:
+            calls["width"] = width
+            calls["height"] = height
+            calls["upscale_method"] = upscale_method
+            calls["crop"] = crop
+            return _FakeMovedTensor()
+
+    monkeypatch.setattr(image_module, "_get_comfy_utils", lambda: _FakeComfyUtils)
+
+    scale_by = 0.5
+    image_scale_by(_FakeInputTensor(), upscale_method="lanczos", scale_by=scale_by)
+
+    assert calls["width"] == math.floor(5 * scale_by)
+    assert calls["height"] == math.floor(7 * scale_by)
+    assert calls["upscale_method"] == "lanczos"
+    assert calls["crop"] == "disabled"
+
+
+def test_image_scale_by_returns_image_tensor(monkeypatch: Any) -> None:
+    """AC01: function is callable and returns an IMAGE tensor."""
+    expected_output = object()
+
+    class _FakeInputTensor:
+        @property
+        def shape(self) -> tuple[int, int, int, int]:
+            return (1, 3, 4, 4)
+
+        def movedim(self, src: int, dst: int) -> _FakeMovedTensor:
+            return _FakeMovedTensor()
+
+    class _FakeMovedTensor:
+        @property
+        def shape(self) -> tuple[int, int, int, int]:
+            return (1, 3, 4, 4)
+
+        def movedim(self, src: int, dst: int) -> object:
+            return expected_output
+
+    class _FakeComfyUtils:
+        @staticmethod
+        def common_upscale(
+            samples: Any, width: int, height: int, upscale_method: str, crop: str
+        ) -> _FakeMovedTensor:
+            return _FakeMovedTensor()
+
+    monkeypatch.setattr(image_module, "_get_comfy_utils", lambda: _FakeComfyUtils)
+
+    result = image_scale_by(_FakeInputTensor(), upscale_method="lanczos", scale_by=0.5)
+
+    assert result is expected_output
+
+
+def test_image_scale_by_lazy_import_no_top_level_torch_or_comfy() -> None:
+    """AC04: no top-level torch/comfy imports in image.py."""
+    import ast
+    import pathlib
+
+    source = pathlib.Path(image_module.__file__).read_text()
+    tree = ast.parse(source)
+
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            # These must not appear at module top level (i.e. directly inside Module body)
+            pass
+
+    top_level_imports = [
+        n
+        for n in tree.body
+        if isinstance(n, (ast.Import, ast.ImportFrom))
+    ]
+    forbidden = {"torch", "comfy"}
+    for imp in top_level_imports:
+        if isinstance(imp, ast.Import):
+            for alias in imp.names:
+                assert alias.name.split(".")[0] not in forbidden, (
+                    f"Forbidden top-level import: {alias.name}"
+                )
+        elif isinstance(imp, ast.ImportFrom) and imp.module:
+            assert imp.module.split(".")[0] not in forbidden, (
+                f"Forbidden top-level import: {imp.module}"
+            )
+
+
+# ---------------------------------------------------------------------------
+# dw_preprocessor tests (US-002)
+# ---------------------------------------------------------------------------
+
+
+def test_dw_preprocessor_is_callable() -> None:
+    assert callable(dw_preprocessor)
+
+
+def test_dw_preprocessor_signature_matches_contract() -> None:
+    signature = inspect.signature(dw_preprocessor)
+    assert str(signature) == (
+        "(image: 'Any', detect_hand: 'bool' = True, detect_body: 'bool' = True, "
+        "detect_face: 'bool' = True, resolution: 'int' = 512) -> 'Any'"
+    )
+
+
+def test_dw_preprocessor_in_dunder_all() -> None:
+    assert "dw_preprocessor" in image_module.__all__
+
+
+def test_dw_preprocessor_not_re_exported_from_package_root() -> None:
+    assert not hasattr(comfy_diffusion, "dw_preprocessor")
+
+
+def test_dw_preprocessor_returns_tensor_with_same_batch_dim(monkeypatch: Any) -> None:
+    """AC01: returns IMAGE tensor with same batch dimension as input."""
+    import numpy as np
+
+    batch_size = 3
+
+    class _FakeTensorItem:
+        def cpu(self) -> "_FakeTensorItem":
+            return self
+
+        def numpy(self) -> Any:
+            return np.zeros((4, 4, 3), dtype=np.float32)
+
+    class _FakeInputTensor:
+        @property
+        def shape(self) -> tuple[int, int, int, int]:
+            return (batch_size, 4, 4, 3)
+
+        def __getitem__(self, idx: int) -> _FakeTensorItem:
+            return _FakeTensorItem()
+
+    pose_frame = np.zeros((4, 4, 3), dtype=np.uint8)
+
+    class _FakeDWposeDetector:
+        def __call__(
+            self,
+            image: Any,
+            *,
+            detect_resolution: int,
+            image_resolution: int,
+            include_body: bool,
+            include_hand: bool,
+            include_face: bool,
+            return_pil: bool,
+        ) -> Any:
+            return pose_frame
+
+    stacked: list[Any] = []
+
+    class _FakeTorchModule:
+        float32 = "float32"
+
+        @staticmethod
+        def from_numpy(arr: Any) -> "_FakeTorchModule._FrameTensor":
+            return _FakeTorchModule._FrameTensor(arr)
+
+        @staticmethod
+        def stack(frames: list[Any], dim: int) -> object:
+            stacked.extend(frames)
+            return object()
+
+        class _FrameTensor:
+            def __init__(self, arr: Any) -> None:
+                self._arr = arr
+
+            def float(self) -> "_FakeTorchModule._FrameTensor":
+                return self
+
+            def __truediv__(self, val: float) -> "_FakeTorchModule._FrameTensor":
+                return self
+
+    monkeypatch.setattr(
+        image_module,
+        "_get_dw_preprocessor_deps",
+        lambda: (_FakeDWposeDetector, _FakeTorchModule, np),
+    )
+
+    result = dw_preprocessor(_FakeInputTensor())
+
+    assert len(stacked) == batch_size
+
+
+def test_dw_preprocessor_passes_flags_to_detector(monkeypatch: Any) -> None:
+    """Verify detect_hand/body/face and resolution are forwarded to the detector."""
+    import numpy as np
+
+    calls: dict[str, Any] = {}
+
+    class _FakeTensorItem:
+        def cpu(self) -> "_FakeTensorItem":
+            return self
+
+        def numpy(self) -> Any:
+            return np.zeros((4, 4, 3), dtype=np.float32)
+
+    class _FakeInputTensor:
+        @property
+        def shape(self) -> tuple[int, int, int, int]:
+            return (1, 4, 4, 3)
+
+        def __getitem__(self, idx: int) -> _FakeTensorItem:
+            return _FakeTensorItem()
+
+    class _FakeDWposeDetector:
+        def __call__(
+            self,
+            image: Any,
+            *,
+            detect_resolution: int,
+            image_resolution: int,
+            include_body: bool,
+            include_hand: bool,
+            include_face: bool,
+            return_pil: bool,
+        ) -> Any:
+            calls["detect_resolution"] = detect_resolution
+            calls["image_resolution"] = image_resolution
+            calls["include_body"] = include_body
+            calls["include_hand"] = include_hand
+            calls["include_face"] = include_face
+            calls["return_pil"] = return_pil
+            return np.zeros((4, 4, 3), dtype=np.uint8)
+
+    class _FakeTorchModule:
+        @staticmethod
+        def from_numpy(arr: Any) -> Any:
+            class _T:
+                def float(self) -> "_T":
+                    return self
+
+                def __truediv__(self, val: float) -> "_T":
+                    return self
+
+            return _T()
+
+        @staticmethod
+        def stack(frames: list[Any], dim: int) -> object:
+            return object()
+
+    monkeypatch.setattr(
+        image_module,
+        "_get_dw_preprocessor_deps",
+        lambda: (_FakeDWposeDetector, _FakeTorchModule, np),
+    )
+
+    dw_preprocessor(
+        _FakeInputTensor(),
+        detect_hand=False,
+        detect_body=True,
+        detect_face=True,
+        resolution=256,
+    )
+
+    assert calls["detect_resolution"] == 256
+    assert calls["image_resolution"] == 256
+    assert calls["include_body"] is True
+    assert calls["include_hand"] is False
+    assert calls["include_face"] is True
+    assert calls["return_pil"] is False
+
+
+def test_dw_preprocessor_lazy_import_no_top_level_controlnet_aux() -> None:
+    """AC03: controlnet_aux is not imported at module top level."""
+    import ast
+    import pathlib
+
+    source = pathlib.Path(image_module.__file__).read_text()
+    tree = ast.parse(source)
+    top_level_imports = [n for n in tree.body if isinstance(n, (ast.Import, ast.ImportFrom))]
+    for imp in top_level_imports:
+        if isinstance(imp, ast.Import):
+            for alias in imp.names:
+                assert "controlnet_aux" not in alias.name, (
+                    "controlnet_aux must not be imported at module top level"
+                )
+        elif isinstance(imp, ast.ImportFrom) and imp.module:
+            assert "controlnet_aux" not in imp.module, (
+                "controlnet_aux must not be imported at module top level"
+            )

@@ -197,6 +197,66 @@ def ltxv_add_guide(
     )
 
 
+def lotus_depth_pass(lotus_model: Any, lotus_vae: Any, image: Any) -> Any:
+    """Run the full Lotus depth-estimation pass on an image batch.
+
+    Wraps the "Image to Depth Map (Lotus)" subgraph from the LTX-2 depth
+    workflow:  VAEEncode → LotusConditioning + DisableNoise + BasicGuider +
+    BasicScheduler(1 step, normal) + SetFirstSigma(999) →
+    SamplerCustomAdvanced(euler) → VAEDecode → ImageInvert.
+
+    Parameters
+    ----------
+    lotus_model :
+        Lotus depth diffusion model loaded via ``ModelManager.load_unet()``.
+    lotus_vae :
+        Standard SD VAE (``vae-ft-mse-840000-ema-pruned``) loaded via
+        ``ModelManager.load_vae()``.
+    image :
+        ComfyUI IMAGE tensor (B, H, W, C) of input frames at half resolution.
+
+    Returns
+    -------
+    Any
+        ComfyUI IMAGE tensor of inverted depth maps, same resolution as input.
+    """
+    from comfy_diffusion.image import image_invert
+    from comfy_diffusion.sampling import (
+        basic_guider,
+        basic_scheduler,
+        disable_noise,
+        get_sampler,
+        sample_custom,
+        set_first_sigma,
+    )
+
+    # Encode input image using the standard SD VAE (Lotus uses 4-channel latents).
+    latent: dict[str, Any] = {"samples": lotus_vae.encode(image[:, :, :, :3])}
+
+    # Lotus conditioning uses a frozen encoder with hardcoded null tensors.
+    cond = lotus_conditioning(lotus_model, image)
+
+    # BasicScheduler (1 step, normal schedule) + override first sigma to 999.
+    sigmas = basic_scheduler(lotus_model, "normal", 1, 1.0)
+    sigmas = set_first_sigma(sigmas, 999.0)
+
+    # BasicGuider (unconditioned, matches the reference workflow).
+    guider = basic_guider(lotus_model, cond)
+
+    # DisableNoise: tells the sampler to skip noise injection.
+    noise = disable_noise()
+
+    # Run one denoising step with the euler sampler.
+    sampler = get_sampler("euler")
+    output, _ = sample_custom(noise, guider, sampler, sigmas, latent)
+
+    # Decode latent → image tensor using the same lotus VAE.
+    depth_tensor = lotus_vae.decode(output["samples"])
+
+    # Invert the depth map to match LTX-2 depth-control LoRA convention.
+    return image_invert(depth_tensor)
+
+
 __all__ = [
     "load_controlnet",
     "load_diff_controlnet",
@@ -204,4 +264,5 @@ __all__ = [
     "set_union_controlnet_type",
     "lotus_conditioning",
     "ltxv_add_guide",
+    "lotus_depth_pass",
 ]

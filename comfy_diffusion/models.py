@@ -242,12 +242,7 @@ class ModelManager:
             raise FileNotFoundError(f"ltxv audio vae file not found: {p}")
         else:
             name = path if isinstance(path, str) else p.name
-            # Try vae/ first, fall back to checkpoints/ for bundled checkpoints.
-            vae_full = folder_paths.get_full_path("vae", name)
-            if vae_full:
-                checkpoint_path = vae_full
-            else:
-                checkpoint_path = folder_paths.get_full_path_or_raise("checkpoints", name)
+            checkpoint_path = folder_paths.get_full_path_or_raise("checkpoints", name)
 
         state_dict, metadata = comfy_utils.load_torch_file(
             checkpoint_path, return_metadata=True
@@ -553,6 +548,7 @@ def model_sampling_aura_flow(model: Any, shift: float) -> Any:
 __all__ = [
     "CheckpointResult",
     "ModelManager",
+    "load_latent_upscale_model",
     "model_sampling_aura_flow",
     "model_sampling_flux",
     "model_sampling_sd3",

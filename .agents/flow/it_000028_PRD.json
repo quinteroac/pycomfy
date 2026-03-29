@@ -1,0 +1,312 @@
+{
+  "goals": [
+    "Expose the three missing node wrappers (`image_scale_by`, `dw_preprocessor`,",
+    "Implement all four Phase 5 pipelines as faithful translations of their official",
+    "Provide a runnable example script for each pipeline.",
+    "Maintain CPU-only test coverage so CI remains green.",
+    "Update `comfy_diffusion/pipelines/video/ltx/ltx23/__init__.py` to export `ia2v`."
+  ],
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Scale an image by a factor (ImageScaleBy)",
+      "description": "As a developer composing an LTX2 ControlNet pipeline, I want an `image_scale_by(image, upscale_method, scale_by)` function so that I can resize an image tensor by a float scale factor without specifying absolute dimensions.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-001-AC01",
+          "text": "`comfy_diffusion.image.image_scale_by(image, upscale_method=\"lanczos\", scale_by=0.5)` is callable and returns an IMAGE tensor."
+        },
+        {
+          "id": "US-001-AC02",
+          "text": "Result dimensions equal `floor(input_h * scale_by)` × `floor(input_w * scale_by)`."
+        },
+        {
+          "id": "US-001-AC03",
+          "text": "Function is added to `image.__all__`."
+        },
+        {
+          "id": "US-001-AC04",
+          "text": "Lazy-import pattern followed (no top-level `comfy.*` / `torch` imports)."
+        },
+        {
+          "id": "US-001-AC05",
+          "text": "Typecheck / lint passes."
+        }
+      ]
+    },
+    {
+      "id": "US-002",
+      "title": "Estimate pose from image (DWPreprocessor)",
+      "description": "As a developer composing an LTX2 pose-to-video pipeline, I want a `dw_preprocessor(image, detect_hand, detect_body, detect_face, resolution)` function so that I can generate a pose map from an input image for ControlNet conditioning.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-002-AC01",
+          "text": "`comfy_diffusion.image.dw_preprocessor(image, detect_hand=True, detect_body=True, detect_face=True, resolution=512)` is callable and returns an IMAGE tensor with the same batch dimension as the input."
+        },
+        {
+          "id": "US-002-AC02",
+          "text": "Function is added to `image.__all__`."
+        },
+        {
+          "id": "US-002-AC03",
+          "text": "Lazy-import pattern followed."
+        },
+        {
+          "id": "US-002-AC04",
+          "text": "Typecheck / lint passes."
+        }
+      ]
+    },
+    {
+      "id": "US-003",
+      "title": "Load audio from disk (LoadAudio)",
+      "description": "As a developer composing an LTX23 ia2v pipeline, I want a `load_audio(path, start_time, duration)` function so that I can load an audio file into the ComfyUI-compatible `AUDIO` dict format required by `ltxv_audio_vae_encode`.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-003-AC01",
+          "text": "`comfy_diffusion.audio.load_audio(path)` is callable with an optional `start_time: float = 0.0` and `duration: float | None = None`, and returns a `dict` with keys `\"waveform\"` (torch.Tensor, shape `[1, C, N]`) and `\"sample_rate\"` (int)."
+        },
+        {
+          "id": "US-003-AC02",
+          "text": "Implementation uses `torchaudio` (consistent with the architecture rule: external libs over node ports for audio I/O)."
+        },
+        {
+          "id": "US-003-AC03",
+          "text": "Function is added to `audio.__all__`."
+        },
+        {
+          "id": "US-003-AC04",
+          "text": "Typecheck / lint passes."
+        }
+      ]
+    },
+    {
+      "id": "US-004",
+      "title": "LTX2 Canny-to-Video pipeline",
+      "description": "As a developer, I want `comfy_diffusion.pipelines.video.ltx.ltx2.canny` with `manifest()` and `run(...)` so that I can generate a video from a text prompt and a reference video using Canny edge-detection ControlNet conditioning (LTX 2.0 dev fp8).",
+      "acceptanceCriteria": [
+        {
+          "id": "US-004-AC01",
+          "text": "`manifest()` returns a list of `ModelEntry` objects matching exactly the"
+        },
+        {
+          "id": "US-004-AC02",
+          "text": "`run(models_dir, prompt, video_path, ...)` executes end-to-end following the"
+        },
+        {
+          "id": "US-004-AC03",
+          "text": "Sampler, sigmas, and CFG values match the workflow (`euler_ancestral`, manual"
+        },
+        {
+          "id": "US-004-AC04",
+          "text": "`run()` accepts keyword arguments: `prompt`, `negative_prompt`, `video_path`,"
+        },
+        {
+          "id": "US-004-AC05",
+          "text": "Pipeline file is at `comfy_diffusion/pipelines/video/ltx/ltx2/canny.py`."
+        },
+        {
+          "id": "US-004-AC06",
+          "text": "Typecheck / lint passes."
+        }
+      ]
+    },
+    {
+      "id": "US-005",
+      "title": "LTX2 Depth-to-Video pipeline",
+      "description": "As a developer, I want `comfy_diffusion.pipelines.video.ltx.ltx2.depth` with `manifest()` and `run(...)` so that I can generate a video from a reference video using Lotus depth-map ControlNet conditioning (LTX 2.0 dev fp8).",
+      "acceptanceCriteria": [
+        {
+          "id": "US-005-AC01",
+          "text": "`manifest()` returns entries for the **active** (non-bypassed) models from"
+        },
+        {
+          "id": "US-005-AC02",
+          "text": "`run(models_dir, prompt, video_path, ...)` follows the workflow order:"
+        },
+        {
+          "id": "US-005-AC03",
+          "text": "Sampler / scheduler values match the workflow: Lotus pass uses `euler` +"
+        },
+        {
+          "id": "US-005-AC04",
+          "text": "`run()` accepts: `prompt`, `negative_prompt`, `video_path`, `seed`, `width`,"
+        },
+        {
+          "id": "US-005-AC05",
+          "text": "Pipeline file is at `comfy_diffusion/pipelines/video/ltx/ltx2/depth.py`."
+        },
+        {
+          "id": "US-005-AC06",
+          "text": "Typecheck / lint passes."
+        }
+      ]
+    },
+    {
+      "id": "US-006",
+      "title": "LTX2 Pose-to-Video pipeline",
+      "description": "As a developer, I want `comfy_diffusion.pipelines.video.ltx.ltx2.pose` with `manifest()` and `run(...)` so that I can generate a video from a reference video using DWPreprocessor pose estimation ControlNet conditioning (LTX 2.0 dev fp8).",
+      "acceptanceCriteria": [
+        {
+          "id": "US-006-AC01",
+          "text": "`manifest()` returns entries for all active models from"
+        },
+        {
+          "id": "US-006-AC02",
+          "text": "`run(models_dir, prompt, video_path, ...)` follows the workflow order:"
+        },
+        {
+          "id": "US-006-AC03",
+          "text": "Sampler / sigmas / CFG match the pose workflow (same manual sigma pattern as"
+        },
+        {
+          "id": "US-006-AC04",
+          "text": "`run()` accepts: `prompt`, `negative_prompt`, `video_path`, `first_frame_path`,"
+        },
+        {
+          "id": "US-006-AC05",
+          "text": "Pipeline file is at `comfy_diffusion/pipelines/video/ltx/ltx2/pose.py`."
+        },
+        {
+          "id": "US-006-AC06",
+          "text": "Typecheck / lint passes."
+        }
+      ]
+    },
+    {
+      "id": "US-007",
+      "title": "LTX23 Image+Audio-to-Video pipeline (ia2v)",
+      "description": "As a developer, I want `comfy_diffusion.pipelines.video.ltx.ltx23.ia2v` with `manifest()` and `run(...)` so that I can generate a video jointly conditioned on a reference image and an audio file (LTX 2.3 22B dev fp8).",
+      "acceptanceCriteria": [
+        {
+          "id": "US-007-AC01",
+          "text": "`manifest()` returns entries for all active models from"
+        },
+        {
+          "id": "US-007-AC02",
+          "text": "`run(models_dir, prompt, image_path, audio_path, ...)` follows the workflow order:"
+        },
+        {
+          "id": "US-007-AC03",
+          "text": "Samplers match the workflow: pass-1 uses `euler_cfg_pp` + manual sigmas"
+        },
+        {
+          "id": "US-007-AC04",
+          "text": "`run()` accepts: `prompt`, `negative_prompt`, `image_path`, `audio_path`, `seed`,"
+        },
+        {
+          "id": "US-007-AC05",
+          "text": "Pipeline file is at `comfy_diffusion/pipelines/video/ltx/ltx23/ia2v.py`."
+        },
+        {
+          "id": "US-007-AC06",
+          "text": "`ltx23/__init__.py` updated to export `ia2v` and remove the \"Not yet implemented\""
+        },
+        {
+          "id": "US-007-AC07",
+          "text": "Typecheck / lint passes."
+        }
+      ]
+    },
+    {
+      "id": "US-008",
+      "title": "Example scripts for each pipeline",
+      "description": "As a developer, I want one runnable example script per pipeline so that I can copy-paste a working invocation and adapt it to my own project.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-008-AC01",
+          "text": "`examples/video/ltx/ltx2/canny.py` — shows `download_models(manifest(), ...)`,"
+        },
+        {
+          "id": "US-008-AC02",
+          "text": "`examples/video/ltx/ltx2/depth.py` — same pattern for depth pipeline."
+        },
+        {
+          "id": "US-008-AC03",
+          "text": "`examples/video/ltx/ltx2/pose.py` — same pattern for pose pipeline."
+        },
+        {
+          "id": "US-008-AC04",
+          "text": "`examples/video/ltx/ltx23/ia2v.py` — shows `download_models`, `run(...)` with"
+        },
+        {
+          "id": "US-008-AC05",
+          "text": "Each script accepts CLI flags `--models-dir`, `--prompt`, and pipeline-specific"
+        },
+        {
+          "id": "US-008-AC06",
+          "text": "Each script prints a clear error and usage hint if required arguments are missing."
+        },
+        {
+          "id": "US-008-AC07",
+          "text": "No script imports at module top level — all heavy imports inside `main()`."
+        }
+      ]
+    },
+    {
+      "id": "US-009",
+      "title": "CPU-only test coverage",
+      "description": "As a CI pipeline, I want CPU-only pytest tests for the new wrappers and pipeline `manifest()` calls so that CI stays green without a GPU.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-009-AC01",
+          "text": "`tests/test_image.py` (or new file) contains unit tests for `image_scale_by`"
+        },
+        {
+          "id": "US-009-AC02",
+          "text": "`tests/test_audio.py` (or new file) contains a unit test for `load_audio`"
+        },
+        {
+          "id": "US-009-AC03",
+          "text": "`tests/test_pipelines_ltx2.py` (or new file) verifies that `canny.manifest()`,"
+        },
+        {
+          "id": "US-009-AC04",
+          "text": "`tests/test_pipelines_ltx23.py` (or new file) verifies that `ia2v.manifest()`"
+        },
+        {
+          "id": "US-009-AC05",
+          "text": "`uv run pytest` passes with no failures."
+        }
+      ]
+    }
+  ],
+  "functionalRequirements": [
+    {
+      "id": "FR-1",
+      "description": "** `image_scale_by(image, upscale_method, scale_by)` wraps"
+    },
+    {
+      "id": "FR-2",
+      "description": "** `dw_preprocessor(image, detect_hand, detect_body, detect_face, resolution)`"
+    },
+    {
+      "id": "FR-3",
+      "description": "** `load_audio(path, start_time, duration)` uses `torchaudio.load` and returns"
+    },
+    {
+      "id": "FR-4",
+      "description": "** All four pipeline files export exactly two public symbols: `manifest` and"
+    },
+    {
+      "id": "FR-5",
+      "description": "** `manifest()` must list **only** models from active (non-bypassed) nodes as"
+    },
+    {
+      "id": "FR-6",
+      "description": "** `run()` node execution order must mirror the `order` field from the workflow"
+    },
+    {
+      "id": "FR-7",
+      "description": "** Example scripts must be self-contained: they `import comfy_diffusion` and"
+    },
+    {
+      "id": "FR-8",
+      "description": "** `ltx23/__init__.py.__all__` must be updated to include `\"ia2v\"`."
+    },
+    {
+      "id": "FR-9",
+      "description": "** New wrappers must be added to their respective module's `__all__`."
+    }
+  ]
+}

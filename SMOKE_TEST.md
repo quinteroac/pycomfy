@@ -157,12 +157,12 @@ print(f"OK — {len(frames)} frames")
 
 ---
 
-## ltx3_t2v — LTX-Video 2.3 (22B) Text-to-Video
+## ltx23_t2v — LTX-Video 2.3 (22B) Text-to-Video
 
 ```python
 from comfy_diffusion import check_runtime
 from comfy_diffusion.downloader import download_models
-from comfy_diffusion.pipelines.video.ltx.ltx3.t2v import manifest, run
+from comfy_diffusion.pipelines.video.ltx.ltx23.t2v import manifest, run
 
 check_runtime()
 download_models(manifest(), models_dir="/path/to/models")
@@ -176,7 +176,7 @@ frames = run(
     steps=8,
     seed=42,
 )
-frames[0].save("ltx3_t2v_smoke.png")
+frames[0].save("ltx23_t2v_smoke.png")
 print(f"OK — {len(frames)} frames")
 ```
 
@@ -184,12 +184,12 @@ print(f"OK — {len(frames)} frames")
 
 ---
 
-## ltx3_i2v — LTX-Video 2.3 (22B) Image-to-Video
+## ltx23_i2v — LTX-Video 2.3 (22B) Image-to-Video
 
 ```python
 from comfy_diffusion import check_runtime
 from comfy_diffusion.downloader import download_models
-from comfy_diffusion.pipelines.video.ltx.ltx3.i2v import manifest, run
+from comfy_diffusion.pipelines.video.ltx.ltx23.i2v import manifest, run
 
 check_runtime()
 download_models(manifest(), models_dir="/path/to/models")
@@ -205,7 +205,7 @@ frames = run(
     steps=8,
     seed=42,
 )
-frames[0].save("ltx3_i2v_smoke.png")
+frames[0].save("ltx23_i2v_smoke.png")
 print(f"OK — {len(frames)} frames")
 ```
 

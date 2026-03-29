@@ -39,15 +39,13 @@ downloader = [
     "huggingface_hub>=0.20",
     "tqdm>=4.67",
 ]
-# NOTE: [all] mirrors the union of [cuda], [video], [audio], and [downloader]. If a dep
+# NOTE: [all] mirrors the union of [cpu], [cuda], [video], and [audio]. If a dep
 # changes in one of those extras, update it here too to keep [all] in sync.
 all = [
     "torch",
     "opencv-python>=4.13.0.92",
     "imageio>=2.37.2",
     "torchaudio",
-    "huggingface_hub>=0.20",
-    "tqdm>=4.67",
 ]
 # ComfyUI runtime deps (from vendor/ComfyUI/requirements.txt via: uv add -r vendor/ComfyUI/requirements.txt --optional comfyui)
 comfyui = [

@@ -79,7 +79,7 @@ __all__ = ["manifest", "run"]
 # Canonical HuggingFace repository for LTX-Video
 # ---------------------------------------------------------------------------
 
-_HF_REPO = "Lightricks/LTX-2.3-fp8"
+_HF_REPO = "Lightricks/LTX-Video"
 
 # Relative destination paths (resolved against models_dir by download_models).
 _UNET_DEST = Path("diffusion_models") / "ltx-2.3-22b-distilled-fp8.safetensors"
@@ -117,7 +117,7 @@ def manifest() -> list[ModelEntry]:
         ),
         HFModelEntry(
             repo_id=_HF_REPO,
-            filename="gemma_3_12B_it_fp4_mixed.safetensors",
+            filename="split_files/text_encoders/gemma_3_12B_it_fp4_mixed.safetensors",
             dest=_TEXT_ENCODER_DEST,
         ),
     ]

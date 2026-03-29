@@ -201,6 +201,7 @@ def test_mask_module_exports_expected_entrypoints() -> None:
         "mask_to_image",
         "grow_mask",
         "feather_mask",
+        "solid_mask",
     ]
 
 

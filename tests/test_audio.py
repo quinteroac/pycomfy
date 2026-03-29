@@ -14,6 +14,7 @@ import comfy_diffusion.audio as audio_module
 from comfy_diffusion.audio import (
     empty_ace_step_15_latent_audio,
     encode_ace_step_15_audio,
+    load_audio,
     ltxv_audio_vae_decode,
     ltxv_audio_vae_encode,
     ltxv_concat_av_latent,
@@ -51,6 +52,7 @@ def test_audio_module_exports_ltxv_audio_vae_helpers() -> None:
         "empty_ace_step_15_latent_audio",
         "ltxv_concat_av_latent",
         "ltxv_separate_av_latent",
+        "load_audio",
     ]
 
 
@@ -666,3 +668,127 @@ def test_import_comfy_diffusion_audio_has_no_torch_or_comfy_side_effects() -> No
     assert payload["comfy_sd_loaded"] is False
     heavy = [module for module in payload["new_modules"] if module.startswith(("torch", "comfy.")) or module == "comfy"]
     assert heavy == [], f"Unexpected heavy modules loaded on import: {heavy}"
+
+
+# ---------------------------------------------------------------------------
+# load_audio tests
+# ---------------------------------------------------------------------------
+
+
+def test_load_audio_signature_matches_contract() -> None:
+    signature = inspect.signature(load_audio)
+    params = signature.parameters
+    assert "path" in params
+    assert "start_time" in params
+    assert params["start_time"].default == 0.0
+    assert "duration" in params
+    assert params["duration"].default is None
+
+
+def _make_fake_torchaudio(sample_rate: int, num_channels: int, num_samples: int) -> Any:
+    """Return a fake torchaudio module whose load() returns a fixed tensor."""
+    import sys
+
+    # Import torch inside helper so it is lazily available
+    import torch
+
+    fake_waveform = torch.zeros(num_channels, num_samples)
+
+    class FakeTorchaudio:
+        @staticmethod
+        def load(path: Any, **kwargs: Any) -> tuple[Any, int]:
+            return fake_waveform, sample_rate
+
+    return FakeTorchaudio()
+
+
+def test_load_audio_returns_waveform_dict(monkeypatch: Any) -> None:
+    """load_audio returns dict with 'waveform' [1, C, N] tensor and 'sample_rate' int."""
+    import sys
+
+    sample_rate = 8000
+    num_channels = 1
+    num_samples = 4000  # 0.5 seconds
+
+    fake_ta = _make_fake_torchaudio(sample_rate, num_channels, num_samples)
+    monkeypatch.setitem(sys.modules, "torchaudio", fake_ta)
+
+    result = load_audio("/fake/audio.wav")
+
+    assert isinstance(result, dict)
+    assert "waveform" in result
+    assert "sample_rate" in result
+    assert result["sample_rate"] == sample_rate
+    waveform = result["waveform"]
+    assert len(waveform.shape) == 3, f"Expected shape [1, C, N], got {waveform.shape}"
+    assert waveform.shape[0] == 1
+    assert waveform.shape[1] == num_channels
+    assert waveform.shape[2] == num_samples
+
+
+def test_load_audio_start_time_trims_beginning(monkeypatch: Any) -> None:
+    """start_time offsets the audio by the given number of seconds."""
+    import sys
+
+    sample_rate = 8000
+    num_channels = 1
+    num_samples = 8000  # 1 second
+
+    fake_ta = _make_fake_torchaudio(sample_rate, num_channels, num_samples)
+    monkeypatch.setitem(sys.modules, "torchaudio", fake_ta)
+
+    result = load_audio("/fake/audio.wav", start_time=0.5)
+    waveform = result["waveform"]
+    # After 0.5s offset from 1s audio, 4000 samples remain
+    assert waveform.shape[2] == 4000
+
+
+def test_load_audio_duration_limits_output(monkeypatch: Any) -> None:
+    """duration limits the number of audio frames loaded."""
+    import math
+    import sys
+
+    sample_rate = 8000
+    num_channels = 1
+    num_samples = 8000  # 1 second
+
+    fake_ta = _make_fake_torchaudio(sample_rate, num_channels, num_samples)
+    monkeypatch.setitem(sys.modules, "torchaudio", fake_ta)
+
+    result = load_audio("/fake/audio.wav", duration=0.25)
+    waveform = result["waveform"]
+    expected = math.ceil(0.25 * sample_rate)
+    assert waveform.shape[2] == expected
+
+
+def test_load_audio_start_and_duration(monkeypatch: Any) -> None:
+    """start_time + duration correctly slices the waveform."""
+    import math
+    import sys
+
+    sample_rate = 16000
+    num_channels = 2
+    num_samples = 32000  # 2 seconds
+
+    fake_ta = _make_fake_torchaudio(sample_rate, num_channels, num_samples)
+    monkeypatch.setitem(sys.modules, "torchaudio", fake_ta)
+
+    result = load_audio("/fake/audio.wav", start_time=0.5, duration=1.0)
+    waveform = result["waveform"]
+    assert waveform.shape[0] == 1
+    assert waveform.shape[1] == num_channels
+    assert waveform.shape[2] == math.ceil(1.0 * sample_rate)
+
+
+def test_load_audio_is_in_all() -> None:
+    assert "load_audio" in audio_module.__all__
+
+
+def test_load_audio_is_importable() -> None:
+    result = _run_python(
+        "from comfy_diffusion.audio import load_audio; "
+        "assert load_audio.__name__ == 'load_audio'; "
+        "print('ok')"
+    )
+    assert result.returncode == 0
+    assert result.stdout.strip() == "ok"
