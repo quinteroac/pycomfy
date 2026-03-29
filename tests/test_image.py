@@ -21,6 +21,7 @@ from comfy_diffusion.image import (
     ltxv_preprocess,
     repeat_image_batch,
     resize_image_mask,
+    resize_images_by_longer_edge,
 )
 
 
@@ -209,6 +210,7 @@ def test_image_module_exports_expected_entrypoints() -> None:
         "image_composite_masked",
         "ltxv_preprocess",
         "resize_image_mask",
+        "resize_images_by_longer_edge",
     ]
 
 
@@ -883,3 +885,65 @@ def test_resize_image_mask_supports_comfyui_v3_result_output(monkeypatch: Any) -
 
     assert result_image is image_out
     assert result_mask is mask_out
+
+
+def test_resize_images_by_longer_edge_signature_matches_contract() -> None:
+    signature = inspect.signature(resize_images_by_longer_edge)
+    assert str(signature) == "(images: 'Any', size: 'int') -> 'Any'"
+
+
+def test_resize_images_by_longer_edge_not_re_exported_from_package_root() -> None:
+    assert not hasattr(comfy_diffusion, "resize_images_by_longer_edge")
+
+
+def test_resize_images_by_longer_edge_delegates_to_comfyui_node(monkeypatch: Any) -> None:
+    input_images = object()
+    expected_output = _FakeTorch.tensor(
+        [[[[0.5, 0.5, 0.5], [0.5, 0.5, 0.5]]]],
+        dtype=_FakeTorch.float32,
+    )
+    captured: dict[str, Any] = {}
+
+    class FakeResizeImagesByLongerEdgeNode:
+        @classmethod
+        def execute(cls, *, images: Any, size: int) -> tuple[Any]:
+            captured["images"] = images
+            captured["size"] = size
+            return (expected_output,)
+
+    monkeypatch.setattr(
+        image_module,
+        "_get_resize_images_by_longer_edge_node_type",
+        lambda: FakeResizeImagesByLongerEdgeNode,
+    )
+
+    result = resize_images_by_longer_edge(input_images, 512)
+
+    assert captured["images"] is input_images
+    assert captured["size"] == 512
+    assert result is expected_output
+
+
+def test_resize_images_by_longer_edge_supports_comfyui_v3_result_output(
+    monkeypatch: Any,
+) -> None:
+    expected_output = object()
+
+    class FakeNodeOutput:
+        def __init__(self, result: tuple[Any, ...]) -> None:
+            self.result = result
+
+    class FakeResizeImagesByLongerEdgeNode:
+        @classmethod
+        def execute(cls, *, images: Any, size: int) -> Any:
+            return FakeNodeOutput((expected_output,))
+
+    monkeypatch.setattr(
+        image_module,
+        "_get_resize_images_by_longer_edge_node_type",
+        lambda: FakeResizeImagesByLongerEdgeNode,
+    )
+
+    result = resize_images_by_longer_edge(object(), 768)
+
+    assert result is expected_output

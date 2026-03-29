@@ -66,6 +66,15 @@ def _get_resize_image_mask_node_type() -> Any:
     return ResizeImageMaskNode
 
 
+def _get_resize_images_by_longer_edge_node_type() -> Any:
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    from comfy_extras.nodes_dataset import ResizeImagesByLongerEdgeNode
+
+    return ResizeImagesByLongerEdgeNode
+
+
 def _get_ltxv_preprocess_dependencies() -> tuple[Any, Any]:
     from ._runtime import ensure_comfyui_on_path
 
@@ -257,6 +266,14 @@ def resize_image_mask(
     return raw[0], raw[1]
 
 
+def resize_images_by_longer_edge(images: Any, size: int) -> Any:
+    """Resize images so the longer dimension equals `size`, preserving aspect ratio."""
+    resize_images_by_longer_edge_node_type = _get_resize_images_by_longer_edge_node_type()
+    return _unwrap_node_output(
+        resize_images_by_longer_edge_node_type.execute(images=images, size=size)
+    )
+
+
 __all__ = [
     "load_image",
     "image_to_tensor",
@@ -267,4 +284,5 @@ __all__ = [
     "image_composite_masked",
     "ltxv_preprocess",
     "resize_image_mask",
+    "resize_images_by_longer_edge",
 ]
