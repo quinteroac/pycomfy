@@ -1,6 +1,6 @@
 """LTX-Video 2.3 (22B dev fp8) pipeline modules.
 
-All three pipelines use the dev fp8 checkpoint (``ltx-2.3-22b-dev-fp8.safetensors``)
+All four pipelines use the dev fp8 checkpoint (``ltx-2.3-22b-dev-fp8.safetensors``)
 with the distilled LoRA and Gemma text-encoder LoRA applied at runtime.  They
 follow a two-pass sampling chain: a full denoising pass followed by spatial
 upscaling and a short refinement pass.
@@ -14,19 +14,18 @@ i2v
 flf2v
     First-last-frame-to-video-with-audio.  Generates a smooth video transition
     between two guide images.  Mirrors ``video_ltx2_3_flf2v.json``.
-
-Not yet implemented
--------------------
 ia2v
-    Image+audio-to-video.  Mirrors ``video_ltx2_3_ia2v.json``.  Requires
-    ``load_audio`` and ``trim_audio`` helpers not yet available in the
-    ``comfy_diffusion`` public API.
+    Image+audio-to-video.  Jointly conditioned on a reference image and an
+    audio file.  The audio is VAE-encoded and injected with a zero noise mask
+    so the sampler uses it as structural guidance.
+    Mirrors ``video_ltx2_3_ia2v.json``.
 
 Usage::
 
     from comfy_diffusion.pipelines.video.ltx.ltx23.t2v import manifest, run
     from comfy_diffusion.pipelines.video.ltx.ltx23.i2v import manifest, run
     from comfy_diffusion.pipelines.video.ltx.ltx23.flf2v import manifest, run
+    from comfy_diffusion.pipelines.video.ltx.ltx23.ia2v import manifest, run
 """
 
-__all__ = ["t2v", "i2v", "flf2v"]
+__all__ = ["t2v", "i2v", "flf2v", "ia2v"]

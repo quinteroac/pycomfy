@@ -297,13 +297,13 @@ def image_to_tensor(image: PILImage.Image) -> Any:
     return torch.tensor([rows], dtype=torch.float32)
 
 
-def ltxv_preprocess(image: Any, width: int, height: int) -> Any:
+def ltxv_preprocess(image: Any, width: int, height: int, img_compression: int = 35) -> Any:
     """Preprocess image batch for LTXV img2vid with center resize and node compression."""
     comfy_utils, ltxv_preprocess_type = _get_ltxv_preprocess_dependencies()
     resized = comfy_utils.common_upscale(
         image.movedim(-1, 1), width, height, "bilinear", "center"
     ).movedim(1, -1)
-    return _unwrap_node_output(ltxv_preprocess_type.execute(resized, img_compression=35))
+    return _unwrap_node_output(ltxv_preprocess_type.execute(resized, img_compression=img_compression))
 
 
 def resize_image_mask(

@@ -312,7 +312,7 @@ def test_image_composite_masked_not_re_exported_from_package_root() -> None:
 
 def test_ltxv_preprocess_signature_matches_contract() -> None:
     signature = inspect.signature(ltxv_preprocess)
-    assert str(signature) == "(image: 'Any', width: 'int', height: 'int') -> 'Any'"
+    assert str(signature) == "(image: 'Any', width: 'int', height: 'int', img_compression: 'int' = 35) -> 'Any'"
 
 
 def test_ltxv_preprocess_not_re_exported_from_package_root() -> None:
