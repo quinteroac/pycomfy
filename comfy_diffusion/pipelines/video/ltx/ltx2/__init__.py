@@ -16,10 +16,12 @@ canny
     Canny-to-video with the LTX-Video 2 dev fp8 model + Canny control LoRA.
 depth
     Depth-to-video with Lotus depth estimation + LTX-Video 2 dev fp8 model.
+pose
+    Pose-to-video with DWPreprocessor + LTX-Video 2 dev fp8 model.
 
 Usage::
 
     from comfy_diffusion.pipelines.video.ltx.ltx2.t2v import manifest, run
 """
 
-__all__ = ["t2v", "t2v_distilled", "i2v", "i2v_distilled", "i2v_lora", "canny", "depth"]
+__all__ = ["t2v", "t2v_distilled", "i2v", "i2v_distilled", "i2v_lora", "canny", "depth", "pose"]
