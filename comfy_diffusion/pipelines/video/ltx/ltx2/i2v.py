@@ -71,8 +71,7 @@ __all__ = ["manifest", "run"]
 # HuggingFace repositories for LTX-Video 2
 # ---------------------------------------------------------------------------
 
-_HF_REPO_LTX = "Lightricks/LTX-2"          # UNet, LoRA, upscaler
-_HF_REPO_COMFY = "Comfy-Org/ltx-2"         # Gemma text encoder
+_HF_REPO_LTX = "Lightricks/LTX-Video"      # UNet, LoRA, upscaler, text encoder
 
 # Relative destination paths (resolved against models_dir by download_models).
 _UNET_DEST = Path("diffusion_models") / "ltx-2-19b-dev-fp8.safetensors"
@@ -102,7 +101,7 @@ def manifest() -> list[ModelEntry]:
             dest=_UNET_DEST,
         ),
         HFModelEntry(
-            repo_id=_HF_REPO_COMFY,
+            repo_id=_HF_REPO_LTX,
             filename="split_files/text_encoders/gemma_3_12B_it_fp4_mixed.safetensors",
             dest=_TEXT_ENCODER_DEST,
         ),
@@ -128,10 +127,9 @@ def run(
     width: int = 1280,
     height: int = 720,
     length: int = 97,
-    fps: int = 25,
+    fps: int = 24,
     steps: int = 20,
-    cfg_pass1: float = 4.0,
-    cfg_pass2: float = 1.0,
+    cfg: float = 1.0,
     seed: int = 0,
     lora_strength: float = 1.0,
     unet_filename: str | None = None,
@@ -143,9 +141,8 @@ def run(
 ) -> dict[str, Any]:
     """Run the LTX-Video 2 image-to-video-with-audio pipeline end-to-end.
 
-    Two-pass sampling mirroring the ``video_ltx2_i2v.json`` reference workflow:
-    pass 1 uses the base model at half resolution with ``LTXVScheduler``; pass 2
-    applies the distilled LoRA at full resolution with ``ManualSigmas``.
+    Single-pass sampling: the distilled LoRA is applied first, then the pipeline
+    runs one full denoising pass with ``basic_scheduler``.
 
     Parameters
     ----------
@@ -160,26 +157,22 @@ def run(
         Negative text prompt.
         Default ``"worst quality, inconsistent motion, blurry, jittery, distorted"``.
     width : int, optional
-        Output frame width in pixels.  The latent is sampled at half this size
-        and the spatial upscaler restores the full resolution.  Default ``1280``.
+        Output frame width in pixels.  Default ``1280``.
     height : int, optional
-        Output frame height in pixels.  Same halving logic as ``width``.
-        Default ``720``.
+        Output frame height in pixels.  Default ``720``.
     length : int, optional
         Number of video frames to generate.  Default ``97``.
     fps : int, optional
         Frame rate used for the audio latent and ``LTXVConditioning``.
-        Default ``25``.
+        Default ``24``.
     steps : int, optional
-        Number of denoising steps for pass 1.  Default ``20``.
-    cfg_pass1 : float, optional
-        CFG scale for pass 1 (base model, half resolution).  Default ``4.0``.
-    cfg_pass2 : float, optional
-        CFG scale for pass 2 (LoRA, full resolution).  Default ``1.0``.
+        Number of denoising steps.  Default ``20``.
+    cfg : float, optional
+        CFG scale.  Default ``1.0``.
     seed : int, optional
         Random seed for reproducibility.  Default ``0``.
     lora_strength : float, optional
-        Strength of the distilled LoRA applied in pass 2.  Default ``1.0``.
+        Strength of the distilled LoRA.  Default ``1.0``.
     unet_filename : str | None, optional
         Override the default UNet filename.  Default ``None``.
     vae_filename : str | None, optional
@@ -211,7 +204,7 @@ def run(
     from comfy_diffusion.lora import apply_lora
     from comfy_diffusion.models import ModelManager
     from comfy_diffusion.runtime import check_runtime
-    from comfy_diffusion.sampling import cfg_guider, get_sampler, ltxv_scheduler, manual_sigmas, random_noise, sample_custom
+    from comfy_diffusion.sampling import basic_scheduler, cfg_guider, get_sampler, random_noise, sample_custom
     from comfy_diffusion.vae import vae_decode_batch_tiled
     from comfy_diffusion.video import ltxv_img_to_video_inplace
 
@@ -238,61 +231,46 @@ def run(
     vae_path = Path(vae_filename) if vae_filename else unet_path
     audio_vae_path = Path(audio_vae_filename) if audio_vae_filename else vae_path
 
-    # Load models — base model (no LoRA) for pass 1.
-    model_base = mm.load_unet(unet_path)
+    # Load models.
+    model = mm.load_unet(unet_path)
     vae = mm.load_vae(vae_path)
     audio_vae = mm.load_ltxv_audio_vae(audio_vae_path)
     clip = mm.load_ltxav_text_encoder(te_path, unet_path)
     upscale_model = mm.load_latent_upscale_model(upscaler_path)
 
-    # Load input image and convert to BHWC tensor.
+    # Apply distilled LoRA.
+    model, clip = apply_lora(model, clip, lora_path, lora_strength, lora_strength)
+
+    # Load input image and convert to BHWC tensor, then preprocess.
     if hasattr(image, "mode"):
         image_tensor = image_to_tensor(image)
     else:
         image_tensor, _ = load_image(image)
-
-    # Preprocess once at full output resolution.
-    # ltxv_img_to_video_inplace auto-resizes, so the same tensor works for both passes.
     preprocessed = ltxv_preprocess(image_tensor, width, height)
 
     # Text conditioning + frame-rate metadata.
     positive, negative = encode_prompt(clip, prompt, negative_prompt)
     positive, negative = ltxv_conditioning(positive, negative, frame_rate=fps)
 
-    # Pass 1: half-resolution, base model (no LoRA), LTXVScheduler + euler.
-    latent_width = width // 2
-    latent_height = height // 2
-    video_latent = ltxv_empty_latent_video(width=latent_width, height=latent_height, length=length)
+    # Build video latent, inject image, crop guides.
+    video_latent = ltxv_empty_latent_video(width=width, height=height, length=length)
     video_latent = ltxv_img_to_video_inplace(vae, preprocessed, video_latent)
+    positive, negative, video_latent = ltxv_crop_guides(positive, negative, video_latent)
+
+    # Build AV latent and sample.
     audio_latent = ltxv_empty_latent_audio(audio_vae, frames_number=length, frame_rate=fps)
     av_latent = ltxv_concat_av_latent(video_latent, audio_latent)
 
-    sigmas_p1 = ltxv_scheduler(steps, max_shift=2.05, base_shift=0.95, stretch=True, terminal=0.1, latent=av_latent)
-    guider_p1 = cfg_guider(model_base, positive, negative, cfg_pass1)
-    noise_p1 = random_noise(seed)
-    sampler_p1 = get_sampler("euler")
-    _, denoised_p1 = sample_custom(noise_p1, guider_p1, sampler_p1, sigmas_p1, av_latent)
+    sigmas = basic_scheduler(model, "lcm", steps)
+    guider = cfg_guider(model, positive, negative, cfg)
+    noise = random_noise(seed)
+    sampler_obj = get_sampler("euler_ancestral")
+    _, denoised = sample_custom(noise, guider, sampler_obj, sigmas, av_latent)
 
-    # Between passes: separate → crop guides → upscale → re-inject image → concat audio.
-    video_p1, audio_p1 = ltxv_separate_av_latent(denoised_p1)
-    positive, negative, video_p1 = ltxv_crop_guides(positive, negative, video_p1)
-    video_up = ltxv_latent_upsample(video_p1, upscale_model=upscale_model, vae=vae)
-    video_up = ltxv_img_to_video_inplace(vae, preprocessed, video_up)
-    av_latent_p2 = ltxv_concat_av_latent(video_up, audio_p1)
-
-    # Pass 2: full-resolution, distilled LoRA, ManualSigmas + gradient_estimation.
-    model_p2, clip = apply_lora(model_base, clip, lora_path, lora_strength, lora_strength)
-    sigmas_p2 = manual_sigmas("0.909375, 0.725, 0.421875, 0.0")
-    guider_p2 = cfg_guider(model_p2, positive, negative, cfg_pass2)
-    noise_p2 = random_noise(seed)
-    sampler_p2 = get_sampler("gradient_estimation")
-    _, denoised_p2 = sample_custom(noise_p2, guider_p2, sampler_p2, sigmas_p2, av_latent_p2)
-
-    # Separate video and audio from the final denoised AV latent.
-    video_latent_out, audio_latent_out = ltxv_separate_av_latent(denoised_p2)
-
-    # Decode video → PIL frames; decode audio → waveform dict.
-    frames = vae_decode_batch_tiled(vae, video_latent_out)
+    # Separate, upsample video, decode.
+    video_latent_out, audio_latent_out = ltxv_separate_av_latent(denoised)
+    video_latent_up = ltxv_latent_upsample(video_latent_out, upscale_model=upscale_model, vae=vae)
+    frames = vae_decode_batch_tiled(vae, video_latent_up)
     audio = ltxv_audio_vae_decode(audio_vae, audio_latent_out)
 
     return {"frames": frames, "audio": audio}

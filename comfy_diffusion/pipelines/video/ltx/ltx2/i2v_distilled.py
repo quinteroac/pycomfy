@@ -72,8 +72,7 @@ __all__ = ["manifest", "run"]
 # Canonical HuggingFace repository for LTX-Video 2
 # ---------------------------------------------------------------------------
 
-_HF_REPO_LTX = "Lightricks/LTX-2"          # UNet, upscaler
-_HF_REPO_COMFY = "Comfy-Org/ltx-2"         # Gemma text encoder
+_HF_REPO_LTX = "Lightricks/LTX-Video"      # UNet, upscaler, text encoder
 
 # Relative destination paths (resolved against models_dir by download_models).
 _UNET_DEST = Path("diffusion_models") / "ltx-2-19b-distilled.safetensors"
@@ -102,7 +101,7 @@ def manifest() -> list[ModelEntry]:
             dest=_UNET_DEST,
         ),
         HFModelEntry(
-            repo_id=_HF_REPO_COMFY,
+            repo_id=_HF_REPO_LTX,
             filename="split_files/text_encoders/gemma_3_12B_it_fp4_mixed.safetensors",
             dest=_TEXT_ENCODER_DEST,
         ),
@@ -123,7 +122,8 @@ def run(
     width: int = 1280,
     height: int = 720,
     length: int = 97,
-    fps: int = 25,
+    fps: int = 24,
+    steps: int = 8,
     cfg: float = 1.0,
     seed: int = 0,
     unet_filename: str | None = None,
@@ -161,7 +161,9 @@ def run(
         Number of video frames to generate.  Default ``97``.
     fps : int, optional
         Frame rate used for the audio latent and ``LTXVConditioning``.
-        Default ``25``.
+        Default ``24``.
+    steps : int, optional
+        Number of denoising steps.  Default ``8``.
     cfg : float, optional
         Classifier-free guidance scale applied to both passes.  Default ``1.0``
         (distilled model requires no guidance).
@@ -234,47 +236,30 @@ def run(
     else:
         image_tensor, _ = load_image(image)
 
-    # Preprocess once at full output resolution.
-    # ltxv_img_to_video_inplace auto-resizes, so the same tensor works for both passes.
+    # Preprocess at output resolution.
     preprocessed = ltxv_preprocess(image_tensor, width, height)
 
     # Text conditioning + frame-rate metadata.
     positive, negative = encode_prompt(clip, prompt, negative_prompt)
     positive, negative = ltxv_conditioning(positive, negative, frame_rate=fps)
 
-    # Pass 1: half-resolution, full distilled sigmas, euler.
-    latent_width = width // 2
-    latent_height = height // 2
-    video_latent = ltxv_empty_latent_video(width=latent_width, height=latent_height, length=length)
+    # Single-pass: inject image, crop guides, build AV latent, sample, upsample, decode.
+    video_latent = ltxv_empty_latent_video(width=width, height=height, length=length)
     video_latent = ltxv_img_to_video_inplace(vae, preprocessed, video_latent)
+    positive, negative, video_latent = ltxv_crop_guides(positive, negative, video_latent)
     audio_latent = ltxv_empty_latent_audio(audio_vae, frames_number=length, frame_rate=fps)
     av_latent = ltxv_concat_av_latent(video_latent, audio_latent)
 
-    sigmas_p1 = manual_sigmas("1., 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421875, 0.0")
-    guider_p1 = cfg_guider(model, positive, negative, cfg)
-    noise_p1 = random_noise(seed)
-    sampler_p1 = get_sampler("euler")
-    _, denoised_p1 = sample_custom(noise_p1, guider_p1, sampler_p1, sigmas_p1, av_latent)
+    sigmas = manual_sigmas("1., 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421875, 0.0")
+    guider = cfg_guider(model, positive, negative, cfg)
+    noise = random_noise(seed)
+    sampler_obj = get_sampler("euler_ancestral")
+    _, denoised = sample_custom(noise, guider, sampler_obj, sigmas, av_latent)
 
-    # Between passes: separate → crop guides → upscale → re-inject image → concat audio.
-    video_p1, audio_p1 = ltxv_separate_av_latent(denoised_p1)
-    positive, negative, video_p1 = ltxv_crop_guides(positive, negative, video_p1)
-    video_up = ltxv_latent_upsample(video_p1, upscale_model=upscale_model, vae=vae)
-    video_up = ltxv_img_to_video_inplace(vae, preprocessed, video_up)
-    av_latent_p2 = ltxv_concat_av_latent(video_up, audio_p1)
-
-    # Pass 2: full-resolution, refinement sigmas, gradient_estimation.
-    sigmas_p2 = manual_sigmas("0.909375, 0.725, 0.421875, 0.0")
-    guider_p2 = cfg_guider(model, positive, negative, cfg)
-    noise_p2 = random_noise(seed)
-    sampler_p2 = get_sampler("gradient_estimation")
-    _, denoised_p2 = sample_custom(noise_p2, guider_p2, sampler_p2, sigmas_p2, av_latent_p2)
-
-    # Separate video and audio from the final denoised AV latent.
-    video_latent_out, audio_latent_out = ltxv_separate_av_latent(denoised_p2)
-
-    # Decode video → PIL frames; decode audio → waveform dict.
-    frames = vae_decode_batch_tiled(vae, video_latent_out)
+    # Separate, upsample video, decode.
+    video_latent_out, audio_latent_out = ltxv_separate_av_latent(denoised)
+    video_latent_up = ltxv_latent_upsample(video_latent_out, upscale_model=upscale_model, vae=vae)
+    frames = vae_decode_batch_tiled(vae, video_latent_up)
     audio = ltxv_audio_vae_decode(audio_vae, audio_latent_out)
 
     return {"frames": frames, "audio": audio}
