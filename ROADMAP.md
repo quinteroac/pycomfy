@@ -74,7 +74,7 @@ Expose the three nodes that block all ltx2 and ltx23 pipelines.
 
 ---
 
-### Phase 4 — Expose Secondary Nodes
+### Phase 4 — Expose Secondary Nodes [DONE]
 
 **General utility:**
 
