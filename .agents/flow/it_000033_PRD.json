@@ -1,0 +1,329 @@
+{
+  "goals": [
+    "Deliver 5 image generation pipelines under `comfy_diffusion/pipelines/image/`",
+    "Each pipeline mirrors its reference workflow exactly (node order, parameters, sampler settings)",
+    "Expose two new node wrappers (`empty_sd3_latent_image`, `sd_turbo_scheduler`) and one new sampling function (`sample_custom_simple`) required by the new pipelines",
+    "Ship one example script per pipeline under `examples/`",
+    "All CPU smoke tests pass in CI; GPU validation done locally before merge"
+  ],
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "SDXL base + refiner pipeline (shared prompt)",
+      "description": "As a Python developer, I want to call `comfy_diffusion.pipelines.image.sdxl.t2i.run()` so that I can generate high-quality 1024×1024 images using the SDXL base + refiner two-pass workflow with a single shared prompt.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-001-AC01",
+          "text": "`comfy_diffusion/pipelines/image/sdxl/t2i.py` exists with `manifest()` and `run()`"
+        },
+        {
+          "id": "US-001-AC02",
+          "text": "`manifest()` returns exactly 2 `HFModelEntry` items: `checkpoints/sd_xl_base_1.0.safetensors` and `checkpoints/sd_xl_refiner_1.0.safetensors`"
+        },
+        {
+          "id": "US-001-AC03",
+          "text": "`run()` accepts: `models_dir`, `prompt`, `negative_prompt`, `width`, `height`, `steps`, `base_end_step`, `cfg`, `seed` → returns `list[PIL.Image.Image]`"
+        },
+        {
+          "id": "US-001-AC04",
+          "text": "Pass 1: `KSamplerAdvanced` on base model with `add_noise=enable`, `return_with_leftover_noise=enable`, `start_at_step=0`, `end_at_step=base_end_step` (default 20 out of 25)"
+        },
+        {
+          "id": "US-001-AC05",
+          "text": "Pass 2: `KSamplerAdvanced` on refiner model with `add_noise=disable`, `return_with_leftover_noise=disable`, `start_at_step=base_end_step`, `end_at_step=10000`"
+        },
+        {
+          "id": "US-001-AC06",
+          "text": "Refiner VAE used for final `vae_decode`"
+        },
+        {
+          "id": "US-001-AC07",
+          "text": "`__all__ = [\"manifest\", \"run\"]`, `from __future__ import annotations`, module docstring present"
+        },
+        {
+          "id": "US-001-AC08",
+          "text": "No top-level `comfy.*` or `torch` imports (lazy import pattern enforced)"
+        },
+        {
+          "id": "US-001-AC09",
+          "text": "Typecheck / lint passes"
+        }
+      ]
+    },
+    {
+      "id": "US-002",
+      "title": "SDXL base + refiner pipeline (separate prompts per stage)",
+      "description": "As a Python developer, I want to call `comfy_diffusion.pipelines.image.sdxl.t2i_refiner_prompt.run()` so that I can provide a detailed base prompt and a refined prompt for the SDXL refiner stage separately.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-002-AC01",
+          "text": "`comfy_diffusion/pipelines/image/sdxl/t2i_refiner_prompt.py` exists with `manifest()` and `run()`"
+        },
+        {
+          "id": "US-002-AC02",
+          "text": "`manifest()` is identical to US-001 (same 2 checkpoints)"
+        },
+        {
+          "id": "US-002-AC03",
+          "text": "`run()` accepts same args as US-001 plus `refiner_prompt: str | None` (defaults to `prompt` if `None`) and `refiner_negative_prompt: str | None` (defaults to `negative_prompt`)"
+        },
+        {
+          "id": "US-002-AC04",
+          "text": "Base stage encodes `prompt`/`negative_prompt` with base CLIP; refiner stage encodes `refiner_prompt`/`refiner_negative_prompt` with refiner CLIP"
+        },
+        {
+          "id": "US-002-AC05",
+          "text": "Two-pass `KSamplerAdvanced` flow identical to US-001"
+        },
+        {
+          "id": "US-002-AC06",
+          "text": "`__all__ = [\"manifest\", \"run\"]`, lazy imports, module docstring present"
+        },
+        {
+          "id": "US-002-AC07",
+          "text": "Typecheck / lint passes"
+        }
+      ]
+    },
+    {
+      "id": "US-003",
+      "title": "SDXL Turbo pipeline",
+      "description": "As a Python developer, I want to call `comfy_diffusion.pipelines.image.sdxl.turbo.run()` so that I can generate 512×512 images in a single distilled step using SDXL Turbo.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-003-AC01",
+          "text": "`comfy_diffusion/pipelines/image/sdxl/turbo.py` exists with `manifest()` and `run()`"
+        },
+        {
+          "id": "US-003-AC02",
+          "text": "`manifest()` returns 1 `HFModelEntry`: `checkpoints/sd_xl_turbo_1.0_fp16.safetensors`"
+        },
+        {
+          "id": "US-003-AC03",
+          "text": "`run()` accepts: `models_dir`, `prompt`, `negative_prompt`, `width`, `height`, `steps`, `cfg`, `seed` → returns `list[PIL.Image.Image]`"
+        },
+        {
+          "id": "US-003-AC04",
+          "text": "Sampler: `euler_ancestral` via `get_sampler()`"
+        },
+        {
+          "id": "US-003-AC05",
+          "text": "Sigmas: `sd_turbo_scheduler(model, steps=1, denoise=1.0)` (new wrapper — see FR-1)"
+        },
+        {
+          "id": "US-003-AC06",
+          "text": "Sampling via `sample_custom_simple(model, add_noise=True, seed, cfg, positive, negative, sampler, sigmas, latent)` (new wrapper — see FR-2)"
+        },
+        {
+          "id": "US-003-AC07",
+          "text": "`__all__ = [\"manifest\", \"run\"]`, lazy imports, module docstring present"
+        },
+        {
+          "id": "US-003-AC08",
+          "text": "Typecheck / lint passes"
+        }
+      ]
+    },
+    {
+      "id": "US-004",
+      "title": "Z-Image Turbo pipeline",
+      "description": "As a Python developer, I want to call `comfy_diffusion.pipelines.image.z_image.turbo.run()` so that I can generate images using the Z-Image Turbo distilled model with Qwen text encoder.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-004-AC01",
+          "text": "`comfy_diffusion/pipelines/image/z_image/turbo.py` exists with `manifest()` and `run()`"
+        },
+        {
+          "id": "US-004-AC02",
+          "text": "`manifest()` returns 3 `HFModelEntry` items: `diffusion_models/z_image_turbo_bf16.safetensors`, `text_encoders/qwen_3_4b.safetensors`, `vae/ae.safetensors`"
+        },
+        {
+          "id": "US-004-AC03",
+          "text": "`run()` accepts: `models_dir`, `prompt`, `width`, `height`, `steps`, `seed` → returns `list[PIL.Image.Image]`"
+        },
+        {
+          "id": "US-004-AC04",
+          "text": "`ModelManager.load_unet()` for the diffusion model; `ModelManager.load_clip()` with type `lumina2`; `ModelManager.load_vae()`"
+        },
+        {
+          "id": "US-004-AC05",
+          "text": "`model_sampling_aura_flow(model, shift=3)` applied before sampling"
+        },
+        {
+          "id": "US-004-AC06",
+          "text": "Latent created via `empty_sd3_latent_image(width, height, batch_size=1)` (new wrapper — see FR-3)"
+        },
+        {
+          "id": "US-004-AC07",
+          "text": "Negative conditioning: `conditioning_zero_out(positive_cond)` (already in `conditioning.py`)"
+        },
+        {
+          "id": "US-004-AC08",
+          "text": "Sampler: `res_multistep`, scheduler: `simple`, cfg: 1.0 (turbo — CFG-free effectively)"
+        },
+        {
+          "id": "US-004-AC09",
+          "text": "`__all__ = [\"manifest\", \"run\"]`, lazy imports, module docstring present"
+        },
+        {
+          "id": "US-004-AC10",
+          "text": "Typecheck / lint passes"
+        }
+      ]
+    },
+    {
+      "id": "US-005",
+      "title": "Anima Preview pipeline",
+      "description": "As a Python developer, I want to call `comfy_diffusion.pipelines.image.anima.t2i.run()` so that I can generate anime-style images using the Anima Preview model with Qwen text encoder.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-005-AC01",
+          "text": "`comfy_diffusion/pipelines/image/anima/t2i.py` exists with `manifest()` and `run()`"
+        },
+        {
+          "id": "US-005-AC02",
+          "text": "`manifest()` returns 3 `HFModelEntry` items: `diffusion_models/anima-preview2.safetensors`, `text_encoders/qwen_3_06b_base.safetensors`, `vae/qwen_image_vae.safetensors`"
+        },
+        {
+          "id": "US-005-AC03",
+          "text": "`run()` accepts: `models_dir`, `prompt`, `negative_prompt`, `width`, `height`, `steps`, `cfg`, `seed` → returns `list[PIL.Image.Image]`"
+        },
+        {
+          "id": "US-005-AC04",
+          "text": "`ModelManager.load_unet()` for the diffusion model; `ModelManager.load_clip()` with type `stable_diffusion`; `ModelManager.load_vae()`"
+        },
+        {
+          "id": "US-005-AC05",
+          "text": "Latent via `empty_latent_image(width, height, batch_size=1)` (existing wrapper)"
+        },
+        {
+          "id": "US-005-AC06",
+          "text": "Sampler: `er_sde`, cfg: 4.0, 30 steps (workflow defaults)"
+        },
+        {
+          "id": "US-005-AC07",
+          "text": "`__all__ = [\"manifest\", \"run\"]`, lazy imports, module docstring present"
+        },
+        {
+          "id": "US-005-AC08",
+          "text": "Typecheck / lint passes"
+        }
+      ]
+    },
+    {
+      "id": "US-006",
+      "title": "New node wrappers for image pipelines",
+      "description": "As a library developer, I want `latent.empty_sd3_latent_image()`, `sampling.sd_turbo_scheduler()`, and `sampling.sample_custom_simple()` exposed so that image pipelines can use them without inlining raw `comfy.*` calls.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-006-AC01",
+          "text": "`latent.empty_sd3_latent_image(width, height, batch_size=1)` added to `comfy_diffusion/latent.py`; wraps `comfy_extras.nodes_sd3.EmptySD3LatentImage`; added to `__all__`"
+        },
+        {
+          "id": "US-006-AC02",
+          "text": "`sampling.sd_turbo_scheduler(model, steps, denoise=1.0)` added to `comfy_diffusion/sampling.py`; wraps `comfy_extras.nodes_custom_sampler.SDTurboScheduler`; added to `__all__`"
+        },
+        {
+          "id": "US-006-AC03",
+          "text": "`sampling.sample_custom_simple(model, add_noise, noise_seed, cfg, positive, negative, sampler, sigmas, latent_image)` added to `comfy_diffusion/sampling.py`; wraps `comfy_extras.nodes_custom_sampler.SamplerCustom`; returns `latent` dict; added to `__all__`"
+        },
+        {
+          "id": "US-006-AC04",
+          "text": "All three wrappers follow the lazy-import pattern (no top-level `comfy.*`)"
+        },
+        {
+          "id": "US-006-AC05",
+          "text": "Typecheck / lint passes"
+        }
+      ]
+    },
+    {
+      "id": "US-007",
+      "title": "Example scripts for each image pipeline",
+      "description": "As a developer integrating comfy-diffusion, I want runnable example scripts in `examples/` for each image pipeline so that I can see working usage code I can copy and adapt.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-007-AC01",
+          "text": "`examples/sdxl_t2i.py` — covers SDXL base+refiner (shared prompt); CLI `--prompt`, `--models-dir`, `--output`, `--download-only`"
+        },
+        {
+          "id": "US-007-AC02",
+          "text": "`examples/sdxl_refiner_prompt_t2i.py` — same as above but exposes `--refiner-prompt` CLI arg"
+        },
+        {
+          "id": "US-007-AC03",
+          "text": "`examples/sdxl_turbo.py` — covers SDXL Turbo; CLI `--prompt`, `--models-dir`, `--output`, `--download-only`"
+        },
+        {
+          "id": "US-007-AC04",
+          "text": "`examples/z_image_turbo.py` — covers Z-Image Turbo; CLI `--prompt`, `--models-dir`, `--output`, `--download-only`"
+        },
+        {
+          "id": "US-007-AC05",
+          "text": "`examples/anima_preview.py` — covers Anima Preview; CLI `--prompt`, `--models-dir`, `--output`, `--download-only`"
+        },
+        {
+          "id": "US-007-AC06",
+          "text": "All examples follow the pattern of existing example scripts (argparse, `download_models`, `run()`)"
+        },
+        {
+          "id": "US-007-AC07",
+          "text": "Typecheck / lint passes"
+        }
+      ]
+    },
+    {
+      "id": "US-008",
+      "title": "CPU smoke tests for all new pipelines",
+      "description": "As a maintainer, I want pytest tests that validate each pipeline's structure and mock-call `run()` on CPU so that CI passes without GPU.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-008-AC01",
+          "text": "Test files: `tests/test_pipelines_image_sdxl_t2i.py`, `tests/test_pipelines_image_sdxl_refiner_prompt.py`, `tests/test_pipelines_image_sdxl_turbo.py`, `tests/test_pipelines_image_z_image_turbo.py`, `tests/test_pipelines_image_anima_t2i.py`"
+        },
+        {
+          "id": "US-008-AC02",
+          "text": "Each test file covers: file exists, parses, has future annotations, module docstring, `__all__ = [\"manifest\", \"run\"]`, no top-level comfy imports, `manifest()` returns correct number/type of entries, `run()` accepts expected signature, `run()` calls model loading + sampling stubs via `unittest.mock.patch`"
+        },
+        {
+          "id": "US-008-AC03",
+          "text": "Tests for new wrappers (US-006): `tests/test_image_wrappers_it033.py` — validates `empty_sd3_latent_image`, `sd_turbo_scheduler`, `sample_custom_simple` exist and return correct shapes when mocked"
+        },
+        {
+          "id": "US-008-AC04",
+          "text": "`uv run pytest` passes with no GPU"
+        }
+      ]
+    }
+  ],
+  "functionalRequirements": [
+    {
+      "id": "FR-1",
+      "description": "`sampling.sd_turbo_scheduler(model, steps: int, denoise: float = 1.0) -> Any` — wraps `SDTurboScheduler.execute()` from `comfy_extras.nodes_custom_sampler`; lazy import only"
+    },
+    {
+      "id": "FR-2",
+      "description": "`sampling.sample_custom_simple(model, add_noise, noise_seed, cfg, positive, negative, sampler, sigmas, latent_image) -> dict` — wraps `SamplerCustom.execute()` from `comfy_extras.nodes_custom_sampler`; returns the `output` latent (index 0); lazy import only"
+    },
+    {
+      "id": "FR-3",
+      "description": "`latent.empty_sd3_latent_image(width: int, height: int, batch_size: int = 1) -> dict` — wraps `EmptySD3LatentImage.generate()` from `comfy_extras.nodes_sd3`; lazy import only"
+    },
+    {
+      "id": "FR-4",
+      "description": "All pipeline `run()` functions must call `check_runtime()` first and raise `RuntimeError` with the error message if it returns an error dict"
+    },
+    {
+      "id": "FR-5",
+      "description": "All pipeline `run()` functions derive model file paths from `manifest()` entries by default, with optional per-file overrides via keyword arguments (e.g. `unet_path`, `clip_path`, `vae_path`, `base_ckpt_path`, `refiner_ckpt_path`)"
+    },
+    {
+      "id": "FR-6",
+      "description": "Pipeline modules live under `comfy_diffusion/pipelines/image/` with `__init__.py` files at each directory level"
+    },
+    {
+      "id": "FR-7",
+      "description": "Each new sub-package (`image/`, `image/sdxl/`, `image/z_image/`, `image/anima/`) must have an `__init__.py`"
+    }
+  ]
+}
