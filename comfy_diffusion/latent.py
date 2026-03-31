@@ -98,6 +98,16 @@ def _get_latent_concat_type() -> Any:
     return LatentConcat
 
 
+def _get_latent_cut_type() -> Any:
+    """Resolve ComfyUI LatentCut node at call time."""
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    from comfy_extras.nodes_latent import LatentCut
+
+    return LatentCut
+
+
 def _get_replace_video_latent_frames_type() -> Any:
     """Resolve ComfyUI ReplaceVideoLatentFrames node at call time."""
     from ._runtime import ensure_comfyui_on_path
@@ -263,6 +273,38 @@ def latent_concat(*latents: dict[str, Any], dim: str = "t") -> dict[str, Any]:
 def latent_cut_to_batch(latent: dict[str, Any], start: int, length: int) -> dict[str, Any]:
     """Extract a contiguous segment from the latent batch dimension."""
     return latent_from_batch(latent=latent, batch_index=start, length=length)
+
+
+def latent_cut(
+    latent: dict[str, Any],
+    dim: str = "t",
+    index: int = 0,
+    amount: int = 1,
+) -> dict[str, Any]:
+    """Extract a contiguous segment from a LATENT dict along the given dimension.
+
+    Wraps ComfyUI's ``LatentCut`` node.  The ``dim`` parameter accepts ``"x"``,
+    ``"y"``, or ``"t"`` for spatial-width, spatial-height, or temporal dimensions
+    respectively.
+
+    Args:
+        latent: Source LATENT dict.
+        dim: Dimension to cut along — ``"x"`` (width), ``"y"`` (height), or
+            ``"t"`` (temporal).  Default ``"t"``.
+        index: Start position along the chosen dimension (0-indexed).  Negative
+            values count from the end.  Default ``0``.
+        amount: Number of frames/slices to extract.  Default ``1``.
+
+    Returns:
+        A LATENT dict containing only the extracted segment.
+    """
+    latent_cut_type = _get_latent_cut_type()
+    return cast(
+        dict[str, Any],
+        _unwrap_node_output(
+            latent_cut_type.execute(samples=latent, dim=dim, index=index, amount=amount)
+        ),
+    )
 
 
 def replace_video_latent_frames(
@@ -566,6 +608,7 @@ __all__ = [
     "ltxv_empty_latent_video",
     "latent_from_batch",
     "latent_cut_to_batch",
+    "latent_cut",
     "repeat_latent_batch",
     "latent_concat",
     "replace_video_latent_frames",

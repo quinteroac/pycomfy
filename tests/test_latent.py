@@ -65,6 +65,7 @@ def test_latent_module_exports_empty_latent_image() -> None:
         "ltxv_empty_latent_video",
         "latent_from_batch",
         "latent_cut_to_batch",
+        "latent_cut",
         "repeat_latent_batch",
         "latent_concat",
         "replace_video_latent_frames",
