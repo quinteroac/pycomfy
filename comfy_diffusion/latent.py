@@ -437,6 +437,45 @@ def inpaint_model_conditioning(
     return patched_model, patched_positive, patched_negative
 
 
+def empty_wan_latent_video(
+    width: int,
+    height: int,
+    length: int = 33,
+    batch_size: int = 1,
+) -> dict[str, Any]:
+    """Create empty WAN video latents compatible with WAN models.
+
+    Parameters
+    ----------
+    width : int
+        Frame width in pixels.
+    height : int
+        Frame height in pixels.
+    length : int, optional
+        Number of video frames. Default ``33``.
+    batch_size : int, optional
+        Batch size. Default ``1``.
+
+    Returns
+    -------
+    dict
+        ``{"samples": tensor}`` with shape
+        ``[batch_size, 16, ((length-1)//4)+1, height//8, width//8]``.
+    """
+    import torch
+
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    import comfy.model_management
+
+    latent = torch.zeros(
+        [batch_size, 16, ((length - 1) // 4) + 1, height // 8, width // 8],
+        device=comfy.model_management.intermediate_device(),
+    )
+    return {"samples": latent}
+
+
 def trim_video_latent(latent: dict[str, Any], n_latent_frames: int) -> dict[str, Any]:
     """Trim the first *n_latent_frames* along the time axis of a 5-D video latent.
 
@@ -452,6 +491,7 @@ def trim_video_latent(latent: dict[str, Any], n_latent_frames: int) -> dict[str,
 
 __all__ = [
     "empty_latent_image",
+    "empty_wan_latent_video",
     "ltxv_empty_latent_video",
     "latent_from_batch",
     "latent_cut_to_batch",
