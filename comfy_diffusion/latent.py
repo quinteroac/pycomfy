@@ -476,6 +476,77 @@ def empty_wan_latent_video(
     return {"samples": latent}
 
 
+def wan22_image_to_video_latent(
+    vae: Any,
+    width: int,
+    height: int,
+    length: int = 49,
+    batch_size: int = 1,
+    *,
+    start_image: Any = None,
+) -> dict[str, Any]:
+    """Create TI2V latents for WAN 2.2 image-to-video conditioning.
+
+    Parameters
+    ----------
+    vae : Any
+        ComfyUI VAE model used to encode the start image.
+    width : int
+        Frame width in pixels.
+    height : int
+        Frame height in pixels.
+    length : int, optional
+        Number of video frames. Default ``49``.
+    batch_size : int, optional
+        Batch size. Default ``1``.
+    start_image : Any, optional
+        Optional image tensor to use as the first frame.
+
+    Returns
+    -------
+    dict
+        ``{"samples": tensor}`` with shape
+        ``[batch_size, 48, ((length-1)//4)+1, height//16, width//16]``.
+        When *start_image* is provided, also includes ``"noise_mask"``.
+    """
+    import torch
+
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    import comfy.latent_formats
+    import comfy.model_management
+    import comfy.utils
+
+    latent = torch.zeros(
+        [1, 48, ((length - 1) // 4) + 1, height // 16, width // 16],
+        device=comfy.model_management.intermediate_device(),
+    )
+
+    if start_image is None:
+        return {"samples": latent}
+
+    mask = torch.ones(
+        [latent.shape[0], 1, ((length - 1) // 4) + 1, latent.shape[-2], latent.shape[-1]],
+        device=comfy.model_management.intermediate_device(),
+    )
+
+    start_image = comfy.utils.common_upscale(
+        start_image[:length].movedim(-1, 1), width, height, "bilinear", "center"
+    ).movedim(1, -1)
+    latent_temp = vae.encode(start_image)
+    latent[:, :, : latent_temp.shape[-3]] = latent_temp
+    mask[:, :, : latent_temp.shape[-3]] *= 0.0
+
+    latent_format = comfy.latent_formats.Wan22()
+    latent = latent_format.process_out(latent) * mask + latent * (1.0 - mask)
+
+    out_latent: dict[str, Any] = {}
+    out_latent["samples"] = latent.repeat((batch_size,) + (1,) * (latent.ndim - 1))
+    out_latent["noise_mask"] = mask.repeat((batch_size,) + (1,) * (mask.ndim - 1))
+    return out_latent
+
+
 def trim_video_latent(latent: dict[str, Any], n_latent_frames: int) -> dict[str, Any]:
     """Trim the first *n_latent_frames* along the time axis of a 5-D video latent.
 
@@ -507,4 +578,5 @@ __all__ = [
     "inpaint_model_conditioning",
     "ltxv_latent_upsample",
     "trim_video_latent",
+    "wan22_image_to_video_latent",
 ]
