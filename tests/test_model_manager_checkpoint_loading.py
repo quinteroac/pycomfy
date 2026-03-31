@@ -117,6 +117,7 @@ def test_load_checkpoint_resolves_filename_and_returns_typed_result(
         ("llm", str(models_dir / "llm"), True),
         ("upscale_models", str(models_dir / "upscale_models"), True),
         ("latent_upscale_models", str(models_dir / "upscale"), True),
+        ("audio_encoders", str(models_dir / "audio_encoders"), True),
     ]
     assert calls["get_full_path_or_raise"] == [("checkpoints", checkpoint_filename)]
     assert calls["get_folder_paths"] == ["embeddings"]

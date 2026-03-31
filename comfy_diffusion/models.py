@@ -73,6 +73,9 @@ class ModelManager:
         folder_paths.add_model_folder_path(
             "latent_upscale_models", str(self.models_dir / "upscale"), is_default=True
         )
+        folder_paths.add_model_folder_path(
+            "audio_encoders", str(self.models_dir / "audio_encoders"), is_default=True
+        )
 
     def load_checkpoint(self, filename: str) -> CheckpointResult:
         """Load a checkpoint by filename from the configured checkpoints directory."""
@@ -338,6 +341,42 @@ class ModelManager:
             ckpt_paths=[llm_path],
             embedding_directory=folder_paths.get_folder_paths("embeddings"),
         )
+
+    def load_audio_encoder(self, path: str | Path) -> Any:
+        """Load a wav2vec2-compatible audio encoder from a path or filename.
+
+        If ``path`` is an absolute path to an existing file, that file is loaded.
+        Otherwise ``path`` is treated as a filename under the ``audio_encoders`` folder.
+
+        Internally calls ``comfy.utils.load_torch_file`` and
+        ``comfy.audio_encoders.audio_encoders.load_audio_encoder_from_sd``.
+        Raises ``FileNotFoundError`` if the file cannot be found.
+        Raises ``ValueError`` if the state dict is not a recognised audio encoder.
+
+        Returns an ``AudioEncoderModel`` instance.
+        """
+        ensure_comfyui_on_path()
+
+        import folder_paths
+        from comfy import utils as comfy_utils
+        from comfy.audio_encoders import audio_encoders as comfy_audio_encoders
+
+        p = Path(path)
+        if p.is_absolute() and p.is_file():
+            model_path = str(p.resolve())
+        elif p.is_absolute():
+            raise FileNotFoundError(f"audio encoder file not found: {p}")
+        else:
+            name = path if isinstance(path, str) else p.name
+            model_path = folder_paths.get_full_path_or_raise("audio_encoders", name)
+
+        sd = comfy_utils.load_torch_file(model_path, safe_load=True)
+        audio_encoder = comfy_audio_encoders.load_audio_encoder_from_sd(sd)
+        if audio_encoder is None:
+            raise ValueError(
+                f"unrecognised audio encoder state dict in: {model_path}"
+            )
+        return audio_encoder
 
     def load_vae_kj(
         self,

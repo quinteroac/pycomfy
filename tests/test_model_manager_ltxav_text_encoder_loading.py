@@ -204,6 +204,7 @@ def test_load_ltxav_text_encoder_calls_loader_and_returns_raw_object(
         ("llm", str(models_dir / "llm"), True),
         ("upscale_models", str(models_dir / "upscale_models"), True),
         ("latent_upscale_models", str(models_dir / "upscale"), True),
+        ("audio_encoders", str(models_dir / "audio_encoders"), True),
     ]
 
 
