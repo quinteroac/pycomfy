@@ -1275,15 +1275,7 @@ def _wan_sound_to_video(
     ref_motion: Any | None = None,
     ref_motion_latent: Any | None = None,
 ) -> tuple[Any, Any, dict[str, Any], int]:
-    import torch
-
-    from ._runtime import ensure_comfyui_on_path
-
-    ensure_comfyui_on_path()
-    import comfy.latent_formats
-    import comfy.model_management
-    import comfy.utils
-    import node_helpers
+    torch, model_management, comfy_utils, node_helpers, latent_formats = _get_wan_vace_dependencies()
 
     latent_t = ((length - 1) // 4) + 1
 
@@ -1304,7 +1296,7 @@ def _wan_sound_to_video(
             frame_offset += batch_frames
 
     if ref_image is not None:
-        ref_image = comfy.utils.common_upscale(
+        ref_image = comfy_utils.common_upscale(
             ref_image[:1].movedim(-1, 1), width, height, "bilinear", "center"
         ).movedim(1, -1)
         ref_latent = vae.encode(ref_image[:, :, :, :3])
@@ -1314,7 +1306,7 @@ def _wan_sound_to_video(
     if ref_motion is not None:
         if ref_motion.shape[0] > 73:
             ref_motion = ref_motion[-73:]
-        ref_motion = comfy.utils.common_upscale(ref_motion.movedim(-1, 1), width, height, "bilinear", "center").movedim(1, -1)
+        ref_motion = comfy_utils.common_upscale(ref_motion.movedim(-1, 1), width, height, "bilinear", "center").movedim(1, -1)
         if ref_motion.shape[0] < 73:
             r = torch.ones([73, height, width, 3]) * 0.5
             r[-ref_motion.shape[0]:] = ref_motion
@@ -1326,10 +1318,10 @@ def _wan_sound_to_video(
         positive = node_helpers.conditioning_set_values(positive, {"reference_motion": ref_motion_latent})
         negative = node_helpers.conditioning_set_values(negative, {"reference_motion": ref_motion_latent})
 
-    latent = torch.zeros([batch_size, 16, latent_t, height // 8, width // 8], device=comfy.model_management.intermediate_device())
-    control_video_out = comfy.latent_formats.Wan21().process_out(torch.zeros_like(latent))
+    latent = torch.zeros([batch_size, 16, latent_t, height // 8, width // 8], device=model_management.intermediate_device())
+    control_video_out = latent_formats.Wan21().process_out(torch.zeros_like(latent))
     if control_video is not None:
-        control_video = comfy.utils.common_upscale(
+        control_video = comfy_utils.common_upscale(
             control_video[:length].movedim(-1, 1), width, height, "bilinear", "center"
         ).movedim(1, -1)
         cv_latent = vae.encode(control_video[:, :, :, :3])

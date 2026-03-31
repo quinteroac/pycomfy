@@ -699,6 +699,21 @@ def test_wan_sound_image_to_video_signature_matches_contract() -> None:
     )
 
 
+def test_wan_sound_image_to_video_returns_positive_negative_latent(
+    monkeypatch: Any,
+) -> None:
+    monkeypatch.setattr(conditioning_module, "_get_wan_vace_dependencies", _make_vace_deps())
+    positive = [["p", {}]]
+    negative = [["n", {}]]
+    out_pos, out_neg, latent = wan_sound_image_to_video(
+        positive=positive, negative=negative, vae=_FakeVaeVace()
+    )
+    assert isinstance(out_pos, list)
+    assert isinstance(out_neg, list)
+    assert isinstance(latent, dict)
+    assert "samples" in latent
+
+
 # ── wan_sound_image_to_video_extend ──────────────────────────────────────────
 
 
@@ -710,6 +725,23 @@ def test_wan_sound_image_to_video_extend_signature_matches_contract() -> None:
         "audio_encoder_output: 'Any | None' = None, ref_image: 'Any | None' = None, "
         "control_video: 'Any | None' = None) -> 'tuple[Any, Any, dict[str, Any]]'"
     )
+
+
+def test_wan_sound_image_to_video_extend_returns_positive_negative_latent(
+    monkeypatch: Any,
+) -> None:
+    monkeypatch.setattr(conditioning_module, "_get_wan_vace_dependencies", _make_vace_deps())
+    positive = [["p", {}]]
+    negative = [["n", {}]]
+    video_latent: dict[str, Any] = {"samples": _FakeTensor((1, 16, 5, 60, 104))}
+    out_pos, out_neg, latent = wan_sound_image_to_video_extend(
+        positive=positive, negative=negative, vae=_FakeVaeVace(),
+        length=77, video_latent=video_latent,
+    )
+    assert isinstance(out_pos, list)
+    assert isinstance(out_neg, list)
+    assert isinstance(latent, dict)
+    assert "samples" in latent
 
 
 # ── wan_humo_image_to_video ───────────────────────────────────────────────────
