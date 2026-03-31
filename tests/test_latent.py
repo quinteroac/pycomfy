@@ -17,6 +17,7 @@ import comfy_diffusion.sampling as sampling_module
 from comfy_diffusion.conditioning import conditioning_combine
 from comfy_diffusion.latent import (
     empty_latent_image,
+    empty_wan_latent_video,
     inpaint_model_conditioning,
     latent_composite,
     latent_composite_masked,
@@ -59,6 +60,7 @@ def _run_python(code: str) -> subprocess.CompletedProcess[str]:
 def test_latent_module_exports_empty_latent_image() -> None:
     assert latent_module.__all__ == [
         "empty_latent_image",
+        "empty_wan_latent_video",
         "ltxv_empty_latent_video",
         "latent_from_batch",
         "latent_cut_to_batch",
@@ -360,6 +362,96 @@ def test_ltxv_empty_latent_video_in_all() -> None:
     import comfy_diffusion.latent as m
 
     assert "ltxv_empty_latent_video" in m.__all__
+
+
+def test_empty_wan_latent_video_signature_matches_contract() -> None:
+    signature = inspect.signature(empty_wan_latent_video)
+    assert str(signature) == (
+        "(width: 'int', height: 'int', length: 'int' = 33, batch_size: 'int' = 1)"
+        " -> 'dict[str, Any]'"
+    )
+
+
+def test_empty_wan_latent_video_returns_correct_shape(monkeypatch: Any) -> None:
+    import types
+
+    class FakeTensor:
+        def __init__(self, shape: Any) -> None:
+            self.shape = tuple(shape)
+
+    fake_torch = types.SimpleNamespace(zeros=lambda s, device=None: FakeTensor(s))
+    fake_comfy_mm = types.SimpleNamespace(intermediate_device=lambda: "cpu")
+    fake_comfy = types.SimpleNamespace(model_management=fake_comfy_mm)
+
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    monkeypatch.setitem(sys.modules, "comfy", fake_comfy)
+    monkeypatch.setitem(sys.modules, "comfy.model_management", fake_comfy_mm)
+
+    result = empty_wan_latent_video(width=832, height=480, length=33, batch_size=1)
+
+    assert isinstance(result, dict)
+    assert "samples" in result
+    # ((33-1)//4)+1 = 9; 480//8 = 60; 832//8 = 104
+    assert result["samples"].shape == (1, 16, 9, 60, 104)
+
+
+def test_empty_wan_latent_video_default_length_and_batch_size(monkeypatch: Any) -> None:
+    import types
+
+    class FakeTensor:
+        def __init__(self, shape: Any) -> None:
+            self.shape = tuple(shape)
+
+    fake_torch = types.SimpleNamespace(zeros=lambda s, device=None: FakeTensor(s))
+    fake_comfy_mm = types.SimpleNamespace(intermediate_device=lambda: "cpu")
+    fake_comfy = types.SimpleNamespace(model_management=fake_comfy_mm)
+
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    monkeypatch.setitem(sys.modules, "comfy", fake_comfy)
+    monkeypatch.setitem(sys.modules, "comfy.model_management", fake_comfy_mm)
+
+    result = empty_wan_latent_video(width=512, height=512)
+
+    # length=33 default → ((33-1)//4)+1 = 9; 512//8 = 64
+    assert result["samples"].shape == (1, 16, 9, 64, 64)
+
+
+def test_empty_wan_latent_video_batch_size(monkeypatch: Any) -> None:
+    import types
+
+    class FakeTensor:
+        def __init__(self, shape: Any) -> None:
+            self.shape = tuple(shape)
+
+    fake_torch = types.SimpleNamespace(zeros=lambda s, device=None: FakeTensor(s))
+    fake_comfy_mm = types.SimpleNamespace(intermediate_device=lambda: "cpu")
+    fake_comfy = types.SimpleNamespace(model_management=fake_comfy_mm)
+
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    monkeypatch.setitem(sys.modules, "comfy", fake_comfy)
+    monkeypatch.setitem(sys.modules, "comfy.model_management", fake_comfy_mm)
+
+    result = empty_wan_latent_video(width=256, height=256, length=17, batch_size=2)
+
+    # ((17-1)//4)+1 = 5; 256//8 = 32
+    assert result["samples"].shape == (2, 16, 5, 32, 32)
+
+
+def test_empty_wan_latent_video_lazy_imports() -> None:
+    result = _run_python(
+        "import sys\n"
+        "import comfy_diffusion.latent as m\n"
+        "assert 'torch' not in sys.modules, 'torch imported at module level'\n"
+        "assert 'comfy' not in sys.modules, 'comfy imported at module level'\n"
+        "print('ok')"
+    )
+    assert result.stdout.strip() == "ok"
+
+
+def test_empty_wan_latent_video_in_all() -> None:
+    import comfy_diffusion.latent as m
+
+    assert "empty_wan_latent_video" in m.__all__
 
 
 def test_latent_upscale_supports_all_comfyui_methods_and_returns_sample_compatible_latent(
