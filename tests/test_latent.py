@@ -33,6 +33,7 @@ from comfy_diffusion.latent import (
     replace_video_latent_frames,
     set_latent_noise_mask,
     trim_video_latent,
+    wan22_image_to_video_latent,
 )
 from comfy_diffusion.sampling import sample
 
@@ -64,6 +65,7 @@ def test_latent_module_exports_empty_latent_image() -> None:
         "ltxv_empty_latent_video",
         "latent_from_batch",
         "latent_cut_to_batch",
+        "latent_cut",
         "repeat_latent_batch",
         "latent_concat",
         "replace_video_latent_frames",
@@ -76,6 +78,7 @@ def test_latent_module_exports_empty_latent_image() -> None:
         "inpaint_model_conditioning",
         "ltxv_latent_upsample",
         "trim_video_latent",
+        "wan22_image_to_video_latent",
     ]
 
 
@@ -1302,3 +1305,120 @@ def test_trim_video_latent_zero_trim_returns_full_latent() -> None:
     latent = {"samples": samples}
     result = trim_video_latent(latent, 0)
     assert result["samples"].shape == (1, 16, 5, 8, 8)
+
+
+def test_wan22_image_to_video_latent_in_all() -> None:
+    import comfy_diffusion.latent as m
+
+    assert "wan22_image_to_video_latent" in m.__all__
+
+
+def test_wan22_image_to_video_latent_signature_matches_contract() -> None:
+    sig = str(inspect.signature(wan22_image_to_video_latent))
+    assert sig == (
+        "(vae: 'Any', width: 'int', height: 'int', length: 'int' = 49,"
+        " batch_size: 'int' = 1, *, start_image: 'Any' = None) -> 'dict[str, Any]'"
+    )
+
+
+def test_wan22_image_to_video_latent_no_start_image(monkeypatch: Any) -> None:
+    """Without start_image: returns samples only, no noise_mask."""
+    import types
+
+    class FakeTensor:
+        def __init__(self, shape: tuple) -> None:
+            self.shape = shape
+            self.ndim = len(shape)
+
+        def repeat(self, *args: Any) -> "FakeTensor":
+            new_shape = tuple(a * b for a, b in zip(args[0], self.shape))
+            return FakeTensor(new_shape)
+
+    fake_comfy_mm = types.SimpleNamespace(intermediate_device=lambda: "cpu")
+    fake_comfy = types.SimpleNamespace(model_management=fake_comfy_mm)
+
+    captured: dict[str, Any] = {}
+
+    def fake_zeros(shape: tuple, device: Any = None) -> FakeTensor:
+        captured["shape"] = shape
+        return FakeTensor(shape)
+
+    fake_torch = types.SimpleNamespace(zeros=fake_zeros, ones=lambda *a, **kw: FakeTensor(a[0]))
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    monkeypatch.setitem(sys.modules, "comfy", fake_comfy)
+    monkeypatch.setitem(sys.modules, "comfy.model_management", fake_comfy_mm)
+    monkeypatch.setitem(sys.modules, "comfy.latent_formats", types.SimpleNamespace(Wan22=object))
+    monkeypatch.setitem(sys.modules, "comfy.utils", types.SimpleNamespace())
+
+    result = wan22_image_to_video_latent(vae=None, width=640, height=384, length=49, batch_size=1)
+
+    # shape [1, 48, ((49-1)//4)+1, 384//16, 640//16] = [1, 48, 13, 24, 40]
+    assert list(captured["shape"]) == [1, 48, 13, 24, 40]
+    assert "samples" in result
+    assert "noise_mask" not in result
+
+
+def test_wan22_image_to_video_latent_with_start_image(monkeypatch: Any) -> None:
+    """With start_image: samples and noise_mask are returned, both with batch_size repeated."""
+    import types
+    import torch
+
+    width, height, length, batch_size = 64, 64, 5, 2
+    t_frames = ((length - 1) // 4) + 1  # 2
+    latent_h, latent_w = height // 16, width // 16  # 4, 4
+
+    # Minimal stub VAE
+    class FakeVAE:
+        def encode(self, img: Any) -> Any:
+            # returns a [1, 48, 1, latent_h, latent_w] tensor (1 encoded frame)
+            return torch.zeros(1, 48, 1, latent_h, latent_w)
+
+    fake_start_image = torch.zeros(1, height, width, 3)
+
+    def fake_common_upscale(img: Any, w: int, h: int, mode: str, crop: str) -> Any:
+        return img.movedim(-1, 1)  # just return something with right-ish shape
+
+    fake_comfy_utils = types.SimpleNamespace(common_upscale=fake_common_upscale)
+
+    class FakeWan22:
+        def process_out(self, t: Any) -> Any:
+            return t  # identity
+
+    fake_latent_formats = types.SimpleNamespace(Wan22=FakeWan22)
+    fake_comfy_mm = types.SimpleNamespace(intermediate_device=lambda: "cpu")
+    fake_comfy = types.SimpleNamespace(
+        model_management=fake_comfy_mm,
+        latent_formats=fake_latent_formats,
+        utils=fake_comfy_utils,
+    )
+    monkeypatch.setitem(sys.modules, "comfy", fake_comfy)
+    monkeypatch.setitem(sys.modules, "comfy.model_management", fake_comfy_mm)
+    monkeypatch.setitem(sys.modules, "comfy.latent_formats", fake_latent_formats)
+    monkeypatch.setitem(sys.modules, "comfy.utils", fake_comfy_utils)
+
+    result = wan22_image_to_video_latent(
+        vae=FakeVAE(),
+        width=width,
+        height=height,
+        length=length,
+        batch_size=batch_size,
+        start_image=fake_start_image,
+    )
+
+    assert "samples" in result
+    assert "noise_mask" in result
+    assert result["samples"].shape[0] == batch_size
+    assert result["samples"].shape[1] == 48
+    assert result["samples"].shape[2] == t_frames
+    assert result["noise_mask"].shape[0] == batch_size
+
+
+def test_wan22_image_to_video_latent_lazy_imports() -> None:
+    result = _run_python(
+        "import sys\n"
+        "import comfy_diffusion.latent as m\n"
+        "assert 'torch' not in sys.modules\n"
+        "assert 'comfy' not in sys.modules\n"
+        "print('ok')\n"
+    )
+    assert result.stdout.strip() == "ok"

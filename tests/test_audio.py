@@ -13,6 +13,7 @@ from typing import Any
 import comfy_diffusion.audio as audio_module
 from comfy_diffusion.audio import (
     audio_crop,
+    audio_encoder_encode,
     audio_separation,
     empty_ace_step_15_latent_audio,
     encode_ace_step_15_audio,
@@ -60,6 +61,7 @@ def test_audio_module_exports_ltxv_audio_vae_helpers() -> None:
         "audio_separation",
         "trim_audio_duration",
         "ltxv_audio_video_mask",
+        "audio_encoder_encode",
     ]
 
 
@@ -979,6 +981,65 @@ def test_audio_preprocessing_has_no_top_level_comfy_or_torch_imports() -> None:
         "import sys\n"
         "import comfy_diffusion\n"
         "from comfy_diffusion.audio import audio_crop, audio_separation, trim_audio_duration\n"
+        "assert 'torch' not in sys.modules, 'torch was imported at module level'\n"
+        "assert 'comfy' not in sys.modules, 'comfy was imported at module level'\n"
+        "print('ok')\n"
+    )
+    assert result.returncode == 0
+    assert result.stdout.strip() == "ok"
+
+
+# ---------------------------------------------------------------------------
+# audio_encoder_encode tests
+# ---------------------------------------------------------------------------
+
+
+def test_audio_encoder_encode_is_in_all() -> None:
+    assert "audio_encoder_encode" in audio_module.__all__
+
+
+def test_audio_encoder_encode_signature_matches_contract() -> None:
+    signature = inspect.signature(audio_encoder_encode)
+    assert str(signature) == "(audio_encoder: 'Any', audio: 'dict') -> 'Any'"
+
+
+def test_audio_encoder_encode_calls_encode_audio_with_waveform_and_sample_rate() -> None:
+    expected_waveform = object()
+    expected_sample_rate = 44100
+    expected_output = object()
+    call_log: list[dict[str, Any]] = []
+
+    class FakeAudioEncoder:
+        def encode_audio(self, waveform: Any, sample_rate: Any) -> Any:
+            call_log.append({"waveform": waveform, "sample_rate": sample_rate})
+            return expected_output
+
+    encoder = FakeAudioEncoder()
+    audio: dict[str, Any] = {"waveform": expected_waveform, "sample_rate": expected_sample_rate}
+
+    result = audio_encoder_encode(encoder, audio)
+
+    assert result is expected_output
+    assert len(call_log) == 1
+    assert call_log[0]["waveform"] is expected_waveform
+    assert call_log[0]["sample_rate"] == expected_sample_rate
+
+
+def test_audio_encoder_encode_is_importable() -> None:
+    result = _run_python(
+        "from comfy_diffusion.audio import audio_encoder_encode; "
+        "assert audio_encoder_encode.__name__ == 'audio_encoder_encode'; "
+        "print('ok')"
+    )
+    assert result.returncode == 0
+    assert result.stdout.strip() == "ok"
+
+
+def test_audio_encoder_encode_has_no_top_level_comfy_or_torch_imports() -> None:
+    result = _run_python(
+        "import sys\n"
+        "import comfy_diffusion\n"
+        "from comfy_diffusion.audio import audio_encoder_encode\n"
         "assert 'torch' not in sys.modules, 'torch was imported at module level'\n"
         "assert 'comfy' not in sys.modules, 'comfy was imported at module level'\n"
         "print('ok')\n"

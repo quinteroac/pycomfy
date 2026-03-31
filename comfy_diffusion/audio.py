@@ -418,6 +418,19 @@ def load_audio(
     return {"waveform": waveform, "sample_rate": sample_rate}
 
 
+def audio_encoder_encode(audio_encoder: Any, audio: dict) -> Any:
+    """Encode an audio dict into an AUDIO_ENCODER_OUTPUT for S2V conditioning.
+
+    Args:
+        audio_encoder: A loaded audio encoder (e.g. from ``ModelManager.load_audio_encoder``).
+        audio: ComfyUI AUDIO dict with keys ``"waveform"`` and ``"sample_rate"``.
+
+    Returns:
+        An ``AUDIO_ENCODER_OUTPUT`` object suitable for S2V conditioning.
+    """
+    return audio_encoder.encode_audio(audio["waveform"], audio["sample_rate"])
+
+
 def ltxv_audio_video_mask(
     video_latent: dict[str, Any],
     audio_latent: dict[str, Any],
@@ -503,4 +516,5 @@ __all__ = [
     "audio_separation",
     "trim_audio_duration",
     "ltxv_audio_video_mask",
+    "audio_encoder_encode",
 ]

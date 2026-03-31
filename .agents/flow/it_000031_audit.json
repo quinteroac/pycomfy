@@ -1,0 +1,67 @@
+{
+  "iteration": "000031",
+  "executive_summary": "Iteration 000031 delivers WAN 2.2 audio/video pipeline support across 10 user stories. All 293 tests pass on CPU. All five pipelines (t2v, i2v, flf2v, s2v, ti2v) are implemented with manifest()/run() contracts, lazy-import patterns, example scripts, and unit tests. Two minor spec deviations: (1) flf2v manifest() returns 4 ModelEntry items instead of the 3 specified in US-007-AC01; (2) audio_encoders folder registered in ModelManager.__init__ (models.py) rather than _runtime.py as FR-11 specifies.",
+  "verification_by_fr": [
+    { "frId": "FR-1", "assessment": "comply" },
+    { "frId": "FR-2", "assessment": "comply" },
+    { "frId": "FR-3", "assessment": "comply" },
+    { "frId": "FR-4", "assessment": "comply" },
+    { "frId": "FR-5", "assessment": "comply" },
+    { "frId": "FR-6", "assessment": "comply" },
+    { "frId": "FR-7", "assessment": "partially_comply" },
+    { "frId": "FR-8", "assessment": "comply" },
+    { "frId": "FR-9", "assessment": "comply" },
+    { "frId": "FR-10", "assessment": "comply" },
+    { "frId": "FR-11", "assessment": "partially_comply" }
+  ],
+  "verification_by_us": [
+    { "usId": "US-001", "assessment": "comply" },
+    { "usId": "US-002", "assessment": "comply" },
+    { "usId": "US-003", "assessment": "comply" },
+    { "usId": "US-004", "assessment": "comply" },
+    { "usId": "US-005", "assessment": "comply" },
+    { "usId": "US-006", "assessment": "comply" },
+    { "usId": "US-007", "assessment": "partially_comply" },
+    { "usId": "US-008", "assessment": "comply" },
+    { "usId": "US-009", "assessment": "comply" },
+    { "usId": "US-010", "assessment": "comply" }
+  ],
+  "minor_observations": [
+    "wan22_image_to_video_latent is defined in two places: latent.py (public function) and conditioning.py (internal helper used by ti2v). Consolidate into latent.py.",
+    "flf2v manifest() docstring says 'exactly 4' contradicting PRD US-007-AC01 which says 3. Reconciliation needed.",
+    "FR-11 specifies _runtime.py as registration location; implementation correctly uses ModelManager.__init__ in models.py. PRD wording should be updated.",
+    "wan_first_last_frame_to_video in conditioning.__all__ — verify it was pre-existing and not missing from a prior iteration's __all__."
+  ],
+  "conclusions_and_recommendations": "Iteration 000031 is production-ready. 9/10 US fully comply. Recommended refactor targets: (1) Reconcile flf2v manifest count against reference workflow — update either flf2v.py or PRD US-007-AC01. (2) Update FR-11 wording to reflect registration in ModelManager.__init__. (3) Consolidate duplicate wan22_image_to_video_latent definition by removing the internal copy in conditioning.py and importing from comfy_diffusion.latent in ti2v.py.",
+  "refactor_plan": [
+    {
+      "id": "refactor-001",
+      "title": "Reconcile flf2v manifest count",
+      "description": "Verify active model loader nodes in the reference WAN 2.2 FLF2V workflow JSON. If 3 is correct (one shared UNet), update flf2v.py manifest() to return 3 entries, update run() accordingly, and align the docstring and test assertion. If 4 is correct, update PRD US-007-AC01 to say 'exactly 4'.",
+      "files": [
+        "comfy_diffusion/pipelines/video/wan/wan22/flf2v.py",
+        "tests/test_pipelines_wan22_flf2v.py"
+      ],
+      "priority": "high"
+    },
+    {
+      "id": "refactor-002",
+      "title": "Update FR-11 PRD wording",
+      "description": "Change FR-11 description to reflect that audio_encoders/ is registered in ModelManager.__init__ (models.py) via folder_paths.add_model_folder_path, consistent with other model directories.",
+      "files": [
+        ".agents/flow/it_000031_PRD.json"
+      ],
+      "priority": "low"
+    },
+    {
+      "id": "refactor-003",
+      "title": "Consolidate wan22_image_to_video_latent",
+      "description": "Remove the internal wan22_image_to_video_latent helper from conditioning.py. Update ti2v.py to import wan22_image_to_video_latent from comfy_diffusion.latent. Run uv run pytest to verify nothing breaks.",
+      "files": [
+        "comfy_diffusion/conditioning.py",
+        "comfy_diffusion/pipelines/video/wan/wan22/ti2v.py"
+      ],
+      "priority": "medium"
+    }
+  ]
+}
