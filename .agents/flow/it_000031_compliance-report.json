@@ -1,0 +1,121 @@
+{
+  "iteration": "000031",
+  "executive_summary": "Iteration 000031 delivers WAN 2.2 audio/video pipeline support across 10 user stories. All 293 tests pass on CPU. All five pipelines (t2v, i2v, flf2v, s2v, ti2v) are implemented with manifest()/run() contracts, lazy-import patterns, example scripts, and unit tests. Two minor deviations from the letter of the PRD were found: (1) the flf2v manifest() returns 4 ModelEntry items instead of the 3 specified in US-007-AC01 — the implementation includes both high-noise and low-noise UNets plus a text encoder and VAE, which is logically correct given the two-pass sampler flow; (2) the audio_encoders folder is registered in ModelManager.__init__ (models.py) rather than in _runtime.py as specified by FR-11 — it is functionally registered and accessible when needed. Both deviations are low-risk and represent implementation choices that are at least as correct as the spec.",
+  "verification_by_fr": [
+    {
+      "frId": "FR-1",
+      "assessment": "comply",
+      "notes": "ModelManager.load_audio_encoder(path: str | Path) -> Any is implemented in models.py:345. Calls comfy.utils.load_torch_file with safe_load=True, then comfy.audio_encoders.audio_encoders.load_audio_encoder_from_sd(sd). Follows lazy-import pattern."
+    },
+    {
+      "frId": "FR-2",
+      "assessment": "comply",
+      "notes": "audio_encoder_encode(audio_encoder, audio: dict) -> Any is in audio.py:421. Correctly calls audio_encoder.encode_audio(audio['waveform'], audio['sample_rate']). Listed in audio.__all__."
+    },
+    {
+      "frId": "FR-3",
+      "assessment": "comply",
+      "notes": "wan_sound_image_to_video wraps _wan_sound_to_video() (internal helper mirroring WanSoundImageToVideo.execute()) and returns (positive, negative, latent). Listed in conditioning.__all__."
+    },
+    {
+      "frId": "FR-4",
+      "assessment": "comply",
+      "notes": "wan_sound_image_to_video_extend wraps _wan_sound_to_video() with frame_offset derived from video_latent, mirrors WanSoundImageToVideoExtend.execute(), returns (positive, negative, latent). Listed in conditioning.__all__."
+    },
+    {
+      "frId": "FR-5",
+      "assessment": "comply",
+      "notes": "wan22_image_to_video_latent in latent.py:521 uses comfy.latent_formats.Wan22() for latent processing when start_image is provided. Returns {samples, noise_mask} with shape [batch, 48, ((length-1)//4)+1, height//16, width//16]. When start_image is None, returns {samples} only (matches node behavior). Listed in latent.__all__."
+    },
+    {
+      "frId": "FR-6",
+      "assessment": "comply",
+      "notes": "All 5 pipelines expose manifest() -> list[ModelEntry] and run(...) functions. Package wiring via wan22/__init__.py and wan/__init__.py is correct. Pattern is consistent with ltx2_t2v.py precedent."
+    },
+    {
+      "frId": "FR-7",
+      "assessment": "partially_comply",
+      "notes": "t2v(6), i2v(6), s2v(5), ti2v(3) match PRD exactly. flf2v returns 4 ModelEntry items (2 UNets + 1 text encoder + 1 VAE) but PRD US-007-AC01 specifies exactly 3. The implementation rationale (two-pass KSamplerAdvanced requires two separate UNets) is sound, but deviates from the stated count."
+    },
+    {
+      "frId": "FR-8",
+      "assessment": "comply",
+      "notes": "Pipeline run() execution orders mirror workflow node execution: model loading → conditioning → sampler passes → VAE decode. Two-pass KSamplerAdvanced (high-noise then low-noise) is preserved in t2v, i2v, flf2v. S2V iterates multi-pass extend loop. TI2V uses single-pass KSampler matching the 5B workflow."
+    },
+    {
+      "frId": "FR-9",
+      "assessment": "comply",
+      "notes": "All 5 pipeline modules have zero top-level torch/comfy imports. Only standard library, pathlib, typing, and comfy_diffusion.downloader are imported at module level. All comfy.* and torch imports are deferred inside function bodies. Verified by test_no_heavy_top_level_imports tests (all pass)."
+    },
+    {
+      "frId": "FR-10",
+      "assessment": "comply",
+      "notes": "All 293 tests pass (uv run pytest). No GPU required — model weights are mocked. Tests cover manifest() item counts, field names, package wiring, import patterns, CLI flag presence, and entrypoint guards."
+    },
+    {
+      "frId": "FR-11",
+      "assessment": "partially_comply",
+      "notes": "audio_encoders is registered via folder_paths.add_model_folder_path('audio_encoders', ..., is_default=True) in ModelManager.__init__ (models.py:77), NOT in _runtime.py as specified. Functionally equivalent — the folder is correctly registered before load_audio_encoder is called — but deviates from the spec's stated location."
+    }
+  ],
+  "verification_by_us": [
+    {
+      "usId": "US-001",
+      "assessment": "comply",
+      "notes": "All 6 ACs met: method signature str|Path, audio_encoders folder registered, calls comfy.utils.load_torch_file + load_audio_encoder_from_sd, lazy-import pattern, docstring present."
+    },
+    {
+      "usId": "US-002",
+      "assessment": "comply",
+      "notes": "All 5 ACs met: function signature Any/dict, calls encode_audio correctly, lazy-import, listed in audio.__all__, lint passes."
+    },
+    {
+      "usId": "US-003",
+      "assessment": "comply",
+      "notes": "All 5 ACs met: both functions implemented with correct signatures, both return (positive, negative, latent), lazy-import, both in conditioning.__all__."
+    },
+    {
+      "usId": "US-004",
+      "assessment": "comply",
+      "notes": "All 5 ACs met: signature matches spec, returns {samples, noise_mask} with correct shape, uses comfy.latent_formats.Wan22(), lazy-import, listed in latent.__all__."
+    },
+    {
+      "usId": "US-005",
+      "assessment": "comply",
+      "notes": "All 7 ACs met: manifest() returns 6 items, run() implements dual two-pass KSamplerAdvanced with LoraLoaderModelOnly and ModelSamplingSD3 shift, bypassed nodes excluded, returns list[PIL.Image], unit test in test_pipelines_wan22_t2v.py, examples/wan22_t2v.py exists."
+    },
+    {
+      "usId": "US-006",
+      "assessment": "comply",
+      "notes": "All 6 ACs met: manifest() returns 6 items, run() uses WanImageToVideo conditioning + two-pass KSamplerAdvanced + ModelSamplingSD3 with switch defaults, bypassed nodes excluded, unit test and examples/wan22_i2v.py present."
+    },
+    {
+      "usId": "US-007",
+      "assessment": "partially_comply",
+      "notes": "5 of 7 ACs met. AC01 fails: manifest() returns 4 ModelEntry items, not 3 as specified. AC02 (UMT5-XXL text encoder included), AC03 (WanFirstLastFrameToVideo + two-pass), AC04 (BYPASSED nodes excluded), AC05 (unit test), AC06 (examples/wan22_flf2v.py) all pass. The 4-entry manifest is logically justified by the two-pass sampler needing two UNets, but diverges from the PRD count."
+    },
+    {
+      "usId": "US-008",
+      "assessment": "comply",
+      "notes": "All 6 ACs met: manifest() returns 5 items, run() calls load_audio_encoder + audio_encoder_encode + multi-pass WanSoundImageToVideoExtend + KSampler + LatentConcat loop, audio dict accepts waveform/sample_rate keys, unit test present, examples/wan22_s2v.py present."
+    },
+    {
+      "usId": "US-009",
+      "assessment": "comply",
+      "notes": "All 6 ACs met: manifest() returns 3 items, run() calls wan22_image_to_video_latent + ModelSamplingSD3(shift=8) + KSampler(uni_pc, 20 steps, cfg=5) + vae_decode, start_image=None uses empty latent without mask, unit test present, examples/wan22_ti2v.py present."
+    },
+    {
+      "usId": "US-010",
+      "assessment": "comply",
+      "notes": "All 4 ACs met: wan22/__init__.py exports [t2v, i2v, flf2v, s2v, ti2v], wan/__init__.py exposes wan22, all 5 example scripts present with argparse CLI flags (--models-dir, --prompt, --output, --seed, --steps, --cfg plus pipeline-specific flags), lint passes."
+    }
+  ],
+  "minor_observations": [
+    "wan22_image_to_video_latent appears to be defined in two places: latent.py:521 (primary, top-level module function) and conditioning.py (internal helper referenced by ti2v pipeline). Both are functionally equivalent. Consider consolidating in a future cleanup iteration to eliminate the duplication.",
+    "flf2v pipeline docstring says 'Returns exactly 4 HFModelEntry items' — this contradicts US-007-AC01 which says 3. The docstring is self-consistent with the implementation but the PRD count needs reconciliation.",
+    "FR-11 specifies audio_encoders folder registration in _runtime.py, but the implementation places it in ModelManager.__init__ (models.py). This is architecturally cleaner (model directories belong to the model manager), but the PRD spec location should be updated to match reality in future iterations.",
+    "The wan_first_last_frame_to_video helper is listed in conditioning.__all__ (line 1804) even though it is not a new function for this iteration — verifying it was pre-existing and not accidentally omitted from a prior iteration's __all__ is recommended.",
+    "All 5 example scripts include a save_frames() helper and proper if __name__ == '__main__' guard. Test coverage for example scripts (test_us010_wan22_package_wiring.py) is thorough (56 tests)."
+  ],
+  "conclusions_and_recommendations": "Iteration 000031 is substantially complete and production-ready. 9 of 10 user stories fully comply; US-007 (flf2v) partially complies due to a manifest count discrepancy (4 items vs 3 specified). FR-7 and FR-11 also partially comply for the same reasons. Recommended actions: (1) Clarify with the workflow reader whether the reference workflow for flf2v truly has only 3 active model loader nodes or 4 — if 4 is correct, update the PRD; if 3 is correct, investigate whether one UNet can be reused for both passes. (2) Update FR-11 wording in the PRD to reflect that audio_encoders is registered in ModelManager.__init__, not _runtime.py — this is the better architectural location. (3) Consider consolidating the dual wan22_image_to_video_latent definitions into a single canonical implementation in latent.py. All tests pass; no blocking issues."
+}
