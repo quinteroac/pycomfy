@@ -1796,6 +1796,33 @@ def wan22_image_to_video_latent(
     }
 
 
+def reference_latent(conditioning: list, latent: dict) -> list:
+    """Inject a reference-image latent into conditioning.
+
+    Wraps ``ReferenceLatent`` from ``comfy_extras.nodes_edit_model``.  Used by
+    Flux.2 Klein editing and Qwen Image Layered workflows to attach a guiding
+    latent to the conditioning list.
+
+    Args:
+        conditioning: Conditioning list to augment.
+        latent: Latent dict with a ``"samples"`` tensor (standard ComfyUI latent).
+
+    Returns:
+        New conditioning list with ``reference_latents`` appended.
+    """
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+
+    import node_helpers
+
+    return node_helpers.conditioning_set_values(
+        conditioning,
+        {"reference_latents": [latent["samples"]]},
+        append=True,
+    )
+
+
 __all__ = [
     "encode_prompt",
     "encode_prompt_flux",
@@ -1825,4 +1852,5 @@ __all__ = [
     "conditioning_set_mask",
     "conditioning_set_timestep_range",
     "flux_guidance",
+    "reference_latent",
 ]
