@@ -11,6 +11,12 @@ Each pipeline module exports ``manifest()``, ``run_t2l()``, and ``run_i2l()``.
   Layered latent creation, KSampler denoising, and VAE decoding with
   ``LatentCut`` to extract generated layers.
 
+  .. note::
+     The reference ComfyUI workflow uses the ``LatentCutToBatch`` node to
+     extract each layer frame.  This pipeline uses ``LatentCut(dim="t")``
+     instead, which is functionally equivalent for temporal slicing and avoids
+     an additional batch-dimension reshape step.
+
 - ``run_i2l()`` executes the image-to-layers pipeline end-to-end: same as
   ``run_t2l()`` but uses the input image dimensions for the latent, encodes
   the (scaled) reference image with the VAE, and injects the reference latent

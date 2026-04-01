@@ -1796,12 +1796,31 @@ def wan22_image_to_video_latent(
     }
 
 
+def _get_reference_latent_type() -> Any:
+    """Resolve ComfyUI ReferenceLatent node at call time."""
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    from comfy_extras.nodes_edit_model import ReferenceLatent
+
+    return ReferenceLatent
+
+
+def _unwrap_node_output(output: Any) -> Any:
+    """Return first output for ComfyUI V3 nodes and tuple-style APIs."""
+    if hasattr(output, "result"):
+        return output.result[0]
+    if isinstance(output, tuple):
+        return output[0]
+    return output
+
+
 def reference_latent(conditioning: list, latent: dict) -> list:
     """Inject a reference-image latent into conditioning.
 
-    Wraps ``ReferenceLatent`` from ``comfy_extras.nodes_edit_model``.  Used by
-    Flux.2 Klein editing and Qwen Image Layered workflows to attach a guiding
-    latent to the conditioning list.
+    Wraps ``ReferenceLatent.execute()`` from ``comfy_extras.nodes_edit_model``.
+    Used by Flux.2 Klein editing and Qwen Image Layered workflows to attach a
+    guiding latent to the conditioning list.
 
     Args:
         conditioning: Conditioning list to augment.
@@ -1810,17 +1829,8 @@ def reference_latent(conditioning: list, latent: dict) -> list:
     Returns:
         New conditioning list with ``reference_latents`` appended.
     """
-    from ._runtime import ensure_comfyui_on_path
-
-    ensure_comfyui_on_path()
-
-    import node_helpers
-
-    return node_helpers.conditioning_set_values(
-        conditioning,
-        {"reference_latents": [latent["samples"]]},
-        append=True,
-    )
+    node_type = _get_reference_latent_type()
+    return _unwrap_node_output(node_type.execute(conditioning=conditioning, latent=latent))
 
 
 __all__ = [
