@@ -24,6 +24,7 @@ from comfy_diffusion.conditioning import (
     ltxv_conditioning,
     ltxv_crop_guides,
     ltxv_img_to_video,
+    reference_latent,
     wan_first_last_frame_to_video,
     wan_image_to_video,
 )
@@ -308,6 +309,7 @@ def test_conditioning_public_api_exports_expected_entrypoints() -> None:
         "conditioning_set_mask",
         "conditioning_set_timestep_range",
         "flux_guidance",
+        "reference_latent",
     ]
 
 
@@ -651,3 +653,55 @@ def test_import_comfy_diffusion_conditioning_has_no_torch_or_loader_side_effects
         if module.startswith(("torch", "folder_paths", "comfy.sd"))
     ]
     assert heavy == [], f"Unexpected heavy modules loaded on import: {heavy}"
+
+
+# ── reference_latent ─────────────────────────────────────────────────────────
+
+
+def test_reference_latent_returns_list() -> None:
+    """US-002-AC03: output is a list regardless of mock inputs."""
+    conditioning_input = [
+        ["token-a", {"source": "base"}],
+    ]
+    # Use a plain object as a stand-in for a torch tensor — node_helpers only
+    # stores the reference, so no GPU or torch required.
+    fake_samples = object()
+    latent: dict[str, Any] = {"samples": fake_samples}
+
+    result = reference_latent(conditioning_input, latent)
+
+    assert isinstance(result, list)
+
+
+def test_reference_latent_injects_reference_latents_key() -> None:
+    """reference_latents list is appended to each conditioning entry."""
+    conditioning_input = [
+        ["token-a", {}],
+        ["token-b", {}],
+    ]
+    fake_samples = object()
+    latent: dict[str, Any] = {"samples": fake_samples}
+
+    result = reference_latent(conditioning_input, latent)
+
+    assert len(result) == 2
+    for entry in result:
+        assert "reference_latents" in entry[1]
+        assert entry[1]["reference_latents"] == [fake_samples]
+
+
+def test_reference_latent_does_not_mutate_input() -> None:
+    """Original conditioning list is not modified."""
+    conditioning_input = [["token-a", {}]]
+    latent: dict[str, Any] = {"samples": object()}
+
+    reference_latent(conditioning_input, latent)
+
+    assert conditioning_input[0][1] == {}
+
+
+def test_reference_latent_in_all() -> None:
+    """US-002-AC02: reference_latent is listed in conditioning.__all__."""
+    import comfy_diffusion.conditioning as _cond_mod
+
+    assert "reference_latent" in _cond_mod.__all__

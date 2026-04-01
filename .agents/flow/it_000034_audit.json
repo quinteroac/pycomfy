@@ -1,0 +1,19 @@
+{
+  "iteration": "000034",
+  "refactorPlan": [
+    {
+      "id": "R-001",
+      "title": "Align reference_latent with the 'wraps ReferenceLatent' contract",
+      "file": "comfy_diffusion/conditioning.py",
+      "description": "Add _get_reference_latent_type() lazy-import helper and _unwrap_node_output() helper. Rewrite reference_latent() to call ReferenceLatent.execute(conditioning, latent) from comfy_extras.nodes_edit_model and unwrap the result — matching the established lazy-import pattern used by every other wrapper in the codebase.",
+      "status": "done"
+    },
+    {
+      "id": "R-002",
+      "title": "Document LatentCut vs LatentCutToBatch divergence in qwen/layered.py",
+      "file": "comfy_diffusion/pipelines/image/qwen/layered.py",
+      "description": "Add a .. note:: block to the module docstring explaining that LatentCut(dim='t') is used in place of the reference workflow's LatentCutToBatch and why it is functionally equivalent.",
+      "status": "done"
+    }
+  ]
+}

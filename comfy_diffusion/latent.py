@@ -401,6 +401,26 @@ def ltxv_empty_latent_video(
     return {"samples": latent}
 
 
+def _get_empty_flux2_latent_image_type() -> Any:
+    """Resolve ComfyUI EmptyFlux2LatentImage node at call time."""
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    from comfy_extras.nodes_flux import EmptyFlux2LatentImage
+
+    return EmptyFlux2LatentImage
+
+
+def _get_empty_qwen_image_layered_latent_image_type() -> Any:
+    """Resolve ComfyUI EmptyQwenImageLayeredLatentImage node at call time."""
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    from comfy_extras.nodes_qwen import EmptyQwenImageLayeredLatentImage
+
+    return EmptyQwenImageLayeredLatentImage
+
+
 def _load_latent_upscale_model() -> Any:
     """Resolve LTXVLatentUpsampler node at call time."""
     from ._runtime import ensure_comfyui_on_path
@@ -619,6 +639,67 @@ def empty_sd3_latent_image(width: int, height: int, batch_size: int = 1) -> dict
     return {"samples": latent, "downscale_ratio_spacial": 8}
 
 
+def empty_flux2_latent_image(width: int, height: int, batch_size: int = 1) -> dict[str, Any]:
+    """Create empty Flux.2 Klein image latents (128-channel, factor-16 spatial).
+
+    Wraps ``EmptyFlux2LatentImage.execute()`` from ``comfy_extras.nodes_flux``.
+
+    Parameters
+    ----------
+    width : int
+        Target image width in pixels.  Must be divisible by 16.
+    height : int
+        Target image height in pixels.  Must be divisible by 16.
+    batch_size : int, optional
+        Batch size.  Default ``1``.
+
+    Returns
+    -------
+    dict
+        ``{"samples": tensor}`` with shape
+        ``[batch_size, 128, height // 16, width // 16]``.
+    """
+    node_type = _get_empty_flux2_latent_image_type()
+    return cast(
+        dict[str, Any],
+        _unwrap_node_output(node_type.execute(width=width, height=height, batch_size=batch_size)),
+    )
+
+
+def empty_qwen_image_layered_latent_image(
+    width: int, height: int, layers: int, batch_size: int = 1
+) -> dict[str, Any]:
+    """Create empty Qwen Image Layered latents for Qwen Image Layered models.
+
+    Wraps ``EmptyQwenImageLayeredLatentImage.execute()`` from
+    ``comfy_extras.nodes_qwen``.
+
+    Parameters
+    ----------
+    width : int
+        Target image width in pixels.  Must be divisible by 8.
+    height : int
+        Target image height in pixels.  Must be divisible by 8.
+    layers : int
+        Number of extra layers.  The tensor time dimension is ``layers + 1``.
+    batch_size : int, optional
+        Batch size.  Default ``1``.
+
+    Returns
+    -------
+    dict
+        ``{"samples": tensor}`` with shape
+        ``[batch_size, 16, layers + 1, height // 8, width // 8]``.
+    """
+    node_type = _get_empty_qwen_image_layered_latent_image_type()
+    return cast(
+        dict[str, Any],
+        _unwrap_node_output(
+            node_type.execute(width=width, height=height, layers=layers, batch_size=batch_size)
+        ),
+    )
+
+
 def trim_video_latent(latent: dict[str, Any], n_latent_frames: int) -> dict[str, Any]:
     """Trim the first *n_latent_frames* along the time axis of a 5-D video latent.
 
@@ -633,7 +714,9 @@ def trim_video_latent(latent: dict[str, Any], n_latent_frames: int) -> dict[str,
 
 
 __all__ = [
+    "empty_flux2_latent_image",
     "empty_latent_image",
+    "empty_qwen_image_layered_latent_image",
     "empty_sd3_latent_image",
     "empty_wan_latent_video",
     "ltxv_empty_latent_video",

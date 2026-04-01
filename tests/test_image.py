@@ -227,6 +227,9 @@ def test_image_module_exports_expected_entrypoints() -> None:
         "dw_preprocessor",
         "image_resize_kj",
         "image_batch_extend_with_overlap",
+        "image_scale_to_total_pixels",
+        "image_scale_to_max_dimension",
+        "get_image_size",
     ]
 
 

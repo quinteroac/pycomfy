@@ -347,6 +347,22 @@ def get_sampler(sampler_name: str) -> Any:
     return _unwrap_node_output(ksampler_select_type.execute(sampler_name))
 
 
+def _get_flux_kv_cache_type() -> Any:
+    """Resolve ComfyUI FluxKVCache implementation at call time."""
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    from comfy_extras.nodes_flux import FluxKVCache
+
+    return FluxKVCache
+
+
+def flux_kv_cache(model: Any) -> Any:
+    """Apply the FluxKVCache model patch for Flux.2 Klein 9B KV editing pipelines."""
+    flux_kv_cache_type = _get_flux_kv_cache_type()
+    return _unwrap_node_output(flux_kv_cache_type.execute(model))
+
+
 def set_first_sigma(sigmas: Any, sigma_override: float) -> Any:
     """Override the first sigma in a sigmas tensor using ComfyUI SetFirstSigma."""
     set_first_sigma_type = _get_set_first_sigma_type()
@@ -550,4 +566,5 @@ __all__ = [
     "get_sampler",
     "set_first_sigma",
     "manual_sigmas",
+    "flux_kv_cache",
 ]
