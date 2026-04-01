@@ -367,6 +367,29 @@ def vae_encode(vae: _VaeEncoder, image: Image.Image) -> dict[str, Any]:
     return {"samples": samples}
 
 
+def vae_encode_tensor(vae: Any, image_tensor: Any) -> dict[str, Any]:
+    """Encode a ComfyUI IMAGE tensor (BHWC float32) into a LATENT dict.
+
+    Use this when the image is already a ComfyUI IMAGE tensor (e.g. from
+    ``image_scale_to_total_pixels`` or ``image_to_tensor``).  For PIL images
+    use :func:`vae_encode` instead.
+
+    Parameters
+    ----------
+    vae:
+        ComfyUI VAE model object (duck-typed — needs ``encode()``).
+    image_tensor:
+        BHWC float32 tensor with values in ``[0, 1]``.
+
+    Returns
+    -------
+    dict
+        Standard ComfyUI LATENT dict ``{"samples": tensor}``.
+    """
+    samples = vae.encode(image_tensor[:, :, :, :3])
+    return {"samples": samples}
+
+
 def vae_encode_for_inpaint(
     vae: _VaeEncoderForInpaint,
     image: Image.Image,
@@ -491,6 +514,7 @@ __all__ = [
     "vae_decode_batch",
     "vae_decode_batch_tiled",
     "vae_encode",
+    "vae_encode_tensor",
     "vae_encode_for_inpaint",
     "vae_encode_batch",
     "vae_encode_tiled",
