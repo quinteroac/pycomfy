@@ -96,6 +96,7 @@ def test_sampling_public_api_exports_all_entrypoints() -> None:
         "get_sampler",
         "set_first_sigma",
         "manual_sigmas",
+        "flux_kv_cache",
     ]
 
 
@@ -1730,3 +1731,44 @@ def test_set_first_sigma_lazy_import_does_not_load_comfy_at_module_level() -> No
     assert payload["func_name"] == "set_first_sigma"
     assert payload["comfy_extras_loaded"] is False
 
+
+
+def test_flux_kv_cache_in_all() -> None:
+    assert "flux_kv_cache" in sampling_module.__all__
+
+
+def test_flux_kv_cache_accepts_mock_model_and_returns_value(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mock_model = object()
+    patched_model = object()
+
+    class FakeFluxKVCache:
+        @classmethod
+        def execute(cls, model: Any) -> tuple[Any]:
+            return (patched_model,)
+
+    monkeypatch.setattr(
+        sampling_module,
+        "_get_flux_kv_cache_type",
+        lambda: FakeFluxKVCache,
+    )
+    from comfy_diffusion.sampling import flux_kv_cache
+
+    result = flux_kv_cache(mock_model)
+    assert result is patched_model
+
+
+def test_flux_kv_cache_lazy_import_does_not_load_comfy_at_module_level() -> None:
+    result = _run_python(
+        "import json, sys\n"
+        "from comfy_diffusion.sampling import flux_kv_cache\n"
+        "comfy_extras_loaded = 'comfy_extras' in sys.modules\n"
+        "print(json.dumps({'comfy_extras_loaded': comfy_extras_loaded, 'func_name': flux_kv_cache.__name__}))\n"
+    )
+
+    import json as _json
+
+    payload = _json.loads(result.stdout)
+    assert payload["func_name"] == "flux_kv_cache"
+    assert payload["comfy_extras_loaded"] is False
