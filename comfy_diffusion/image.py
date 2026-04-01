@@ -131,6 +131,33 @@ def _get_comfy_utils() -> Any:
     return comfy.utils
 
 
+def _get_image_scale_to_total_pixels_type() -> Any:
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    from comfy_extras.nodes_post_processing import ImageScaleToTotalPixels
+
+    return ImageScaleToTotalPixels
+
+
+def _get_image_scale_to_max_dimension_type() -> Any:
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    from comfy_extras.nodes_images import ImageScaleToMaxDimension
+
+    return ImageScaleToMaxDimension
+
+
+def _get_get_image_size_type() -> Any:
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    from comfy_extras.nodes_images import GetImageSize
+
+    return GetImageSize
+
+
 def _get_dw_preprocessor_deps() -> tuple[Any, Any, Any]:
     try:
         from controlnet_aux import DWposeDetector
@@ -669,6 +696,59 @@ def dw_preprocessor(
     return torch.stack(pose_frames, dim=0)
 
 
+def image_scale_to_total_pixels(
+    image: Any,
+    upscale_method: str,
+    megapixels: float,
+    smallest_side: int,
+) -> Any:
+    """Scale an IMAGE tensor to a target total pixel count.
+
+    Wraps ``ImageScaleToTotalPixels`` from ``comfy_extras.nodes_post_processing``.
+    ``smallest_side`` maps to ``resolution_steps`` — output dimensions are
+    rounded to multiples of this value.
+    """
+    node_type = _get_image_scale_to_total_pixels_type()
+    return _unwrap_node_output(
+        node_type.execute(
+            image=image,
+            upscale_method=upscale_method,
+            megapixels=megapixels,
+            resolution_steps=smallest_side,
+        )
+    )
+
+
+def image_scale_to_max_dimension(
+    image: Any,
+    upscale_method: str,
+    max_dimension: int,
+) -> Any:
+    """Scale an IMAGE tensor so its largest dimension equals ``max_dimension``.
+
+    Wraps ``ImageScaleToMaxDimension`` from ``comfy_extras.nodes_images``.
+    """
+    node_type = _get_image_scale_to_max_dimension_type()
+    return _unwrap_node_output(
+        node_type.execute(
+            image=image,
+            upscale_method=upscale_method,
+            largest_size=max_dimension,
+        )
+    )
+
+
+def get_image_size(image: Any) -> tuple[int, int]:
+    """Return ``(width, height)`` of an IMAGE tensor.
+
+    Wraps ``GetImageSize`` from ``comfy_extras.nodes_images``.
+    """
+    node_type = _get_get_image_size_type()
+    result = node_type.execute(image=image)
+    raw = getattr(result, "result", result)
+    return int(raw[0]), int(raw[1])
+
+
 __all__ = [
     "load_image",
     "image_to_tensor",
@@ -688,4 +768,7 @@ __all__ = [
     "dw_preprocessor",
     "image_resize_kj",
     "image_batch_extend_with_overlap",
+    "image_scale_to_total_pixels",
+    "image_scale_to_max_dimension",
+    "get_image_size",
 ]
