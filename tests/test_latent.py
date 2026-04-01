@@ -60,7 +60,9 @@ def _run_python(code: str) -> subprocess.CompletedProcess[str]:
 
 def test_latent_module_exports_empty_latent_image() -> None:
     assert latent_module.__all__ == [
+        "empty_flux2_latent_image",
         "empty_latent_image",
+        "empty_qwen_image_layered_latent_image",
         "empty_sd3_latent_image",
         "empty_wan_latent_video",
         "ltxv_empty_latent_video",
