@@ -107,6 +107,16 @@ def _get_ltxv_scheduler_type() -> Any:
     return LTXVScheduler
 
 
+def _get_sampler_custom_type() -> Any:
+    """Resolve ComfyUI SamplerCustom implementation at call time."""
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    from comfy_extras.nodes_custom_sampler import SamplerCustom
+
+    return SamplerCustom
+
+
 def _get_sampler_custom_advanced_type() -> Any:
     """Resolve ComfyUI SamplerCustomAdvanced implementation at call time."""
     from ._runtime import ensure_comfyui_on_path
@@ -115,6 +125,16 @@ def _get_sampler_custom_advanced_type() -> Any:
     from comfy_extras.nodes_custom_sampler import SamplerCustomAdvanced
 
     return SamplerCustomAdvanced
+
+
+def _get_sd_turbo_scheduler_type() -> Any:
+    """Resolve ComfyUI SDTurboScheduler implementation at call time."""
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    from comfy_extras.nodes_custom_sampler import SDTurboScheduler
+
+    return SDTurboScheduler
 
 
 def _get_split_sigmas_type() -> Any:
@@ -333,6 +353,67 @@ def set_first_sigma(sigmas: Any, sigma_override: float) -> Any:
     return _unwrap_node_output(set_first_sigma_type.execute(sigmas, sigma_override))
 
 
+def sd_turbo_scheduler(model: Any, steps: int = 1, denoise: float = 1.0) -> Any:
+    """Create SIGMAS using ComfyUI SDTurboScheduler.
+
+    Designed for single-step distilled inference (SDXL Turbo / SD Turbo).
+    ``steps`` is clamped to the range 1–10 by ComfyUI internally.
+    """
+    sd_turbo_scheduler_type = _get_sd_turbo_scheduler_type()
+    return _unwrap_node_output(sd_turbo_scheduler_type.execute(model, steps, denoise))
+
+
+def sample_custom_simple(
+    model: Any,
+    add_noise: bool,
+    noise_seed: int,
+    cfg: float,
+    positive: Any,
+    negative: Any,
+    sampler: Any,
+    sigmas: Any,
+    latent_image: Any,
+) -> dict[str, Any]:
+    """Run custom sampling via ``SamplerCustom``.
+
+    Direct wrapper around ComfyUI's ``SamplerCustom`` node.  Handles noise
+    injection and CFG internally based on *add_noise* and *cfg*.
+
+    Parameters
+    ----------
+    model:
+        The loaded model object.
+    add_noise:
+        When ``True``, inject fresh random noise.  Pass ``False`` for
+        second-pass or zero-noise sampling.
+    noise_seed:
+        Random seed used when *add_noise* is ``True``.
+    cfg:
+        CFG scale.  Use ``0.0`` for distilled/turbo models.
+    positive:
+        Positive conditioning tensor.
+    negative:
+        Negative conditioning tensor.
+    sampler:
+        SAMPLER object from :func:`get_sampler`.
+    sigmas:
+        SIGMAS tensor (e.g. from :func:`sd_turbo_scheduler`).
+    latent_image:
+        Input LATENT dict (``{"samples": ...}``).
+
+    Returns
+    -------
+    dict[str, Any]
+        The denoised LATENT dict (first output of SamplerCustom).
+    """
+    sampler_custom_type = _get_sampler_custom_type()
+    output = sampler_custom_type.execute(
+        model, add_noise, noise_seed, cfg, positive, negative, sampler, sigmas, latent_image
+    )
+    result = getattr(output, "result", output)
+    return result[0]
+
+
 def manual_sigmas(sigmas: str) -> Any:
     """Parse a string of numeric values into a ``torch.FloatTensor`` of sigmas.
 
@@ -451,6 +532,7 @@ __all__ = [
     "sample",
     "sample_advanced",
     "sample_custom",
+    "sample_custom_simple",
     "basic_guider",
     "cfg_guider",
     "video_linear_cfg_guidance",
@@ -462,6 +544,7 @@ __all__ = [
     "ays_scheduler",
     "flux2_scheduler",
     "ltxv_scheduler",
+    "sd_turbo_scheduler",
     "split_sigmas",
     "split_sigmas_denoise",
     "get_sampler",

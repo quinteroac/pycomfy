@@ -589,6 +589,36 @@ def wan22_image_to_video_latent(
     return out_latent
 
 
+def empty_sd3_latent_image(width: int, height: int, batch_size: int = 1) -> dict[str, Any]:
+    """Create empty SD3/AuraFlow/Lumina2 image latents (16-channel, factor-8 spatial).
+
+    Mirrors ``EmptySD3LatentImage.execute()`` from ComfyUI.  The returned dict
+    contains ``"samples"`` (a zero-filled 16-channel tensor) and the
+    ``"downscale_ratio_spacial"`` metadata key expected by SD3-family models.
+
+    Parameters
+    ----------
+    width : int
+        Target image width in pixels.  Must be divisible by 8.
+    height : int
+        Target image height in pixels.  Must be divisible by 8.
+    batch_size : int, optional
+        Batch size.  Default ``1``.
+    """
+    import torch
+
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    import comfy.model_management
+
+    latent = torch.zeros(
+        [batch_size, 16, height // 8, width // 8],
+        device=comfy.model_management.intermediate_device(),
+    )
+    return {"samples": latent, "downscale_ratio_spacial": 8}
+
+
 def trim_video_latent(latent: dict[str, Any], n_latent_frames: int) -> dict[str, Any]:
     """Trim the first *n_latent_frames* along the time axis of a 5-D video latent.
 
@@ -604,6 +634,7 @@ def trim_video_latent(latent: dict[str, Any], n_latent_frames: int) -> dict[str,
 
 __all__ = [
     "empty_latent_image",
+    "empty_sd3_latent_image",
     "empty_wan_latent_video",
     "ltxv_empty_latent_video",
     "latent_from_batch",

@@ -1,0 +1,95 @@
+{
+  "iteration": "000033",
+  "generated_at": "2026-04-01T02:25:21.154Z",
+  "executive_summary": "Iteration 000033 delivers all 5 image-generation pipelines (SDXL T2I, SDXL T2I Refiner Prompt, SDXL Turbo, Z-Image Turbo, Anima Preview), three new node wrappers (empty_sd3_latent_image, sd_turbo_scheduler, sample_custom_simple), five example scripts, and six pytest test files. All 134 tests pass on CPU. The implementation is structurally complete and correct with one minor gap: the Z-Image Turbo pipeline (z_image/turbo.py) omits the optional per-file path-override keyword arguments required by FR-5, using hardcoded manifest-derived filenames instead.",
+
+  "verification_by_fr": [
+    {
+      "frId": "FR-1",
+      "assessment": "comply",
+      "notes": "sampling.sd_turbo_scheduler(model, steps, denoise=1.0) wraps SDTurboScheduler; lazy import confirmed; present in __all__."
+    },
+    {
+      "frId": "FR-2",
+      "assessment": "comply",
+      "notes": "sampling.sample_custom_simple(model, add_noise, noise_seed, cfg, positive, negative, sampler, sigmas, latent_image) wraps SamplerCustom; returns output latent at index 0; lazy import confirmed; present in __all__."
+    },
+    {
+      "frId": "FR-3",
+      "assessment": "comply",
+      "notes": "latent.empty_sd3_latent_image(width, height, batch_size=1) wraps EmptySD3LatentImage logic via torch + comfy.model_management; lazy import confirmed; present in __all__."
+    },
+    {
+      "frId": "FR-4",
+      "assessment": "comply",
+      "notes": "All five pipeline run() functions call check_runtime() first and raise RuntimeError with the error message if an error key is present. Pattern consistent across all modules."
+    },
+    {
+      "frId": "FR-5",
+      "assessment": "partially_comply",
+      "notes": "SDXL T2I, SDXL T2I Refiner Prompt, SDXL Turbo, and Anima T2I expose per-file path-override keyword arguments (base_filename, refiner_filename, ckpt_filename, unet_filename, clip_filename, vae_filename). Z-Image Turbo (z_image/turbo.py) does NOT expose any path-override kwargs; it always resolves paths from manifest() entries only, giving callers no way to override individual model file names at call time."
+    },
+    {
+      "frId": "FR-6",
+      "assessment": "comply",
+      "notes": "All pipeline modules live under comfy_diffusion/pipelines/image/ as specified."
+    },
+    {
+      "frId": "FR-7",
+      "assessment": "comply",
+      "notes": "__init__.py files present at: pipelines/, pipelines/image/, pipelines/image/sdxl/, pipelines/image/z_image/, pipelines/image/anima/."
+    }
+  ],
+
+  "verification_by_us": [
+    {
+      "usId": "US-001",
+      "assessment": "comply",
+      "notes": "t2i.py exists; manifest() returns 2 correct checkpoints; run() signature matches; KSamplerAdvanced (via sample_advanced) with correct add_noise/return_with_leftover_noise/start_at_step/end_at_step settings; refiner VAE used for decode; lazy imports; check_runtime() call; __all__ and docstring present."
+    },
+    {
+      "usId": "US-002",
+      "assessment": "comply",
+      "notes": "t2i_refiner_prompt.py exists; manifest() identical to US-001; run() adds refiner_prompt and refiner_negative_prompt kwargs (default to base prompt/negative when None); refiner CLIP used for refiner-stage conditioning; two-pass KSamplerAdvanced flow identical to US-001; lazy imports; __all__ and docstring present."
+    },
+    {
+      "usId": "US-003",
+      "assessment": "comply",
+      "notes": "turbo.py exists; manifest() returns 1 entry (sd_xl_turbo_1.0_fp16.safetensors); run() accepts all required args; euler_ancestral via get_sampler(); sd_turbo_scheduler(model, steps=1, denoise=1.0); sample_custom_simple() used; lazy imports; __all__ and docstring present."
+    },
+    {
+      "usId": "US-004",
+      "assessment": "comply",
+      "notes": "z_image/turbo.py exists; manifest() returns 3 correct entries; run() accepts models_dir, prompt, width, height, steps, seed (no negative_prompt); load_clip with clip_type='lumina2'; model_sampling_aura_flow(shift=3); empty_sd3_latent_image(); conditioning_zero_out(); sampler res_multistep, scheduler simple, cfg 1.0; lazy imports; __all__ and docstring present."
+    },
+    {
+      "usId": "US-005",
+      "assessment": "comply",
+      "notes": "anima/t2i.py exists; manifest() returns 3 correct entries; run() accepts all required args; load_clip with clip_type='stable_diffusion'; empty_latent_image(); er_sde sampler; cfg defaults 4.0, steps defaults 30; lazy imports; __all__ and docstring present."
+    },
+    {
+      "usId": "US-006",
+      "assessment": "comply",
+      "notes": "All three wrappers added: latent.empty_sd3_latent_image (latent.py), sampling.sd_turbo_scheduler and sampling.sample_custom_simple (sampling.py). All present in __all__. All use lazy imports. All wrap correct ComfyUI internals."
+    },
+    {
+      "usId": "US-007",
+      "assessment": "comply",
+      "notes": "All 5 example scripts exist: sdxl_t2i.py, sdxl_refiner_prompt_t2i.py (includes --refiner-prompt), sdxl_turbo.py, z_image_turbo.py (no --negative-prompt, consistent with pipeline), anima_preview.py. All use argparse, download_models(), run() pattern consistent with existing examples."
+    },
+    {
+      "usId": "US-008",
+      "assessment": "comply",
+      "notes": "All 6 test files present: test_pipelines_image_sdxl_t2i.py, test_pipelines_image_sdxl_refiner_prompt.py, test_pipelines_image_sdxl_turbo.py, test_pipelines_image_z_image_turbo.py, test_pipelines_image_anima_t2i.py, test_image_wrappers_it033.py. Each covers structure, __all__, manifest, run signature, lazy imports, and mock-based run(). test_image_wrappers_it033.py covers all three new wrappers. All 134 tests pass on CPU (uv run pytest)."
+    }
+  ],
+
+  "minor_observations": [
+    "z_image/turbo.py uses hardcoded _UNET_DEST.name, _CLIP_DEST.name, _VAE_DEST.name constants inside run() instead of exposing optional path-override kwargs (unet_filename/unet_path, clip_filename/clip_path, vae_filename/vae_path). The other four pipelines expose filename overrides for flexibility.",
+    "sample_custom_simple() uses 'noise_seed' as parameter name in the public signature, while the PRD spec mentions the same parameter as 'noise_seed'. This is consistent — no mismatch.",
+    "SDXL Turbo run() defaults cfg=0.0 (turbo effectively bypasses CFG), which is correct for the distilled model but differs from the PRD's US-003-AC03 which does not specify a default. This is a sensible implementation choice.",
+    "pipelines/__init__.py defines __all__ = ['video'], reflecting previous iteration's video pipelines. The new image sub-package is accessible via explicit import but not re-exported from the top-level pipelines package — consistent with the project's explicit submodule import convention."
+  ],
+
+  "conclusions_and_recommendations": "Iteration 000033 is nearly fully compliant. All user stories comply and six out of seven functional requirements fully comply. The single partial-compliance gap is FR-5: z_image/turbo.py does not expose optional path-override kwargs, making it impossible for callers to swap individual model files without modifying the pipeline. Recommended action: add unet_filename, clip_filename, and vae_filename optional keyword arguments to z_image/turbo.py run() with defaults derived from manifest(), matching the pattern used by the other four pipelines. This is a small, low-risk change that can be addressed in a refactor pass or carried as minor technical debt if the Z-Image model layout is considered stable."
+}
