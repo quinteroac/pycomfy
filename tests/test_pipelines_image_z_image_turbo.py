@@ -325,6 +325,51 @@ def test_run_raises_on_runtime_error(tmp_path: Path) -> None:
             pipeline_mod.run(models_dir=tmp_path, prompt="test")
 
 
+def test_run_signature_includes_path_override_params() -> None:
+    """run() must accept unet_filename, clip_filename, vae_filename overrides."""
+    from comfy_diffusion.pipelines.image.z_image.turbo import run
+
+    sig = inspect.signature(run)
+    assert "unet_filename" in sig.parameters
+    assert "clip_filename" in sig.parameters
+    assert "vae_filename" in sig.parameters
+    assert sig.parameters["unet_filename"].default is None
+    assert sig.parameters["clip_filename"].default is None
+    assert sig.parameters["vae_filename"].default is None
+
+
+def test_run_uses_custom_filenames(tmp_path: Path) -> None:
+    """run() must pass caller-supplied filenames to ModelManager load methods."""
+    from comfy_diffusion.pipelines.image.z_image import turbo as pipeline_mod
+
+    mm = _build_mock_mm()
+
+    with (
+        patch(_RUNTIME_PATCH, return_value={"python_version": "3.12.0"}),
+        patch(_MM_PATCH, return_value=mm),
+        patch(_ENCODE_PATCH, return_value=(MagicMock(), MagicMock())),
+        patch(_ZERO_OUT_PATCH, return_value=MagicMock()),
+        patch(_EMPTY_SD3_LATENT_PATCH, return_value={"samples": MagicMock()}),
+        patch(_MODEL_SAMPLING_AURA_FLOW_PATCH, return_value=MagicMock()),
+        patch(_SAMPLE_PATCH, return_value=MagicMock()),
+        patch(_VAE_DECODE_PATCH, return_value=MagicMock()),
+    ):
+        pipeline_mod.run(
+            models_dir=tmp_path,
+            prompt="test",
+            unet_filename="custom_unet.safetensors",
+            clip_filename="custom_clip.safetensors",
+            vae_filename="custom_vae.safetensors",
+        )
+
+    unet_call_arg = str(mm.load_unet.call_args[0][0])
+    clip_call_arg = str(mm.load_clip.call_args[0][0])
+    vae_call_arg = str(mm.load_vae.call_args[0][0])
+    assert unet_call_arg.endswith("custom_unet.safetensors")
+    assert clip_call_arg.endswith("custom_clip.safetensors")
+    assert vae_call_arg.endswith("custom_vae.safetensors")
+
+
 def test_download_models_idempotent_all_present(tmp_path: Path) -> None:
     from comfy_diffusion.downloader import download_models
     from comfy_diffusion.pipelines.image.z_image.turbo import manifest

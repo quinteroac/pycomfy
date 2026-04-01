@@ -114,6 +114,9 @@ def run(
     height: int = 1024,
     steps: int = 4,
     seed: int = 0,
+    unet_filename: str | None = None,
+    clip_filename: str | None = None,
+    vae_filename: str | None = None,
 ) -> list[Any]:
     """Run the Z-Image Turbo text-to-image pipeline end-to-end.
 
@@ -136,6 +139,12 @@ def run(
         Number of denoising steps.  Default ``4``.
     seed : int, optional
         Random seed for reproducibility.  Default ``0``.
+    unet_filename : str | None, optional
+        Override the default diffusion model filename.  Default ``None``.
+    clip_filename : str | None, optional
+        Override the default text encoder filename.  Default ``None``.
+    vae_filename : str | None, optional
+        Override the default VAE filename.  Default ``None``.
 
     Returns
     -------
@@ -159,10 +168,15 @@ def run(
     models_dir = Path(models_dir)
     mm = ModelManager(models_dir)
 
+    # Resolve model paths (allow caller overrides, fall back to manifest paths).
+    unet_path = models_dir / (unet_filename or _UNET_DEST)
+    clip_path = models_dir / (clip_filename or _CLIP_DEST)
+    vae_path = models_dir / (vae_filename or _VAE_DEST)
+
     # Load all three models independently (no combined checkpoint).
-    model = mm.load_unet(_UNET_DEST.name)
-    clip = mm.load_clip(_CLIP_DEST.name, clip_type="lumina2")
-    vae = mm.load_vae(_VAE_DEST.name)
+    model = mm.load_unet(str(unet_path))
+    clip = mm.load_clip(str(clip_path), clip_type="lumina2")
+    vae = mm.load_vae(str(vae_path))
 
     # Apply AuraFlow model sampling patch (shift=3) before sampling.
     model = model_sampling_aura_flow(model, shift=3)
