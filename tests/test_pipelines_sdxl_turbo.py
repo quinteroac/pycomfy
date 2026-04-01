@@ -250,10 +250,8 @@ def test_sample_custom_simple_signature() -> None:
 
     sig = inspect.signature(sample_custom_simple)
     params = set(sig.parameters.keys())
-    required = {"model", "positive", "negative", "latent", "sampler", "sigmas", "cfg", "seed"}
+    required = {"model", "add_noise", "noise_seed", "cfg", "positive", "negative", "sampler", "sigmas", "latent_image"}
     assert required <= params, f"sample_custom_simple missing params: {required - params}"
-    assert "add_noise" in params, "sample_custom_simple must accept add_noise"
-    assert sig.parameters["add_noise"].default is True
 
 
 # ---------------------------------------------------------------------------
@@ -376,11 +374,12 @@ def test_run_sd_turbo_scheduler_denoise_is_one(tmp_path: Path) -> None:
 
 
 def test_run_calls_sample_custom_simple_with_add_noise(tmp_path: Path) -> None:
-    """sample_custom_simple must be called with add_noise=True."""
+    """sample_custom_simple must be called with add_noise=True (second positional arg)."""
     _, captured = _run_with_mocks(tmp_path)
-    kwargs = captured.get("sample_custom_simple_kwargs", {})
-    assert kwargs.get("add_noise") is True, (
-        f"Expected add_noise=True, got {kwargs.get('add_noise')!r}"
+    args = captured.get("sample_custom_simple_args", ())
+    # add_noise is the second positional argument (index 1) in the new signature
+    assert len(args) >= 2 and args[1] is True, (
+        f"Expected add_noise=True as second positional arg, got args={args!r}"
     )
 
 

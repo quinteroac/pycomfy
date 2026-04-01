@@ -107,6 +107,16 @@ def _get_ltxv_scheduler_type() -> Any:
     return LTXVScheduler
 
 
+def _get_sampler_custom_type() -> Any:
+    """Resolve ComfyUI SamplerCustom implementation at call time."""
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    from comfy_extras.nodes_custom_sampler import SamplerCustom
+
+    return SamplerCustom
+
+
 def _get_sampler_custom_advanced_type() -> Any:
     """Resolve ComfyUI SamplerCustomAdvanced implementation at call time."""
     from ._runtime import ensure_comfyui_on_path
@@ -355,53 +365,53 @@ def sd_turbo_scheduler(model: Any, steps: int = 1, denoise: float = 1.0) -> Any:
 
 def sample_custom_simple(
     model: Any,
+    add_noise: bool,
+    noise_seed: int,
+    cfg: float,
     positive: Any,
     negative: Any,
-    latent: Any,
     sampler: Any,
     sigmas: Any,
-    cfg: float,
-    seed: int,
-    *,
-    add_noise: bool = True,
-) -> Any:
-    """Run custom sampling using a CFGGuider and optional noise injection.
+    latent_image: Any,
+) -> dict[str, Any]:
+    """Run custom sampling via ``SamplerCustom``.
 
-    Convenience wrapper around :func:`sample_custom` that constructs the
-    noise source and guider internally, so callers only need to supply
-    the model, conditioning, sampler, and sigmas.
+    Direct wrapper around ComfyUI's ``SamplerCustom`` node.  Handles noise
+    injection and CFG internally based on *add_noise* and *cfg*.
 
     Parameters
     ----------
     model:
         The loaded model object.
+    add_noise:
+        When ``True``, inject fresh random noise.  Pass ``False`` for
+        second-pass or zero-noise sampling.
+    noise_seed:
+        Random seed used when *add_noise* is ``True``.
+    cfg:
+        CFG scale.  Use ``0.0`` for distilled/turbo models.
     positive:
         Positive conditioning tensor.
     negative:
         Negative conditioning tensor.
-    latent:
-        Input LATENT dict (``{"samples": ...}``).
     sampler:
         SAMPLER object from :func:`get_sampler`.
     sigmas:
         SIGMAS tensor (e.g. from :func:`sd_turbo_scheduler`).
-    cfg:
-        CFG scale.  Use ``0.0`` for distilled models like SDXL Turbo.
-    seed:
-        Random seed for noise generation.
-    add_noise:
-        When ``True`` (default), inject fresh random noise.
-        When ``False``, use a zero-noise source (for second-pass sampling).
+    latent_image:
+        Input LATENT dict (``{"samples": ...}``).
 
     Returns
     -------
-    Any
-        The denoised LATENT object (first output of SamplerCustomAdvanced).
+    dict[str, Any]
+        The denoised LATENT dict (first output of SamplerCustom).
     """
-    noise = random_noise(seed) if add_noise else disable_noise()
-    guider = cfg_guider(model, positive, negative, cfg)
-    denoised, _denoised_output = sample_custom(noise, guider, sampler, sigmas, latent)
-    return denoised
+    sampler_custom_type = _get_sampler_custom_type()
+    output = sampler_custom_type.execute(
+        model, add_noise, noise_seed, cfg, positive, negative, sampler, sigmas, latent_image
+    )
+    result = getattr(output, "result", output)
+    return result[0]
 
 
 def manual_sigmas(sigmas: str) -> Any:

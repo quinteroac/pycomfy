@@ -171,14 +171,14 @@ def run(
     # Run distilled single-step sampling.
     latent_out = sample_custom_simple(
         model,
+        True,
+        seed,
+        cfg,
         positive,
         negative,
-        latent,
         sampler,
         sigmas,
-        cfg,
-        seed,
-        add_noise=True,
+        latent,
     )
 
     # Decode final latent.
