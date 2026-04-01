@@ -218,6 +218,23 @@ def ltxv_separate_av_latent(
     return video_latent, audio_latent
 
 
+def vae_decode_audio(vae: Any, latent: dict[str, Any]) -> Any:
+    """Decode ACE Step (or compatible) audio latents into a waveform tensor.
+
+    Calls ``vae.decode(latent["samples"])`` and moves the channel dimension
+    from the last position to position 1, matching ComfyUI's AUDIO waveform
+    convention (shape ``[B, C, N]``).
+
+    Args:
+        vae: Audio VAE with a ``decode`` method.
+        latent: Latent dict with key ``"samples"``.
+
+    Returns:
+        Waveform tensor with shape ``[B, C, N]``.
+    """
+    return vae.decode(latent["samples"]).movedim(-1, 1)
+
+
 def empty_ace_step_15_latent_audio(seconds: float, batch_size: int = 1) -> dict[str, Any]:
     """Create empty ACE Step 1.5 latents used as sampler noise input."""
     torch, model_management = _get_ace_step_15_latent_audio_dependencies()
@@ -517,4 +534,5 @@ __all__ = [
     "trim_audio_duration",
     "ltxv_audio_video_mask",
     "audio_encoder_encode",
+    "vae_decode_audio",
 ]
