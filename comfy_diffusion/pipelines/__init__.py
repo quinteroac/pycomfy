@@ -10,8 +10,10 @@ Import directly from the specific pipeline module, e.g.::
 
 Sub-packages
 ------------
+audio
+    Audio generation pipelines organised by model family.
 video
     Video generation pipelines organised by model family.
 """
 
-__all__ = ["video"]
+__all__ = ["audio", "video"]
