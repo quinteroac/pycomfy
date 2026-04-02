@@ -7,6 +7,11 @@ Covers:
   - AC03: script prints "Models ready." and exits without performing inference
           when --download-only is given.
   - AC04: no heavy imports at module top level; script parses without errors.
+
+US-002 acceptance criteria:
+  - US-002-AC01: inference run with --image and --prompt completes without error.
+  - US-002-AC02: default output prefix is ``qwen_edit_2511_output``.
+  - US-002-AC03: default steps=4 and use_lora=True when --no-lora is not passed.
 """
 
 from __future__ import annotations
@@ -323,3 +328,201 @@ def test_missing_image_for_inference_exits_nonzero(tmp_path: Path) -> None:
         exit_code = mod.main()
 
     assert exit_code != 0
+
+
+# ---------------------------------------------------------------------------
+# US-002-AC01 — inference with --image and --prompt completes without error
+# ---------------------------------------------------------------------------
+
+
+def _load_script_module() -> object:
+    """Load the example script as a Python module."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("edit_2511_example", _SCRIPT)
+    assert spec is not None
+    mod = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(mod)  # type: ignore[union-attr]
+    return mod
+
+
+def test_inference_with_image_prompt_exits_zero(tmp_path: Path) -> None:
+    """US-002-AC01: --models-dir, --image, --prompt completes and exits 0."""
+    from PIL import Image
+
+    input_image = tmp_path / "input.png"
+    Image.new("RGB", (64, 64), color=(128, 128, 128)).save(str(input_image))
+
+    fake_output_image = MagicMock()
+    fake_output_image.save = MagicMock()
+
+    output_path = tmp_path / "qwen_edit_2511_output.png"
+
+    with (
+        patch("sys.argv", [
+            str(_SCRIPT),
+            "--models-dir", str(tmp_path),
+            "--image", str(input_image),
+            "--prompt", "Make the sofa look like it is covered in fur",
+            "--output", str(output_path),
+        ]),
+        patch("comfy_diffusion.downloader.download_models", return_value=None),
+        patch("comfy_diffusion.pipelines.image.qwen.edit_2511.manifest", return_value=[]),
+        patch(
+            "comfy_diffusion.runtime.check_runtime",
+            return_value={"python_version": "3.12"},
+        ),
+        patch(
+            "comfy_diffusion.pipelines.image.qwen.edit_2511.run",
+            return_value=[fake_output_image],
+        ),
+    ):
+        mod = _load_script_module()
+        exit_code = mod.main()  # type: ignore[attr-defined]
+
+    assert exit_code == 0, f"Expected exit code 0, got {exit_code}"
+
+
+# ---------------------------------------------------------------------------
+# US-002-AC02 — default output path uses prefix ``qwen_edit_2511_output``
+# ---------------------------------------------------------------------------
+
+
+def test_default_output_path_is_qwen_edit_2511_output_png() -> None:
+    """US-002-AC02: the default --output is 'qwen_edit_2511_output.png'."""
+    source = _SCRIPT.read_text(encoding="utf-8")
+    assert "qwen_edit_2511_output" in source, (
+        f"{_SCRIPT.name} must define default output prefix 'qwen_edit_2511_output'"
+    )
+    # Verify the default value includes .png
+    assert "qwen_edit_2511_output.png" in source, (
+        "Default output must be 'qwen_edit_2511_output.png'"
+    )
+
+
+# ---------------------------------------------------------------------------
+# US-002-AC03 — default steps=4 and use_lora=True when --no-lora absent
+# ---------------------------------------------------------------------------
+
+
+def test_default_steps_is_4() -> None:
+    """US-002-AC03: the default --steps value is 4."""
+    tree = _parse(_SCRIPT)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            for kw in node.keywords:
+                if kw.arg == "default" and isinstance(kw.value, ast.Constant):
+                    # Find the add_argument call that mentions "steps"
+                    pass
+    # Fallback: verify via source text that default=4 appears near --steps
+    source = _SCRIPT.read_text(encoding="utf-8")
+    assert "default=4" in source, (
+        f"{_SCRIPT.name}: --steps must have default=4 for Lightning LoRA path"
+    )
+
+
+def test_inference_uses_steps_4_by_default(tmp_path: Path) -> None:
+    """US-002-AC03: run() is called with steps=4 when --steps is not overridden."""
+    from PIL import Image
+
+    input_image = tmp_path / "input.png"
+    Image.new("RGB", (64, 64)).save(str(input_image))
+
+    mock_run = MagicMock(return_value=[MagicMock()])
+
+    with (
+        patch("sys.argv", [
+            str(_SCRIPT),
+            "--models-dir", str(tmp_path),
+            "--image", str(input_image),
+            "--prompt", "test",
+            "--output", str(tmp_path / "out.png"),
+        ]),
+        patch("comfy_diffusion.downloader.download_models", return_value=None),
+        patch("comfy_diffusion.pipelines.image.qwen.edit_2511.manifest", return_value=[]),
+        patch(
+            "comfy_diffusion.runtime.check_runtime",
+            return_value={"python_version": "3.12"},
+        ),
+        patch("comfy_diffusion.pipelines.image.qwen.edit_2511.run", mock_run),
+    ):
+        mod = _load_script_module()
+        mod.main()  # type: ignore[attr-defined]
+
+    mock_run.assert_called_once()
+    call_kwargs = mock_run.call_args.kwargs
+    assert call_kwargs.get("steps") == 4, (
+        f"Expected steps=4 by default, got steps={call_kwargs.get('steps')}"
+    )
+
+
+def test_inference_uses_lora_true_by_default(tmp_path: Path) -> None:
+    """US-002-AC03: run() is called with use_lora=True when --no-lora is absent."""
+    from PIL import Image
+
+    input_image = tmp_path / "input.png"
+    Image.new("RGB", (64, 64)).save(str(input_image))
+
+    mock_run = MagicMock(return_value=[MagicMock()])
+
+    with (
+        patch("sys.argv", [
+            str(_SCRIPT),
+            "--models-dir", str(tmp_path),
+            "--image", str(input_image),
+            "--prompt", "test",
+            "--output", str(tmp_path / "out.png"),
+        ]),
+        patch("comfy_diffusion.downloader.download_models", return_value=None),
+        patch("comfy_diffusion.pipelines.image.qwen.edit_2511.manifest", return_value=[]),
+        patch(
+            "comfy_diffusion.runtime.check_runtime",
+            return_value={"python_version": "3.12"},
+        ),
+        patch("comfy_diffusion.pipelines.image.qwen.edit_2511.run", mock_run),
+    ):
+        mod = _load_script_module()
+        mod.main()  # type: ignore[attr-defined]
+
+    mock_run.assert_called_once()
+    call_kwargs = mock_run.call_args.kwargs
+    assert call_kwargs.get("use_lora") is True, (
+        f"Expected use_lora=True by default, got use_lora={call_kwargs.get('use_lora')}"
+    )
+
+
+def test_no_lora_flag_disables_lora(tmp_path: Path) -> None:
+    """US-002-AC03: run() is called with use_lora=False when --no-lora is passed."""
+    from PIL import Image
+
+    input_image = tmp_path / "input.png"
+    Image.new("RGB", (64, 64)).save(str(input_image))
+
+    mock_run = MagicMock(return_value=[MagicMock()])
+
+    with (
+        patch("sys.argv", [
+            str(_SCRIPT),
+            "--models-dir", str(tmp_path),
+            "--image", str(input_image),
+            "--prompt", "test",
+            "--no-lora",
+            "--output", str(tmp_path / "out.png"),
+        ]),
+        patch("comfy_diffusion.downloader.download_models", return_value=None),
+        patch("comfy_diffusion.pipelines.image.qwen.edit_2511.manifest", return_value=[]),
+        patch(
+            "comfy_diffusion.runtime.check_runtime",
+            return_value={"python_version": "3.12"},
+        ),
+        patch("comfy_diffusion.pipelines.image.qwen.edit_2511.run", mock_run),
+    ):
+        mod = _load_script_module()
+        mod.main()  # type: ignore[attr-defined]
+
+    mock_run.assert_called_once()
+    call_kwargs = mock_run.call_args.kwargs
+    assert call_kwargs.get("use_lora") is False, (
+        f"Expected use_lora=False with --no-lora, got use_lora={call_kwargs.get('use_lora')}"
+    )
