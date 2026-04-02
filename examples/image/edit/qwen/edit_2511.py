@@ -30,7 +30,7 @@ Usage
         --image input.png \\
         --prompt "Make the sofa look like it is covered in fur" \\
         --steps 4 --seed 42 --no-lora \\
-        --output edited_output.png
+        --output-prefix edited_output
 """
 
 from __future__ import annotations
@@ -84,9 +84,9 @@ def main() -> int:
         help="Disable the Lightning LoRA (use standard 40-step inference instead).",
     )
     parser.add_argument(
-        "--output",
-        default="qwen_edit_2511_output.png",
-        help="Output image path.",
+        "--output-prefix",
+        default="qwen_edit_2511_output",
+        help="Output image filename prefix (.png appended automatically).",
     )
     parser.add_argument(
         "--download-only",
@@ -169,7 +169,7 @@ def main() -> int:
         seed=args.seed,
     )
 
-    output_path = Path(args.output)
+    output_path = Path(f"{args.output_prefix}.png")
     output_path.parent.mkdir(parents=True, exist_ok=True)
     images[0].save(str(output_path))
     print(f"Saved: {output_path}")

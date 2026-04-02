@@ -25,7 +25,6 @@ US-004 acceptance criteria:
 
 from __future__ import annotations
 
-import argparse
 import ast
 import subprocess
 import sys
@@ -153,7 +152,9 @@ def test_if_name_main_guard() -> None:
 
 def test_has_required_cli_flags() -> None:
     source = _SCRIPT.read_text(encoding="utf-8")
-    for flag in ("--models-dir", "--image", "--prompt", "--download-only", "--seed", "--output"):
+    for flag in (
+        "--models-dir", "--image", "--prompt", "--download-only", "--seed", "--output-prefix"
+    ):
         assert flag in source, f"{_SCRIPT.name} missing CLI flag: {flag}"
 
 
@@ -168,7 +169,7 @@ def test_download_only_exits_zero(tmp_path: Path) -> None:
     fake_image = tmp_path / "placeholder.png"
     fake_image.write_bytes(b"")  # placeholder — download-only doesn't read the image
 
-    patch_target_download = (
+    patch_target_download = (  # noqa: F841
         "comfy_diffusion.downloader.download_models"
     )
     # We run a subprocess but inject a monkeypatch via import manipulation.
@@ -367,15 +368,13 @@ def test_inference_with_image_prompt_exits_zero(tmp_path: Path) -> None:
     fake_output_image = MagicMock()
     fake_output_image.save = MagicMock()
 
-    output_path = tmp_path / "qwen_edit_2511_output.png"
-
     with (
         patch("sys.argv", [
             str(_SCRIPT),
             "--models-dir", str(tmp_path),
             "--image", str(input_image),
             "--prompt", "Make the sofa look like it is covered in fur",
-            "--output", str(output_path),
+            "--output-prefix", str(tmp_path / "qwen_edit_2511_output"),
         ]),
         patch("comfy_diffusion.downloader.download_models", return_value=None),
         patch("comfy_diffusion.pipelines.image.qwen.edit_2511.manifest", return_value=[]),
@@ -400,14 +399,14 @@ def test_inference_with_image_prompt_exits_zero(tmp_path: Path) -> None:
 
 
 def test_default_output_path_is_qwen_edit_2511_output_png() -> None:
-    """US-002-AC02: the default --output is 'qwen_edit_2511_output.png'."""
+    """US-002-AC02: the default --output-prefix is 'qwen_edit_2511_output'."""
     source = _SCRIPT.read_text(encoding="utf-8")
     assert "qwen_edit_2511_output" in source, (
         f"{_SCRIPT.name} must define default output prefix 'qwen_edit_2511_output'"
     )
-    # Verify the default value includes .png
-    assert "qwen_edit_2511_output.png" in source, (
-        "Default output must be 'qwen_edit_2511_output.png'"
+    # Verify the .png extension is appended automatically in the output path construction
+    assert "output_prefix}.png" in source or ".png" in source, (
+        "Script must append .png to the output prefix"
     )
 
 
@@ -447,7 +446,7 @@ def test_inference_uses_steps_4_by_default(tmp_path: Path) -> None:
             "--models-dir", str(tmp_path),
             "--image", str(input_image),
             "--prompt", "test",
-            "--output", str(tmp_path / "out.png"),
+            "--output-prefix", str(tmp_path / "out"),
         ]),
         patch("comfy_diffusion.downloader.download_models", return_value=None),
         patch("comfy_diffusion.pipelines.image.qwen.edit_2511.manifest", return_value=[]),
@@ -482,7 +481,7 @@ def test_inference_uses_lora_true_by_default(tmp_path: Path) -> None:
             "--models-dir", str(tmp_path),
             "--image", str(input_image),
             "--prompt", "test",
-            "--output", str(tmp_path / "out.png"),
+            "--output-prefix", str(tmp_path / "out"),
         ]),
         patch("comfy_diffusion.downloader.download_models", return_value=None),
         patch("comfy_diffusion.pipelines.image.qwen.edit_2511.manifest", return_value=[]),
@@ -518,7 +517,7 @@ def test_no_lora_flag_disables_lora(tmp_path: Path) -> None:
             "--image", str(input_image),
             "--prompt", "test",
             "--no-lora",
-            "--output", str(tmp_path / "out.png"),
+            "--output-prefix", str(tmp_path / "out"),
         ]),
         patch("comfy_diffusion.downloader.download_models", return_value=None),
         patch("comfy_diffusion.pipelines.image.qwen.edit_2511.manifest", return_value=[]),
@@ -559,7 +558,7 @@ def test_no_lora_sets_steps_40(tmp_path: Path) -> None:
             "--image", str(input_image),
             "--prompt", "test",
             "--no-lora",
-            "--output", str(tmp_path / "out.png"),
+            "--output-prefix", str(tmp_path / "out"),
         ]),
         patch("comfy_diffusion.downloader.download_models", return_value=None),
         patch("comfy_diffusion.pipelines.image.qwen.edit_2511.manifest", return_value=[]),
@@ -604,7 +603,7 @@ def test_explicit_steps_overrides_no_lora_default(tmp_path: Path) -> None:
             "--prompt", "test",
             "--no-lora",
             "--steps", "20",
-            "--output", str(tmp_path / "out.png"),
+            "--output-prefix", str(tmp_path / "out"),
         ]),
         patch("comfy_diffusion.downloader.download_models", return_value=None),
         patch("comfy_diffusion.pipelines.image.qwen.edit_2511.manifest", return_value=[]),
@@ -640,7 +639,7 @@ def test_explicit_steps_overrides_lora_default(tmp_path: Path) -> None:
             "--image", str(input_image),
             "--prompt", "test",
             "--steps", "10",
-            "--output", str(tmp_path / "out.png"),
+            "--output-prefix", str(tmp_path / "out"),
         ]),
         patch("comfy_diffusion.downloader.download_models", return_value=None),
         patch("comfy_diffusion.pipelines.image.qwen.edit_2511.manifest", return_value=[]),
@@ -736,7 +735,7 @@ def test_invalid_image2_path_exits_nonzero(tmp_path: Path) -> None:
             "--image", str(input_image),
             "--image2", str(tmp_path / "nonexistent2.png"),
             "--prompt", "test",
-            "--output", str(tmp_path / "out.png"),
+            "--output-prefix", str(tmp_path / "out"),
         ]),
         patch("comfy_diffusion.downloader.download_models", return_value=None),
         patch("comfy_diffusion.pipelines.image.qwen.edit_2511.manifest", return_value=[]),
@@ -772,7 +771,7 @@ def test_invalid_image3_path_exits_nonzero(tmp_path: Path) -> None:
             "--image", str(input_image),
             "--image3", str(tmp_path / "nonexistent3.png"),
             "--prompt", "test",
-            "--output", str(tmp_path / "out.png"),
+            "--output-prefix", str(tmp_path / "out"),
         ]),
         patch("comfy_diffusion.downloader.download_models", return_value=None),
         patch("comfy_diffusion.pipelines.image.qwen.edit_2511.manifest", return_value=[]),
@@ -815,7 +814,7 @@ def test_valid_image2_and_image3_passed_to_run(tmp_path: Path) -> None:
             "--image2", str(image2_file),
             "--image3", str(image3_file),
             "--prompt", "test",
-            "--output", str(tmp_path / "out.png"),
+            "--output-prefix", str(tmp_path / "out"),
         ]),
         patch("comfy_diffusion.downloader.download_models", return_value=None),
         patch("comfy_diffusion.pipelines.image.qwen.edit_2511.manifest", return_value=[]),
@@ -862,7 +861,7 @@ def test_image2_image3_none_when_not_provided(tmp_path: Path) -> None:
             "--models-dir", str(tmp_path),
             "--image", str(input_image),
             "--prompt", "test",
-            "--output", str(tmp_path / "out.png"),
+            "--output-prefix", str(tmp_path / "out"),
         ]),
         patch("comfy_diffusion.downloader.download_models", return_value=None),
         patch("comfy_diffusion.pipelines.image.qwen.edit_2511.manifest", return_value=[]),

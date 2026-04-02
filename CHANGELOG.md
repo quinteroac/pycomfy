@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [000037] - 2026-04-02
+
+### Added
+- Provide a self-contained, executable CLI example for `edit_2511` that a developer can run
+- Document the pipeline's public API (`manifest()` + `run()`) through concrete, annotated
+
 ## [000036] - 2026-04-02
 
 ### Added
