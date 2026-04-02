@@ -21,8 +21,10 @@
   - Git flow: feature branches per iteration (`feature/it-000001-foundation`), merged to `main` via PR.
   - Public API pattern: modules are not auto-imported from `__init__.py` by default. Exceptions are `check_runtime`, `vae_decode`, `vae_encode`, and `apply_lora` which are re-exported for convenience. All other symbols use explicit submodule imports (e.g. `from comfy_diffusion.conditioning import encode_prompt`).
   - Lazy import pattern: no `torch`, `comfy.*`, or `ensure_comfyui_on_path()` at module top level — all deferred to call time inside function bodies. Exception: `vae.py` uses pure duck typing (no comfy import at all) — both patterns are valid.
+  - Inference mode ownership: `torch.inference_mode()` is enforced centrally in core execution APIs (`sampling.py`, `vae.py`, and relevant `audio.py` wrappers). Pipeline authors must not duplicate inference-mode wrappers in each `run()` implementation.
   - `path` type annotation: `str | Path` is the established pattern across `ModelManager`, `load_checkpoint`, and `apply_lora`. Do not change to `str | os.PathLike` unless updating all occurrences simultaneously in a dedicated cleanup iteration.
   - No high-level pipeline abstraction: comfy-diffusion is a modular runtime library. There is no `ImagePipeline` or equivalent. Callers compose the building blocks directly. This is intentional — the modularity is the feature.
   - External libraries over node ports: prefer `Pillow`, `numpy`, `opencv-python`, `torchaudio` for image transforms, mask ops, video I/O, and audio I/O respectively. Only wrap comfy nodes when they provide non-trivial logic (VAE, samplers, model patches, conditioning). See ROADMAP.md for the full classification.
 
 - **Rule:** All generated resources in this repo must be in English.
+- For any file search or grep in the current git indexed directory use fff tools

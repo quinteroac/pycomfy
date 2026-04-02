@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 from typing import Any, Protocol, cast
 
 
@@ -89,10 +90,20 @@ def _unwrap_node_output(output: Any) -> Any:
     return output
 
 
+def _inference_mode_context() -> Any:
+    """Return torch.inference_mode() when torch is available, else a no-op context."""
+    try:
+        import torch
+    except ModuleNotFoundError:
+        return nullcontext()
+    return torch.inference_mode()
+
+
 def ltxv_audio_vae_encode(vae: _LtxvAudioVaeEncoder, audio: Any) -> dict[str, Any]:
     """Encode raw audio with an LTXV audio VAE."""
-    audio_latents = vae.encode(audio)
-    return {"samples": audio_latents, "sample_rate": int(vae.sample_rate), "type": "audio"}
+    with _inference_mode_context():
+        audio_latents = vae.encode(audio)
+        return {"samples": audio_latents, "sample_rate": int(vae.sample_rate), "type": "audio"}
 
 
 def ltxv_audio_vae_decode(vae: _LtxvAudioVaeDecoder, latent: Any) -> dict[str, Any]:
@@ -100,8 +111,6 @@ def ltxv_audio_vae_decode(vae: _LtxvAudioVaeDecoder, latent: Any) -> dict[str, A
 
     Decodes on CPU to avoid VRAM contention with the video UNet/VAE.
     """
-    import torch
-
     latent_tensor = latent["samples"] if isinstance(latent, dict) else latent
     if getattr(latent_tensor, "is_nested", False):
         latent_tensor = latent_tensor.unbind()[-1]
@@ -111,7 +120,7 @@ def ltxv_audio_vae_decode(vae: _LtxvAudioVaeDecoder, latent: Any) -> dict[str, A
     if hasattr(latent_tensor, "cpu"):
         latent_tensor = latent_tensor.cpu()
 
-    with torch.no_grad():
+    with _inference_mode_context():
         audio = vae.decode(latent_tensor)
     if hasattr(audio, "detach"):
         audio = audio.detach()
@@ -232,7 +241,8 @@ def vae_decode_audio(vae: Any, latent: dict[str, Any]) -> Any:
     Returns:
         Waveform tensor with shape ``[B, C, N]``.
     """
-    return vae.decode(latent["samples"]).movedim(-1, 1)
+    with _inference_mode_context():
+        return vae.decode(latent["samples"]).movedim(-1, 1)
 
 
 def empty_ace_step_15_latent_audio(seconds: float, batch_size: int = 1) -> dict[str, Any]:

@@ -2,9 +2,19 @@
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 import math
 import re
 from typing import Any
+
+
+def _inference_mode_context() -> Any:
+    """Return torch.inference_mode() when torch is available, else a no-op context."""
+    try:
+        import torch
+    except ModuleNotFoundError:
+        return nullcontext()
+    return torch.inference_mode()
 
 
 def _get_common_ksampler() -> Any:
@@ -423,11 +433,12 @@ def sample_custom_simple(
         The denoised LATENT dict (first output of SamplerCustom).
     """
     sampler_custom_type = _get_sampler_custom_type()
-    output = sampler_custom_type.execute(
-        model, add_noise, noise_seed, cfg, positive, negative, sampler, sigmas, latent_image
-    )
-    result = getattr(output, "result", output)
-    return result[0]
+    with _inference_mode_context():
+        output = sampler_custom_type.execute(
+            model, add_noise, noise_seed, cfg, positive, negative, sampler, sigmas, latent_image
+        )
+        result = getattr(output, "result", output)
+        return result[0]
 
 
 def manual_sigmas(sigmas: str) -> Any:
@@ -463,18 +474,19 @@ def sample(
     """
     common_ksampler = _get_common_ksampler()
 
-    return common_ksampler(
-        model,
-        seed,
-        steps,
-        cfg,
-        sampler_name,
-        scheduler,
-        positive,
-        negative,
-        latent,
-        denoise=denoise,
-    )[0]
+    with _inference_mode_context():
+        return common_ksampler(
+            model,
+            seed,
+            steps,
+            cfg,
+            sampler_name,
+            scheduler,
+            positive,
+            negative,
+            latent,
+            denoise=denoise,
+        )[0]
 
 
 def sample_advanced(
@@ -502,22 +514,23 @@ def sample_advanced(
     """
     common_ksampler = _get_common_ksampler()
 
-    return common_ksampler(
-        model,
-        noise_seed,
-        steps,
-        cfg,
-        sampler_name,
-        scheduler,
-        positive,
-        negative,
-        latent,
-        denoise=denoise,
-        disable_noise=not add_noise,
-        start_step=start_at_step,
-        last_step=end_at_step,
-        force_full_denoise=not return_with_leftover_noise,
-    )[0]
+    with _inference_mode_context():
+        return common_ksampler(
+            model,
+            noise_seed,
+            steps,
+            cfg,
+            sampler_name,
+            scheduler,
+            positive,
+            negative,
+            latent,
+            denoise=denoise,
+            disable_noise=not add_noise,
+            start_step=start_at_step,
+            last_step=end_at_step,
+            force_full_denoise=not return_with_leftover_noise,
+        )[0]
 
 
 def sample_custom(
@@ -533,15 +546,16 @@ def sample_custom(
     provided `guider` object (for example from `basic_guider()` or `cfg_guider()`).
     """
     sampler_custom_advanced_type = _get_sampler_custom_advanced_type()
-    output = sampler_custom_advanced_type.execute(
-        noise,
-        guider,
-        sampler,
-        sigmas,
-        latent_image,
-    )
-    result = getattr(output, "result", output)
-    return result[0], result[1]
+    with _inference_mode_context():
+        output = sampler_custom_advanced_type.execute(
+            noise,
+            guider,
+            sampler,
+            sigmas,
+            latent_image,
+        )
+        result = getattr(output, "result", output)
+        return result[0], result[1]
 
 
 __all__ = [
