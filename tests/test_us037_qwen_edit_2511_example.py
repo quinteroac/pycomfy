@@ -16,10 +16,16 @@ US-002 acceptance criteria:
   - US-002-AC01: inference run with --image and --prompt completes without error.
   - US-002-AC02: default output prefix is ``qwen_edit_2511_output``.
   - US-002-AC03: default steps=4 and use_lora=True when --no-lora is not passed.
+
+US-004 acceptance criteria:
+  - US-004-AC01: --image2 and --image3 are optional CLI arguments defaulting to None.
+  - US-004-AC02: provided paths are validated with is_file() before being passed to run().
+  - US-004-AC03: when not provided, None is passed to run().
 """
 
 from __future__ import annotations
 
+import argparse
 import ast
 import subprocess
 import sys
@@ -654,4 +660,227 @@ def test_explicit_steps_overrides_lora_default(tmp_path: Path) -> None:
     )
     assert call_kwargs.get("use_lora") is True, (
         f"Expected use_lora=True (no --no-lora), got {call_kwargs.get('use_lora')}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# US-004-AC01 — --image2 and --image3 are optional CLI args defaulting to None
+# ---------------------------------------------------------------------------
+
+
+def test_image2_and_image3_flags_present_in_source() -> None:
+    """US-004-AC01: --image2 and --image3 must be defined as CLI arguments."""
+    source = _SCRIPT.read_text(encoding="utf-8")
+    assert "--image2" in source, f"{_SCRIPT.name} missing --image2 CLI argument"
+    assert "--image3" in source, f"{_SCRIPT.name} missing --image3 CLI argument"
+
+
+def test_image2_and_image3_default_to_none() -> None:
+    """US-004-AC01: both --image2 and --image3 must default to None (verified via AST)."""
+    tree = _parse(_SCRIPT)
+    defaults: dict[str, object] = {}
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        # Match calls like parser.add_argument("--imageN", default=None, ...)
+        func = node.func
+        if not (isinstance(func, ast.Attribute) and func.attr == "add_argument"):
+            continue
+        # Collect positional string args (flag names) and keyword defaults.
+        flag_names = [
+            a.value if isinstance(a, ast.Constant) and isinstance(a.value, str) else ""
+            for a in node.args
+        ]
+        for kw in node.keywords:
+            if kw.arg == "default":
+                for flag in flag_names:
+                    if flag in ("--image2", "--image3"):
+                        defaults[flag] = (
+                            kw.value.value  # type: ignore[attr-defined]
+                            if isinstance(kw.value, ast.Constant)
+                            else "<non-constant>"
+                        )
+    assert "--image2" in defaults, "--image2 add_argument call not found in AST"
+    assert "--image3" in defaults, "--image3 add_argument call not found in AST"
+    assert defaults["--image2"] is None, (
+        f"Expected --image2 default None, got {defaults['--image2']!r}"
+    )
+    assert defaults["--image3"] is None, (
+        f"Expected --image3 default None, got {defaults['--image3']!r}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# US-004-AC02 — provided paths are validated with is_file() before use
+# ---------------------------------------------------------------------------
+
+
+def test_invalid_image2_path_exits_nonzero(tmp_path: Path) -> None:
+    """US-004-AC02: non-existent --image2 path exits with non-zero code."""
+    from PIL import Image
+
+    input_image = tmp_path / "input.png"
+    Image.new("RGB", (64, 64)).save(str(input_image))
+
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("edit_2511_example", _SCRIPT)
+    assert spec is not None
+    mod = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+
+    with (
+        patch("sys.argv", [
+            str(_SCRIPT),
+            "--models-dir", str(tmp_path),
+            "--image", str(input_image),
+            "--image2", str(tmp_path / "nonexistent2.png"),
+            "--prompt", "test",
+            "--output", str(tmp_path / "out.png"),
+        ]),
+        patch("comfy_diffusion.downloader.download_models", return_value=None),
+        patch("comfy_diffusion.pipelines.image.qwen.edit_2511.manifest", return_value=[]),
+        patch(
+            "comfy_diffusion.runtime.check_runtime",
+            return_value={"python_version": "3.12"},
+        ),
+    ):
+        spec.loader.exec_module(mod)  # type: ignore[union-attr]
+        exit_code = mod.main()
+
+    assert exit_code != 0, "Expected non-zero exit when --image2 path does not exist"
+
+
+def test_invalid_image3_path_exits_nonzero(tmp_path: Path) -> None:
+    """US-004-AC02: non-existent --image3 path exits with non-zero code."""
+    from PIL import Image
+
+    input_image = tmp_path / "input.png"
+    Image.new("RGB", (64, 64)).save(str(input_image))
+
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("edit_2511_example", _SCRIPT)
+    assert spec is not None
+    mod = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+
+    with (
+        patch("sys.argv", [
+            str(_SCRIPT),
+            "--models-dir", str(tmp_path),
+            "--image", str(input_image),
+            "--image3", str(tmp_path / "nonexistent3.png"),
+            "--prompt", "test",
+            "--output", str(tmp_path / "out.png"),
+        ]),
+        patch("comfy_diffusion.downloader.download_models", return_value=None),
+        patch("comfy_diffusion.pipelines.image.qwen.edit_2511.manifest", return_value=[]),
+        patch(
+            "comfy_diffusion.runtime.check_runtime",
+            return_value={"python_version": "3.12"},
+        ),
+    ):
+        spec.loader.exec_module(mod)  # type: ignore[union-attr]
+        exit_code = mod.main()
+
+    assert exit_code != 0, "Expected non-zero exit when --image3 path does not exist"
+
+
+def test_valid_image2_and_image3_passed_to_run(tmp_path: Path) -> None:
+    """US-004-AC02: valid --image2 and --image3 paths are loaded and forwarded to run()."""
+    from PIL import Image
+
+    input_image = tmp_path / "input.png"
+    Image.new("RGB", (64, 64)).save(str(input_image))
+    image2_file = tmp_path / "ref2.png"
+    Image.new("RGB", (32, 32), color=(255, 0, 0)).save(str(image2_file))
+    image3_file = tmp_path / "ref3.png"
+    Image.new("RGB", (32, 32), color=(0, 255, 0)).save(str(image3_file))
+
+    mock_run = MagicMock(return_value=[MagicMock()])
+
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("edit_2511_example", _SCRIPT)
+    assert spec is not None
+    mod = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+
+    with (
+        patch("sys.argv", [
+            str(_SCRIPT),
+            "--models-dir", str(tmp_path),
+            "--image", str(input_image),
+            "--image2", str(image2_file),
+            "--image3", str(image3_file),
+            "--prompt", "test",
+            "--output", str(tmp_path / "out.png"),
+        ]),
+        patch("comfy_diffusion.downloader.download_models", return_value=None),
+        patch("comfy_diffusion.pipelines.image.qwen.edit_2511.manifest", return_value=[]),
+        patch(
+            "comfy_diffusion.runtime.check_runtime",
+            return_value={"python_version": "3.12"},
+        ),
+        patch("comfy_diffusion.pipelines.image.qwen.edit_2511.run", mock_run),
+    ):
+        spec.loader.exec_module(mod)  # type: ignore[union-attr]
+        exit_code = mod.main()
+
+    assert exit_code == 0
+    mock_run.assert_called_once()
+    call_kwargs = mock_run.call_args.kwargs
+    assert call_kwargs.get("image2") is not None, "Expected image2 to be passed to run()"
+    assert call_kwargs.get("image3") is not None, "Expected image3 to be passed to run()"
+
+
+# ---------------------------------------------------------------------------
+# US-004-AC03 — when not provided, None is passed to run()
+# ---------------------------------------------------------------------------
+
+
+def test_image2_image3_none_when_not_provided(tmp_path: Path) -> None:
+    """US-004-AC03: run() receives image2=None and image3=None when flags are absent."""
+    from PIL import Image
+
+    input_image = tmp_path / "input.png"
+    Image.new("RGB", (64, 64)).save(str(input_image))
+
+    mock_run = MagicMock(return_value=[MagicMock()])
+
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("edit_2511_example", _SCRIPT)
+    assert spec is not None
+    mod = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+
+    with (
+        patch("sys.argv", [
+            str(_SCRIPT),
+            "--models-dir", str(tmp_path),
+            "--image", str(input_image),
+            "--prompt", "test",
+            "--output", str(tmp_path / "out.png"),
+        ]),
+        patch("comfy_diffusion.downloader.download_models", return_value=None),
+        patch("comfy_diffusion.pipelines.image.qwen.edit_2511.manifest", return_value=[]),
+        patch(
+            "comfy_diffusion.runtime.check_runtime",
+            return_value={"python_version": "3.12"},
+        ),
+        patch("comfy_diffusion.pipelines.image.qwen.edit_2511.run", mock_run),
+    ):
+        spec.loader.exec_module(mod)  # type: ignore[union-attr]
+        exit_code = mod.main()
+
+    assert exit_code == 0, f"Expected exit 0, got {exit_code}"
+    mock_run.assert_called_once()
+    call_kwargs = mock_run.call_args.kwargs
+    assert call_kwargs.get("image2") is None, (
+        f"Expected image2=None when --image2 not given, got {call_kwargs.get('image2')!r}"
+    )
+    assert call_kwargs.get("image3") is None, (
+        f"Expected image3=None when --image3 not given, got {call_kwargs.get('image3')!r}"
     )
