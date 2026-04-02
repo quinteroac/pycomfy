@@ -1,0 +1,21 @@
+{
+  "name": "@parallax/cli",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "parallax": "./src/index.ts"
+  },
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "start": "bun run src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@parallax/sdk": "workspace:*",
+    "commander": "^12.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "bun-types": "latest"
+  }
+}

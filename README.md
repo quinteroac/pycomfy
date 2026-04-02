@@ -16,6 +16,26 @@ print(check_runtime())
 
 ---
 
+## Monorepo packages
+
+This repo contains the core Python library plus a set of TypeScript application packages built on top of it.
+
+| Package | Language | Description | Docs |
+|---------|----------|-------------|------|
+| `comfy_diffusion` | Python | Core inference library (this repo) | [docs/comfy_diffusion.md](docs/comfy_diffusion.md) |
+| `server/` | Python | FastAPI worker — HTTP interface to the core on `:5000` | [docs/server.md](docs/server.md) |
+| `@parallax/ms` | TypeScript | Elysia gateway on `:3000`, proxies jobs to `server/` | [docs/parallax_ms.md](docs/parallax_ms.md) |
+| `@parallax/cli` | TypeScript | Bun CLI — `parallax generate`, `parallax edit`, … | [docs/parallax_cli.md](docs/parallax_cli.md) |
+| `@parallax/mcp` | TypeScript | MCP server for Claude — tools that call `@parallax/ms` | [docs/parallax_mcp.md](docs/parallax_mcp.md) |
+| `@parallax/sdk` | TypeScript | Shared request/response types across all TS packages | [docs/parallax_sdk.md](docs/parallax_sdk.md) |
+
+Request flow:
+```
+parallax_cli / parallax_mcp  →  @parallax/ms (:3000)  →  server/FastAPI (:5000)  →  comfy_diffusion
+```
+
+---
+
 ## Quick Start
 
 Call `check_runtime()` before any other `comfy_diffusion` API (model loading, prompt encoding, sampling, etc.).
@@ -143,31 +163,10 @@ to import.
 - Not a node system or workflow runner
 - Not a replacement for ComfyUI — it depends on it
 - Not a general-purpose diffusion library — it's opinionated toward ComfyUI's engine
-- Not an opinionated pipeline — there is no `ImagePipeline`. You compose the blocks yourself.
+- Optional pipeline — You can use the existing pipelines or compose the blocks yourself.
 
 ---
 
-## Status
-
-Early development. Built iteratively, one capability block at a time. The full node inventory and iteration plan is in [`ROADMAP.md`](ROADMAP.md).
-
-| # | Module | Goal | Status |
-|---|--------|------|--------|
-| 01 | `_runtime` / `check_runtime()` | Package foundation + ComfyUI vendoring | ✅ Done |
-| 02 | `models` | Checkpoint loading (`ModelManager`, `CheckpointResult`) | ✅ Done |
-| 03 | `conditioning` | Prompt encoding via `encode_prompt` | ✅ Done |
-| 04 | `sampling` | KSampler wrapper via `sample()` | ✅ Done |
-| 05 | `vae` | VAE decode latent→PIL via `vae_decode()` | ✅ Done |
-| 06 | `lora` | LoRA loading and stacking via `apply_lora()` | ✅ Done |
-| 07 | `vae` + `models` | VAE encode + standalone loaders (`load_vae`, `load_clip`, `load_unet`) | ✅ Done |
-| 08 | `vae` — tiled | Tiled VAE encode/decode for large images without OOM | ✅ Done |
-| 09 | `vae` — batch/video | Batch VAE encode/decode for video frame sequences | ✅ Done |
-| 10 | `sampling` — advanced | `SamplerCustomAdvanced`, schedulers, sigma manipulation | ✅ Done |
-| 11 | `audio` | Stable Audio, WAN sound-to-video, LTXV audio, ACE Step | ✅ Done |
-| — | **`v0.1.1-preview`** | **Preview release milestone** | ✅ Done |
-| 12–19 | conditioning, controlnet, latent, image, mask, model patches, packaging, skills | ✅ Done | ✅ Done |
-
----
 
 ## Installation
 

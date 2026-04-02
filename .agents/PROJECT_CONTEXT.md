@@ -9,13 +9,39 @@
 - Workflow: all agent commands via `bun nvst <command>`; all Python via `uv`
 - Language: all generated resources must be in English
 
+## Monorepo Structure
+This repo is a polyglot monorepo: a Python core library + TypeScript application packages.
+
+```
+comfy-diffusion/
+├── comfy_diffusion/       # Python core library (PyPI: comfy-diffusion)
+├── server/                # FastAPI worker — wraps comfy_diffusion, exposes HTTP on :5000
+├── packages/
+│   ├── parallax_sdk/      # @parallax/sdk — shared TypeScript types (request/response contracts)
+│   ├── parallax_ms/       # @parallax/ms  — Elysia gateway on :3000, proxies to server/
+│   ├── parallax_cli/      # @parallax/cli — Bun CLI, talks to parallax_ms
+│   └── parallax_mcp/      # @parallax/mcp — MCP server for Claude, talks to parallax_ms
+└── docs/                  # Per-package documentation
+```
+
+Request flow: `parallax_cli / parallax_mcp → parallax_ms (:3000) → server/FastAPI (:5000) → comfy_diffusion`
+
 ## Tech Stack
+### Python (comfy_diffusion + server/)
 - Language: Python 3.12+
 - Runtime: CPython
-- Frameworks: none (pure library)
+- Frameworks: FastAPI + uvicorn (server/), none (core library)
 - Key libraries: torch (optional, via extras), ComfyUI (vendored submodule)
 - Package manager: uv (no pip/venv)
 - Build / tooling: pyproject.toml (PEP 621), uv for install/sync/run
+
+### TypeScript (packages/)
+- Runtime: Bun
+- Gateway framework: Elysia (parallax_ms)
+- CLI framework: commander (parallax_cli)
+- MCP framework: @modelcontextprotocol/sdk (parallax_mcp)
+- Shared types: @parallax/sdk (workspace:*)
+- Workspace manager: Bun workspaces (package.json root)
 
 ## Code Standards
 - Style: PEP 8, type hints on public API
@@ -46,7 +72,8 @@
 ## Modular Structure
 - `comfy_diffusion/_runtime.py`: path management, `COMFYUI_PINNED_TAG`, auto-bootstrap logic
 - `comfy_diffusion/runtime.py`: public `check_runtime()` entry point
-- `comfy_diffusion/models.py`: `ModelManager` — load_checkpoint, load_clip(*paths), load_vae, load_llm
+- `comfy_diffusion/models.py`: `ModelManager` — load_checkpoint, load_clip(*paths), load_vae, load_llm, load_upscale_model, load_audio_encoder, load_latent_upscale_model
+- `comfy_diffusion/downloader.py`: `HFModelEntry`, `CivitAIModelEntry`, `URLModelEntry` + `download_models()` — manifest-based model downloader with SHA256 verification
 - `comfy_diffusion/conditioning.py`: encode_prompt, advanced/regional/scheduled conditioning (Flux, WAN, LTXV)
 - `comfy_diffusion/sampling.py`: sample(), advanced samplers, custom schedulers, sigma tools
 - `comfy_diffusion/vae.py`: vae_decode/encode (single, tiled, batch variants)
@@ -58,6 +85,7 @@
 - `comfy_diffusion/audio.py`: LTXV Audio VAE + ACE Step 1.5 text-to-audio
 - `comfy_diffusion/textgen.py`: generate_text(), generate_ltx2_prompt() (LLM/VLM inference)
 - `comfy_diffusion/video.py`: video CFG guidance, model sampling patches (Flux, SD3, AuraFlow)
+- `comfy_diffusion/pipelines/`: hierarchical pipeline library — `image/` (sdxl, anima, z_image, flux_klein, qwen), `video/` (ltx/ltx2, ltx/ltx23, wan/wan21, wan/wan22), `audio/` (ace_step); each module exports `manifest() -> list[ModelEntry]` + `run()`
 - `vendor/ComfyUI/`: vendored ComfyUI (submodule or auto-downloaded zip, not edited directly)
 - `tests/`: pytest test files
 
@@ -66,7 +94,7 @@
 - `clip.encode_from_tokens(tokens, return_pooled=True)` — GLIGEN only; do not use for standard encoding
 
 ## Public API Pattern
-- Re-exported at package level: `check_runtime`, `vae_decode`, `vae_encode`, `apply_lora`
+- Re-exported at package level: `check_runtime`, `apply_lora`; full `vae` surface: `vae_decode`, `vae_decode_tiled`, `vae_decode_batch`, `vae_decode_batch_tiled`, `vae_encode`, `vae_encode_tiled`, `vae_encode_batch`, `vae_encode_batch_tiled`, `vae_encode_for_inpaint`
 - All other symbols: explicit submodule imports (e.g. `from comfy_diffusion.conditioning import encode_prompt`)
 - `textgen`, `audio`, `latent`, `image`, `mask`, `video`, `controlnet` — not re-exported at package level
 
@@ -114,48 +142,40 @@ Check each `LoraLoader` / `LoraLoaderModelOnly` node:
 ## Implemented Capabilities
 <!-- Updated at the end of each iteration -->
 
-### Summary — it_000001 through it_000017
-- **001** Foundation: package structure, `check_runtime()`, ComfyUI path management
-- **002** `models`: `ModelManager`, `load_checkpoint()`
-- **003** `conditioning`: `encode_prompt()` via CLIP
-- **004** `sampling`: `sample()` KSampler wrapper
-- **005** `vae`: `vae_decode()` latent→PIL
-- **006** `lora`: `apply_lora()`, LoRA stacking
-- **007** `vae`: `vae_encode()` + standalone `load_clip()`, `load_vae()`
-- **008** `vae`: tiled encode/decode (`vae_decode_tiled`, `vae_encode_tiled`)
-- **009** `vae`: batch variants (`vae_decode_batch`, `vae_encode_batch`, tiled batch)
-- **010** `sampling`: advanced samplers (KSamplerAdvanced, SamplerCustomAdvanced), schedulers, sigma tools
-- **011** `audio`: LTXV Audio VAE, ACE Step 1.5 text-to-audio conditioning
-- **012** `conditioning`: advanced/regional/scheduled conditioning; Flux, WAN, LTXV architecture support
-- **013** `controlnet`: ControlNet load & apply (ControlNetApplyAdvanced, SetUnionControlNetType)
-- **014** `latent`: latent create/resize/crop/compose/batch utilities
-- **015** `image`: image load/save/transform utilities
-- **016** `mask`: mask load/convert/grow/feather utilities
-- **017** `video`: model sampling patches (Flux, SD3, AuraFlow), video CFG guidance (linear/triangle)
+### Summary — it_000001 through it_000024
+- **001** Foundation: `check_runtime()`, `_runtime.py`, ComfyUI path management
+- **002–007** `models`, `conditioning`, `sampling`, `vae` (encode/decode), `lora`
+- **008–010** `vae` tiled + batch variants; advanced samplers, custom schedulers, sigma tools
+- **011–013** `audio` (LTXV VAE + ACE Step conditioning); `conditioning` advanced/regional; `controlnet`
+- **014–017** `latent`, `image`, `mask`, `video` (patches + CFG guidance)
+- **018** Packaging: PEP 621, type stubs, distributable skills
+- **019** `ModelManager.load_clip(*paths)` — variadic CLIP loader
+- **020** `textgen`: `generate_text()`, `generate_ltx2_prompt()` (LLM/VLM)
+- **021** Auto-bootstrap: `check_runtime()` downloads ComfyUI when `vendor/ComfyUI` is absent
+- **022–023** Incremental refinements
+- **024** `downloader.py`: manifest downloader (`HFModelEntry`, `CivitAIModelEntry`, `URLModelEntry`, SHA256, `tqdm`); CivitAI uses REST API directly (no `civitai-py`)
 
-### it_000018 — Packaging & DX
-- pip-installable package (`pyproject.toml` PEP 621), distributable skills, type stubs
+### it_000025–026 — Upscale Model + ComfyUI v0.18.0
+- `ModelManager.load_upscale_model(path)`, `upscale_models` folder registered
+- ComfyUI submodule updated to `v0.18.0`
 
-### it_000019 — Variadic CLIP Loader
-- `ModelManager.load_clip(*paths)` — variadic, wraps `comfy.sd.load_clip(ckpt_paths=[...])`
+### it_000027–034 — LTX-Video 2, WAN 2.1/2.2, Audio Encoder
+- `latent`: `ltxv_empty_latent_video`, `ltxv_latent_upsample`, `ltxv_crop_guides`
+- `audio`: `ltxv_concat_av_latent`, `ltxv_separate_av_latent`, `audio_encoder_encode`, `vae_decode_audio`
+- `sampling`: `manual_sigmas`; `conditioning`: `wan22_image_to_video_latent`
+- `ModelManager`: `load_audio_encoder`, `load_latent_upscale_model`
+- Pipelines: `video/ltx/ltx2` (t2v, i2v, distilled, a2v, depth, canny, pose, lora), `video/ltx/ltx23` (t2v, i2v, flf2v, ia2v), `video/wan/wan21` (t2v, i2v, flf2v), `video/wan/wan22` (t2v, i2v, flf2v, s2v, ti2v), `image/sdxl` (t2i, turbo, refiner), `image/anima`, `image/z_image`
 
-### it_000020 — LLM/VLM Text Generation (`textgen`)
-- `ModelManager.load_llm(path)` — loads LLM via ComfyUI CLIP loader; registers `models_dir/llm`
-- `generate_text(clip, prompt, ...)` — LLM inference, mirrors `TextGenerate.execute()`
-- `generate_ltx2_prompt(clip, prompt, ...)` — LTX-Video 2 prompt enhancer with system prompt templates
+### it_000035 — ACE Step + Flux.2 Klein + new library wrappers
+- `latent`: `empty_flux2_latent_image`, `empty_qwen_image_layered_latent_image`
+- `conditioning`: `reference_latent`; `sampling`: `flux_kv_cache`
+- `image`: `image_scale_to_total_pixels`, `image_scale_to_max_dimension`, `get_image_size`
+- Pipelines: `image/flux_klein` (t2i_4b_base/distilled, edit_4b/9b base/distilled, edit_9b_kv), `image/qwen/layered`
+- Pipelines: `audio/ace_step/v1_5` (checkpoint, split, split_4b)
 
-### it_000021 — Auto-Bootstrap ComfyUI
-- `COMFYUI_PINNED_TAG` constant in `_runtime.py` — pinned ComfyUI release tag
-- `check_runtime()` auto-downloads ComfyUI zip from GitHub when `vendor/ComfyUI` is missing/empty
-- Uses stdlib only: `urllib.request`, `zipfile`, `shutil`, `pathlib`, `tempfile`
-- Idempotent: skips download if `vendor/ComfyUI` is already populated
-- Returns error dict (with `python_version`) on bootstrap failure; never raises
-- README documents `check_runtime()` as first call before any model loading
+### it_000036 — Qwen Image Edit 2511
+- `image/qwen/edit_2511` pipeline — Qwen2.5-VL image editing
+- 4 new library node wrappers across conditioning, latent, sampling, image modules
 
-### it_000024 — Manifest-Based Downloader & Reference Pipeline
-- `comfy_diffusion/downloader.py`: typed entry dataclasses (`HFModelEntry`, `CivitAIModelEntry`, `URLModelEntry`) + `download_models(manifest, *, models_dir, quiet)`
-- SHA256 integrity verification via stdlib `hashlib`; idempotent (skips existing files, re-downloads on hash mismatch)
-- `tqdm` progress for URL/CivitAI downloads; `huggingface_hub` native progress for HF downloads; all suppressed with `quiet=True`
-- **CivitAI design decision**: `civitai-py` library is NOT used. It targets the Generator API (cloud inference), not model file downloads. CivitAI downloads use the CivitAI REST API directly via `urllib.request` with `Authorization: Bearer {CIVITAI_API_KEY}`. This is the same mechanism the library uses internally, avoids an extra dependency, and allows tqdm progress.
-- `comfy_diffusion/pipelines/ltx2_t2v.py`: canonical pipeline pattern — exports `manifest() -> list[ModelEntry]` and `run(...) -> list[PIL.Image]`
-- `[downloader]` optional extra: `huggingface_hub>=0.20`, `tqdm>=4.67` (install with `pip install comfy-diffusion[downloader]`)
+### it_000037 — Qwen edit_2511 CLI example
+- `examples/qwen_edit_2511.py` — self-contained executable annotating pipeline public API (`manifest()` + `run()`)
