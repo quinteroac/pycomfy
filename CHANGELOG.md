@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [000036] - 2026-04-02
+
+### Added
+- Expose Qwen Image Edit 2511 inference as a composable Python function usable
+- Add the four missing node wrappers to their respective library modules,
+- Keep the pipeline CPU-safe: all tests pass without GPU using mocked weights.
+
 ## [000035] - 2026-04-02
 
 ### Added
