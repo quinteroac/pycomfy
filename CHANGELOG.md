@@ -13,8 +13,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Allow developers to generate music from a text prompt with a single function
 - All tests pass on CPU (mocked weights).
 
-## [Unreleased]
-
 ### Added
 
 #### Library wrappers
@@ -123,7 +121,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Initial preview release with basic runtime bootstrap and `comfy.*` path injection
 
-[Unreleased]: https://github.com/quinteroac/comfy-diffusion/compare/v1.3.0...HEAD
 [1.3.0]: https://github.com/quinteroac/comfy-diffusion/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/quinteroac/comfy-diffusion/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/quinteroac/comfy-diffusion/compare/v1.0.0...v1.1.0
