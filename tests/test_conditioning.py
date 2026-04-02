@@ -310,6 +310,8 @@ def test_conditioning_public_api_exports_expected_entrypoints() -> None:
         "conditioning_set_timestep_range",
         "flux_guidance",
         "reference_latent",
+        "encode_qwen_image_edit_plus",
+        "apply_flux_kontext_multi_reference",
     ]
 
 

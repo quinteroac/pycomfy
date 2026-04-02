@@ -669,6 +669,37 @@ def create_video(images: Any, audio: Any, fps: float) -> Any:
     return raw[0]
 
 
+def apply_cfg_norm(model: Any, strength: float = 1.0) -> Any:
+    """Normalise the CFG prediction to the magnitude of the conditional output.
+
+    Mirrors ``CFGNorm.execute()`` from ``comfy_extras/nodes_cfg.py``.
+    Registers a post-CFG sampler hook that scales the denoised prediction so
+    its norm matches the conditional denoised signal, clamped to [0, 1].
+
+    Args:
+        model: ComfyUI model object.
+        strength: Scaling multiplier applied on top of the norm ratio
+            (default ``1.0`` keeps the standard magnitude-matching behaviour).
+
+    Returns:
+        Cloned model with the CFG-norm post-processing hook installed.
+    """
+    import torch
+
+    m = model.clone()
+
+    def cfg_norm(args: dict) -> Any:
+        cond_p = args["cond_denoised"]
+        pred_text = args["denoised"]
+        norm_full_cond = torch.norm(cond_p, dim=1, keepdim=True)
+        norm_pred_text = torch.norm(pred_text, dim=1, keepdim=True)
+        scale = (norm_full_cond / (norm_pred_text + 1e-8)).clamp(min=0.0, max=1.0)
+        return pred_text * scale * strength
+
+    m.set_model_sampler_post_cfg_function(cfg_norm)
+    return m
+
+
 __all__ = [
     "load_video",
     "save_video",
@@ -680,4 +711,5 @@ __all__ = [
     "ltxv_img_to_video_inplace_kj",
     "ltx2_sampling_preview_override",
     "create_video",
+    "apply_cfg_norm",
 ]

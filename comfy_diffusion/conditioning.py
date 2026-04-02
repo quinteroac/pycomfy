@@ -1796,6 +1796,29 @@ def wan22_image_to_video_latent(
     }
 
 
+def _get_qwen_image_edit_plus_dependencies() -> tuple[Any, Any, Any]:
+    """Resolve math, comfy.utils, and node_helpers at call time."""
+    import math as _math
+
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    import comfy.utils
+    import node_helpers
+
+    return _math, comfy.utils, node_helpers
+
+
+def _get_node_helpers() -> Any:
+    """Resolve node_helpers at call time."""
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    import node_helpers
+
+    return node_helpers
+
+
 def _get_reference_latent_type() -> Any:
     """Resolve ComfyUI ReferenceLatent node at call time."""
     from ._runtime import ensure_comfyui_on_path
@@ -1833,6 +1856,102 @@ def reference_latent(conditioning: list, latent: dict) -> list:
     return _unwrap_node_output(node_type.execute(conditioning=conditioning, latent=latent))
 
 
+def encode_qwen_image_edit_plus(
+    clip: Any,
+    vae: Any,
+    image1: Any,
+    image2: Any | None = None,
+    image3: Any | None = None,
+    prompt: str = "",
+) -> Any:
+    """Encode a text prompt together with up to three reference images for Qwen image editing.
+
+    Mirrors ``TextEncodeQwenImageEditPlus.execute()`` from
+    ``comfy_extras/nodes_qwen.py``.
+
+    Args:
+        clip: ComfyUI CLIP object with Qwen tokenizer support.
+        vae: VAE used to encode reference image latents.
+        image1: First reference image tensor (BHWC).
+        image2: Optional second reference image tensor.
+        image3: Optional third reference image tensor.
+        prompt: Text editing instruction.
+
+    Returns:
+        Conditioning list with reference latents attached.
+    """
+    math, comfy_utils, node_helpers = _get_qwen_image_edit_plus_dependencies()
+
+    llama_template = (
+        "<|im_start|>system\nDescribe the key features of the input image "
+        "(color, shape, size, texture, objects, background), then explain how the "
+        "user's text instruction should alter or modify the image. Generate a new "
+        "image that meets the user's requirements while maintaining consistency with "
+        "the original input where appropriate.<|im_end|>\n"
+        "<|im_start|>user\n{}<|im_end|>\n<|im_start|>assistant\n"
+    )
+
+    ref_latents: list[Any] = []
+    images_vl: list[Any] = []
+    image_prompt = ""
+
+    for i, image in enumerate([image1, image2, image3]):
+        if image is None:
+            continue
+        samples = image.movedim(-1, 1)
+        total_vl = int(384 * 384)
+        scale_by = math.sqrt(total_vl / (samples.shape[3] * samples.shape[2]))
+        w_vl = round(samples.shape[3] * scale_by)
+        h_vl = round(samples.shape[2] * scale_by)
+        s_vl = comfy_utils.common_upscale(samples, w_vl, h_vl, "area", "disabled")
+        images_vl.append(s_vl.movedim(1, -1))
+
+        if vae is not None:
+            total_enc = int(1024 * 1024)
+            scale_by_enc = math.sqrt(total_enc / (samples.shape[3] * samples.shape[2]))
+            w_enc = round(samples.shape[3] * scale_by_enc / 8.0) * 8
+            h_enc = round(samples.shape[2] * scale_by_enc / 8.0) * 8
+            s_enc = comfy_utils.common_upscale(samples, w_enc, h_enc, "area", "disabled")
+            ref_latents.append(vae.encode(s_enc.movedim(1, -1)[:, :, :, :3]))
+
+        image_prompt += "Picture {}: <|vision_start|><|image_pad|><|vision_end|>".format(i + 1)
+
+    tokens = clip.tokenize(image_prompt + prompt, images=images_vl, llama_template=llama_template)
+    conditioning = clip.encode_from_tokens_scheduled(tokens)
+    if ref_latents:
+        conditioning = node_helpers.conditioning_set_values(
+            conditioning, {"reference_latents": ref_latents}, append=True
+        )
+    return conditioning
+
+
+def apply_flux_kontext_multi_reference(
+    conditioning: Any,
+    reference_latents_method: str = "index_timestep_zero",
+) -> Any:
+    """Set the reference-latent blending method for Flux Kontext multi-reference.
+
+    Mirrors ``FluxKontextMultiReferenceLatentMethod.execute()`` from
+    ``comfy_extras/nodes_flux.py``.
+
+    Args:
+        conditioning: Conditioning list produced by a text or image encoder.
+        reference_latents_method: One of ``"offset"``, ``"index"``,
+            ``"uxo/uno"``, or ``"index_timestep_zero"`` (default).
+            Any value containing ``"uxo"`` or ``"uso"`` is normalised to
+            ``"uxo"`` internally.
+
+    Returns:
+        New conditioning list with ``reference_latents_method`` set.
+    """
+    node_helpers = _get_node_helpers()
+    if "uxo" in reference_latents_method or "uso" in reference_latents_method:
+        reference_latents_method = "uxo"
+    return node_helpers.conditioning_set_values(
+        conditioning, {"reference_latents_method": reference_latents_method}
+    )
+
+
 __all__ = [
     "encode_prompt",
     "encode_prompt_flux",
@@ -1863,4 +1982,6 @@ __all__ = [
     "conditioning_set_timestep_range",
     "flux_guidance",
     "reference_latent",
+    "encode_qwen_image_edit_plus",
+    "apply_flux_kontext_multi_reference",
 ]

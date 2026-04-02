@@ -230,6 +230,7 @@ def test_image_module_exports_expected_entrypoints() -> None:
         "image_scale_to_total_pixels",
         "image_scale_to_max_dimension",
         "get_image_size",
+        "flux_kontext_image_scale",
     ]
 
 
