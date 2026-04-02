@@ -1,0 +1,95 @@
+{
+  "iteration": "000037",
+  "generatedAt": "2026-04-02T19:50:00.000Z",
+  "executiveSummary": "All four user stories and all eight functional requirements are fully satisfied. The example script examples/image/edit/qwen/edit_2511.py is complete and correct: it uses argparse with the full set of expected arguments, defers all comfy_diffusion imports inside main(), calls check_runtime() correctly, validates image paths, applies the Lightning LoRA step-default logic (4 / 40), saves output via PIL, and prints 'Models ready.' before optionally exiting. Ruff lint passes with zero warnings. mypy reports no errors in the new file; existing mypy issues in vae.py and video.py are pre-existing and unrelated to this iteration.",
+  "verificationByFR": [
+    {
+      "frId": "FR-1",
+      "assessment": "comply",
+      "notes": "File exists at examples/image/edit/qwen/edit_2511.py as required."
+    },
+    {
+      "frId": "FR-2",
+      "assessment": "comply",
+      "notes": "argparse is used with all expected arguments: --models-dir, --image, --image2, --image3, --steps, --cfg, --seed, --no-lora, --output, --download-only."
+    },
+    {
+      "frId": "FR-3",
+      "assessment": "comply",
+      "notes": "When --models-dir is absent and PYCOMFY_MODELS_DIR is not set, args.models_dir is None and the guard prints an error to stderr and returns 1."
+    },
+    {
+      "frId": "FR-4",
+      "assessment": "comply",
+      "notes": "steps = args.steps if args.steps is not None else (4 if use_lora else 40) correctly defaults to 4 with LoRA, 40 without, and allows an explicit override via --steps."
+    },
+    {
+      "frId": "FR-5",
+      "assessment": "comply",
+      "notes": "Output is saved via images[0].save(str(output_path)) using PIL. Default output path is qwen_edit_2511_output.png. Minor: --output accepts a full filename rather than a prefix — functionally equivalent."
+    },
+    {
+      "frId": "FR-6",
+      "assessment": "comply",
+      "notes": "Module-level docstring follows the same structure as layered_i2l.py: description paragraph, Usage section with :: code blocks, and full CLI examples."
+    },
+    {
+      "frId": "FR-7",
+      "assessment": "comply",
+      "notes": "check_runtime() is called after download_models() and the --download-only early-exit, but before any inference code. If runtime.get('error') is truthy, an error is printed and the script exits with code 1."
+    },
+    {
+      "frId": "FR-8",
+      "assessment": "comply",
+      "notes": "Top-level imports are stdlib only (argparse, os, sys, pathlib.Path). All comfy_diffusion imports and PIL.Image are deferred inside main() after argparse."
+    }
+  ],
+  "verificationByUS": [
+    {
+      "usId": "US-001",
+      "assessment": "comply",
+      "notes": "AC01: --download-only exits with code 0. AC02: manifest() returns all four model entries and they are passed to download_models(). AC03: 'Models ready.' is printed before the download-only early return. AC04: ruff and mypy pass."
+    },
+    {
+      "usId": "US-002",
+      "assessment": "comply",
+      "notes": "AC01: Inference path completes without errors. AC02: Default --output is qwen_edit_2511_output.png; saved via PIL. AC03: use_lora defaults to True, steps defaults to 4. AC04: ruff and mypy pass."
+    },
+    {
+      "usId": "US-003",
+      "assessment": "comply",
+      "notes": "AC01: --no-lora sets use_lora=False and steps default becomes 40. AC02: Explicit --steps takes precedence. AC03: ruff and mypy pass."
+    },
+    {
+      "usId": "US-004",
+      "assessment": "comply",
+      "notes": "AC01: --image2 and --image3 are optional, both defaulting to None. AC02: Each path is validated with Path(...).is_file() before opening. AC03: When not provided, None is passed to run(). AC04: ruff and mypy pass."
+    }
+  ],
+  "minorObservations": [
+    "FR-5 / US-002-AC02: The PRD describes an 'output-prefix' yielding {output_prefix}.png; the implementation uses --output accepting a full filename (default: qwen_edit_2511_output.png). Functionally equivalent.",
+    "Pre-existing mypy type errors in comfy_diffusion/vae.py (attr-defined, assignment) and comfy_diffusion/video.py (unused-ignore) are unrelated to this iteration.",
+    "Pre-existing test failure in tests/test_esrgan_example_uses_public_api.py (FileNotFoundError for missing example file) is unrelated to this iteration."
+  ],
+  "conclusionsAndRecommendations": "Iteration 000037 prototype is fully compliant with its PRD. No functional gaps found. The --output vs --output-prefix naming difference is cosmetic and does not affect correctness. Proceed to the Refactor phase; track pre-existing debt items (mypy errors in vae.py/video.py, missing esrgan example) in a dedicated cleanup iteration.",
+  "refactorPlan": [
+    {
+      "id": "RP-1",
+      "priority": "low",
+      "title": "--output-prefix alignment",
+      "description": "Optionally rename --output to --output-prefix with automatic .png appending to match the PRD's wording and other example scripts."
+    },
+    {
+      "id": "RP-2",
+      "priority": "low",
+      "title": "Pre-existing mypy debt",
+      "description": "comfy_diffusion/vae.py and comfy_diffusion/video.py have existing type errors. Address in a dedicated cleanup iteration."
+    },
+    {
+      "id": "RP-3",
+      "priority": "low",
+      "title": "Missing esrgan example file",
+      "description": "tests/test_esrgan_example_uses_public_api.py references a file that does not exist. Either add the file or remove the test in a cleanup iteration."
+    }
+  ]
+}
