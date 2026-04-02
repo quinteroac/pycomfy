@@ -93,3 +93,16 @@
 **Pitfalls Encountered:** None — Commander's `requiredOption` already handles exit code 1 correctly. The only work was message reformatting.
 
 **Useful Context for Future Agents:** The `configureOutput` hook is set once on `program` and applies to all nested subcommands. If new subcommands are added with `requiredOption`, they automatically inherit the custom error format at no extra cost. The regex expects lowercase kebab-case flag names (`--[a-z-]+`), which matches all current flags.
+
+## US-007 — Stub execution
+
+**Summary:** Updated the stub action in `packages/parallax_cli/src/index.ts` to print a contextual "not yet implemented" message to stdout and exit with code 0. Replaced the generic `NOT_IMPLEMENTED` constant with a `notImplemented(action, media, model)` function that formats `[parallax] <action> <media> --model <model> — not yet implemented (coming soon)`. All five command action handlers were updated to pass their action/media context. Five new tests added under the `parallax CLI — stub execution (US-007)` suite.
+
+**Key Decisions:**
+- Changed `console.error` → `console.log` (stdout as required by FR-7) and `process.exit(1)` → `process.exit(0)` (AC-02).
+- Converted the arrow constant to a named function to accept parameters while keeping the `never` return type for TypeScript's control-flow narrowing.
+- Each action handler passes the action (`"create"` / `"edit"`), media (`"image"` / `"video"` / `"audio"`), and `opts.model` directly.
+
+**Pitfalls Encountered:** None — straightforward refactor of a stub function.
+
+**Useful Context for Future Agents:** When real pipeline execution is implemented, replace `notImplemented(...)` calls in each action handler with the actual invocation. The function signature and the model-validation guard above it remain unchanged.

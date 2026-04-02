@@ -279,6 +279,38 @@ describe("parallax CLI — required-flag validation (US-006)", () => {
   });
 });
 
+describe("parallax CLI — stub execution (US-007)", () => {
+  it("US-007-AC01/02: create image with valid flags prints stub message and exits 0", async () => {
+    const { stdout, exitCode } = await runCLI(["create", "image", "--model", "sdxl", "--prompt", "test"]);
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("[parallax] create image --model sdxl — not yet implemented (coming soon)");
+  });
+
+  it("US-007-AC01/02: create video with valid flags prints stub message and exits 0", async () => {
+    const { stdout, exitCode } = await runCLI(["create", "video", "--model", "wan21", "--prompt", "test"]);
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("[parallax] create video --model wan21 — not yet implemented (coming soon)");
+  });
+
+  it("US-007-AC01/02: create audio with valid flags prints stub message and exits 0", async () => {
+    const { stdout, exitCode } = await runCLI(["create", "audio", "--model", "ace_step", "--prompt", "test"]);
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("[parallax] create audio --model ace_step — not yet implemented (coming soon)");
+  });
+
+  it("US-007-AC01/02: edit image with valid flags prints stub message and exits 0", async () => {
+    const { stdout, exitCode } = await runCLI(["edit", "image", "--model", "qwen", "--prompt", "test", "--input", "img.png"]);
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("[parallax] edit image --model qwen — not yet implemented (coming soon)");
+  });
+
+  it("US-007-AC01/02: edit video with valid flags prints stub message and exits 0", async () => {
+    const { stdout, exitCode } = await runCLI(["edit", "video", "--model", "wan21", "--prompt", "test", "--input", "vid.mp4"]);
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("[parallax] edit video --model wan21 — not yet implemented (coming soon)");
+  });
+});
+
 describe("parallax CLI — top-level help (US-001)", () => {
   it("US-001-AC01: --help prints tool name, version, description, and subcommands", async () => {
     const { stdout, exitCode } = await runCLI(["--help"]);

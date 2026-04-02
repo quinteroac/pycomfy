@@ -23,10 +23,10 @@ function validateModel(key: string, model: string): void {
   }
 }
 
-const NOT_IMPLEMENTED = (): never => {
-  console.error("Not yet implemented — coming soon.");
-  process.exit(1);
-};
+function notImplemented(action: string, media: string, model: string): never {
+  console.log(`[parallax] ${action} ${media} --model ${model} — not yet implemented (coming soon)`);
+  process.exit(0);
+}
 
 const program = new Command();
 
@@ -67,7 +67,7 @@ create
   .option("--seed <n>", "Random seed for reproducibility")
   .option("--output <path>", "Output file path", "output.png")
   .addHelpText("after", modelsFooter("create image"))
-  .action((opts) => { validateModel("create image", opts.model); NOT_IMPLEMENTED(); });
+  .action((opts) => { validateModel("create image", opts.model); notImplemented("create", "image", opts.model); });
 
 create
   .command("video")
@@ -82,7 +82,7 @@ create
   .option("--seed <n>", "Random seed for reproducibility")
   .option("--output <path>", "Output file path", "output.mp4")
   .addHelpText("after", modelsFooter("create video"))
-  .action((opts) => { validateModel("create video", opts.model); NOT_IMPLEMENTED(); });
+  .action((opts) => { validateModel("create video", opts.model); notImplemented("create", "video", opts.model); });
 
 create
   .command("audio")
@@ -94,7 +94,7 @@ create
   .option("--seed <n>", "Random seed for reproducibility")
   .option("--output <path>", "Output file path", "output.wav")
   .addHelpText("after", modelsFooter("create audio"))
-  .action((opts) => { validateModel("create audio", opts.model); NOT_IMPLEMENTED(); });
+  .action((opts) => { validateModel("create audio", opts.model); notImplemented("create", "audio", opts.model); });
 
 // ── edit ──────────────────────────────────────────────────────────────────────
 
@@ -114,7 +114,7 @@ edit
   .option("--seed <n>", "Random seed for reproducibility")
   .option("--output <path>", "Output file path", "output.png")
   .addHelpText("after", modelsFooter("edit image"))
-  .action((opts) => { validateModel("edit image", opts.model); NOT_IMPLEMENTED(); });
+  .action((opts) => { validateModel("edit image", opts.model); notImplemented("edit", "image", opts.model); });
 
 edit
   .command("video")
@@ -130,7 +130,7 @@ edit
   .option("--seed <n>", "Random seed for reproducibility")
   .option("--output <path>", "Output file path", "output.mp4")
   .addHelpText("after", modelsFooter("edit video"))
-  .action((opts) => { validateModel("edit video", opts.model); NOT_IMPLEMENTED(); });
+  .action((opts) => { validateModel("edit video", opts.model); notImplemented("edit", "video", opts.model); });
 
 if (process.argv.length <= 2) {
   program.help();
