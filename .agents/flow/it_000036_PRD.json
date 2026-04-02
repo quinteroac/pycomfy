@@ -1,0 +1,124 @@
+{
+  "goals": [
+    "Expose Qwen Image Edit 2511 inference as a composable Python function usable",
+    "Add the four missing node wrappers to their respective library modules,",
+    "Keep the pipeline CPU-safe: all tests pass without GPU using mocked weights."
+  ],
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Add missing node wrappers to library modules",
+      "description": "As a developer using comfy-diffusion, I want the four missing ComfyUI nodes wrapped as library functions so that I (and the pipeline) can call them without inlining raw `comfy.*` logic inside a pipeline file.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-001-AC01",
+          "text": "`conditioning.py` exports `encode_qwen_image_edit_plus(clip, vae, image1, image2=None, image3=None, prompt=\"\") -> Any` — mirrors `TextEncodeQwenImageEditPlus.execute()` from `vendor/ComfyUI/comfy_extras/nodes_qwen.py`; lazy import; added to `__all__`"
+        },
+        {
+          "id": "US-001-AC02",
+          "text": "`conditioning.py` exports `apply_flux_kontext_multi_reference(conditioning, reference_latents_method=\"index_timestep_zero\") -> Any` — mirrors `FluxKontextMultiReferenceLatentMethod.execute()` from `vendor/ComfyUI/comfy_extras/nodes_flux.py`; lazy import; added to `__all__`"
+        },
+        {
+          "id": "US-001-AC03",
+          "text": "`image.py` exports `flux_kontext_image_scale(image) -> Any` — mirrors `FluxKontextImageScale.execute()` from `vendor/ComfyUI/comfy_extras/nodes_flux.py`; lazy import; added to `__all__`"
+        },
+        {
+          "id": "US-001-AC04",
+          "text": "`video.py` exports `apply_cfg_norm(model, strength=1.0) -> Any` — mirrors `CFGNorm.execute()` from `vendor/ComfyUI/comfy_extras/nodes_cfg.py`; lazy import; added to `__all__`"
+        },
+        {
+          "id": "US-001-AC05",
+          "text": "Typecheck / lint passes"
+        }
+      ]
+    },
+    {
+      "id": "US-002",
+      "title": "Implement the `edit_2511` pipeline module",
+      "description": "As a developer, I want a `run()` function that accepts a prompt and an input image (plus optional reference images) and returns a `list[PIL.Image]` so that I can integrate Qwen image editing into my application with a single function call.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-002-AC01",
+          "text": "File `comfy_diffusion/pipelines/image/qwen/edit_2511.py` exists and is importable"
+        },
+        {
+          "id": "US-002-AC02",
+          "text": "`manifest() -> list[ModelEntry]` returns exactly 4 entries matching the workflow model downloads:"
+        },
+        {
+          "id": "US-002-AC03",
+          "text": "`run(prompt, image, image2=None, image3=None, models_dir, *, steps=40, cfg=3.0, use_lora=True, seed=0) -> list[PIL.Image]` executes the full node graph in the order specified by the workflow:"
+        },
+        {
+          "id": "US-002-AC04",
+          "text": "Return value is a non-empty `list[PIL.Image]`"
+        },
+        {
+          "id": "US-002-AC05",
+          "text": "`__all__ = [\"manifest\", \"run\"]` is present"
+        },
+        {
+          "id": "US-002-AC06",
+          "text": "Typecheck / lint passes"
+        }
+      ]
+    },
+    {
+      "id": "US-003",
+      "title": "CPU-safe unit tests",
+      "description": "As a CI system (CPU-only), I want tests that validate `manifest()` and the `run()` call graph without loading real model weights so that the pipeline is verified on every pull request.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-003-AC01",
+          "text": "`tests/test_qwen_edit_2511.py` exists"
+        },
+        {
+          "id": "US-003-AC02",
+          "text": "Test verifies `manifest()` returns exactly 4 `ModelEntry` items with the correct filenames and destination directories"
+        },
+        {
+          "id": "US-003-AC03",
+          "text": "Test for `run()` stubs all model loading and node functions with `unittest.mock`; asserts `vae_decode` is called and result is returned"
+        },
+        {
+          "id": "US-003-AC04",
+          "text": "Tests also cover the four new node-wrapper functions with mocked `comfy.*` internals"
+        },
+        {
+          "id": "US-003-AC05",
+          "text": "All tests pass under `uv run pytest tests/test_qwen_edit_2511.py` on CPU"
+        }
+      ]
+    }
+  ],
+  "functionalRequirements": [
+    {
+      "id": "FR-1",
+      "description": "`encode_qwen_image_edit_plus` must accept `image2` and `image3` as optional keyword arguments (default `None`); when `None`, the underlying `TextEncodeQwenImageEditPlus` node receives no image for those slots."
+    },
+    {
+      "id": "FR-2",
+      "description": "`apply_flux_kontext_multi_reference` must accept a `reference_latents_method` string parameter defaulting to `\"index_timestep_zero\"`, matching the workflow widget value."
+    },
+    {
+      "id": "FR-3",
+      "description": "`flux_kontext_image_scale` must delegate entirely to `FluxKontextImageScale.execute()` without performing any custom scaling logic."
+    },
+    {
+      "id": "FR-4",
+      "description": "`apply_cfg_norm` must clone the input model before patching to avoid mutating a shared model object, consistent with other model-patch functions in the library."
+    },
+    {
+      "id": "FR-5",
+      "description": "`run()` must be wrapped in `torch.inference_mode()` via the established pattern (owned centrally in `sampling.py`'s `sample()` call — do not add a second `torch.inference_mode()` wrapper in `run()`)."
+    },
+    {
+      "id": "FR-6",
+      "description": "`use_lora=True` default matches the workflow default (LoRA switch defaults to `True` — Lightning 4-step LoRA active)."
+    },
+    {
+      "id": "FR-7",
+      "description": "All new functions must follow the lazy-import pattern: no `torch` or `comfy.*` at module top level."
+    }
+  ]
+}
