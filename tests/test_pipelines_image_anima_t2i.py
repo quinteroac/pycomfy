@@ -162,6 +162,17 @@ def test_manifest_vae_dest() -> None:
     )
 
 
+def test_manifest_uses_split_files_hf_paths() -> None:
+    from comfy_diffusion.pipelines.image.anima.t2i import manifest
+
+    filenames = {str(entry.filename) for entry in manifest()}
+    assert filenames == {
+        "split_files/diffusion_models/anima-preview2.safetensors",
+        "split_files/text_encoders/qwen_3_06b_base.safetensors",
+        "split_files/vae/qwen_image_vae.safetensors",
+    }
+
+
 # ---------------------------------------------------------------------------
 # run() signature checks (AC03)
 # ---------------------------------------------------------------------------

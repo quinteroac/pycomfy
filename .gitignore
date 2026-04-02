@@ -48,3 +48,8 @@ output_esrgan.png
 ltxv2_output/output.mp4
 ltxv2_output/audio.wav
 wan21_t2v_output.mp4
+anima_preview_output.png
+.gitignore
+.gitignore
+z_image_turbo_output.png
+.github/copilot-instructions.md

@@ -56,7 +56,7 @@ __all__ = ["manifest", "run"]
 # HuggingFace repository for Anima Preview
 # ---------------------------------------------------------------------------
 
-_HF_REPO = "Comfy-Org/Anima-Preview"
+_HF_REPO = "circlestone-labs/Anima"
 
 # Relative destination paths (resolved against models_dir by download_models).
 _UNET_DEST = Path("diffusion_models") / "anima-preview2.safetensors"
@@ -88,17 +88,17 @@ def manifest() -> list[ModelEntry]:
     return [
         HFModelEntry(
             repo_id=_HF_REPO,
-            filename="anima-preview2.safetensors",
+            filename="split_files/diffusion_models/anima-preview2.safetensors",
             dest=_UNET_DEST,
         ),
         HFModelEntry(
             repo_id=_HF_REPO,
-            filename="text_encoders/qwen_3_06b_base.safetensors",
+            filename="split_files/text_encoders/qwen_3_06b_base.safetensors",
             dest=_CLIP_DEST,
         ),
         HFModelEntry(
             repo_id=_HF_REPO,
-            filename="vae/qwen_image_vae.safetensors",
+            filename="split_files/vae/qwen_image_vae.safetensors",
             dest=_VAE_DEST,
         ),
     ]
