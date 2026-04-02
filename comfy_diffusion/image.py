@@ -749,6 +749,42 @@ def get_image_size(image: Any) -> tuple[int, int]:
     return int(raw[0]), int(raw[1])
 
 
+def _get_flux_kontext_dependencies() -> Any:
+    """Resolve comfy.utils and PREFERED_KONTEXT_RESOLUTIONS at call time."""
+    from ._runtime import ensure_comfyui_on_path
+
+    ensure_comfyui_on_path()
+    import comfy.utils
+    from comfy_extras.nodes_flux import PREFERED_KONTEXT_RESOLUTIONS
+
+    return comfy.utils, PREFERED_KONTEXT_RESOLUTIONS
+
+
+def flux_kontext_image_scale(image: Any) -> Any:
+    """Resize an image to the nearest optimal Flux Kontext resolution.
+
+    Mirrors ``FluxKontextImageScale.execute()`` from ``comfy_extras/nodes_flux.py``.
+    Selects the resolution from a fixed list that best preserves the input
+    aspect ratio, then upscales or downscales with Lanczos + centre-crop.
+
+    Args:
+        image: BHWC image tensor.
+
+    Returns:
+        BHWC image tensor resized to the best-matching Kontext resolution.
+    """
+    comfy_utils, preferred_resolutions = _get_flux_kontext_dependencies()
+    width = image.shape[2]
+    height = image.shape[1]
+    aspect_ratio = width / height
+    _, out_width, out_height = min(
+        (abs(aspect_ratio - w / h), w, h) for w, h in preferred_resolutions
+    )
+    return comfy_utils.common_upscale(
+        image.movedim(-1, 1), out_width, out_height, "lanczos", "center"
+    ).movedim(1, -1)
+
+
 __all__ = [
     "load_image",
     "image_to_tensor",
@@ -771,4 +807,5 @@ __all__ = [
     "image_scale_to_total_pixels",
     "image_scale_to_max_dimension",
     "get_image_size",
+    "flux_kontext_image_scale",
 ]
