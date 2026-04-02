@@ -167,6 +167,53 @@ describe("parallax CLI — media-level help (US-004)", () => {
   });
 });
 
+describe("parallax CLI — known-model validation (US-005)", () => {
+  it("US-005-AC01/02: create image with unknown model prints error message and exits 1", async () => {
+    const { stderr, exitCode } = await runCLI(["create", "image", "--model", "badmodel", "--prompt", "test"]);
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain('unknown model "badmodel" for create image');
+    expect(stderr).toContain("Known models:");
+    expect(stderr).toContain("sdxl");
+  });
+
+  it("US-005-AC01/02: create video with unknown model prints error message and exits 1", async () => {
+    const { stderr, exitCode } = await runCLI(["create", "video", "--model", "badmodel", "--prompt", "test"]);
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain('unknown model "badmodel" for create video');
+    expect(stderr).toContain("Known models:");
+    expect(stderr).toContain("ltx2");
+  });
+
+  it("US-005-AC01/02: create audio with unknown model prints error message and exits 1", async () => {
+    const { stderr, exitCode } = await runCLI(["create", "audio", "--model", "badmodel", "--prompt", "test"]);
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain('unknown model "badmodel" for create audio');
+    expect(stderr).toContain("Known models:");
+    expect(stderr).toContain("ace_step");
+  });
+
+  it("US-005-AC01/02: edit image with unknown model prints error message and exits 1", async () => {
+    const { stderr, exitCode } = await runCLI(["edit", "image", "--model", "badmodel", "--prompt", "test", "--input", "img.png"]);
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain('unknown model "badmodel" for edit image');
+    expect(stderr).toContain("Known models:");
+    expect(stderr).toContain("qwen");
+  });
+
+  it("US-005-AC01/02: edit video with unknown model prints error message and exits 1", async () => {
+    const { stderr, exitCode } = await runCLI(["edit", "video", "--model", "badmodel", "--prompt", "test", "--input", "vid.mp4"]);
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain('unknown model "badmodel" for edit video');
+    expect(stderr).toContain("Known models:");
+    expect(stderr).toContain("wan21");
+  });
+
+  it("US-005: known model passes validation (no model-error in stderr)", async () => {
+    const { stderr } = await runCLI(["create", "image", "--model", "sdxl", "--prompt", "test"]);
+    expect(stderr).not.toContain("unknown model");
+  });
+});
+
 describe("parallax CLI — top-level help (US-001)", () => {
   it("US-001-AC01: --help prints tool name, version, description, and subcommands", async () => {
     const { stdout, exitCode } = await runCLI(["--help"]);

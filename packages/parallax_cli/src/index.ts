@@ -14,6 +14,15 @@ function modelsFooter(key: string): string {
   return `\nAvailable models: ${MODELS[key].join(", ")}`;
 }
 
+function validateModel(key: string, model: string): void {
+  if (!MODELS[key].includes(model)) {
+    console.error(
+      `Error: unknown model "${model}" for ${key}. Known models: ${MODELS[key].join(", ")}`
+    );
+    process.exit(1);
+  }
+}
+
 const NOT_IMPLEMENTED = (): never => {
   console.error("Not yet implemented — coming soon.");
   process.exit(1);
@@ -47,7 +56,7 @@ create
   .option("--seed <n>", "Random seed for reproducibility")
   .option("--output <path>", "Output file path", "output.png")
   .addHelpText("after", modelsFooter("create image"))
-  .action(NOT_IMPLEMENTED);
+  .action((opts) => { validateModel("create image", opts.model); NOT_IMPLEMENTED(); });
 
 create
   .command("video")
@@ -62,7 +71,7 @@ create
   .option("--seed <n>", "Random seed for reproducibility")
   .option("--output <path>", "Output file path", "output.mp4")
   .addHelpText("after", modelsFooter("create video"))
-  .action(NOT_IMPLEMENTED);
+  .action((opts) => { validateModel("create video", opts.model); NOT_IMPLEMENTED(); });
 
 create
   .command("audio")
@@ -74,7 +83,7 @@ create
   .option("--seed <n>", "Random seed for reproducibility")
   .option("--output <path>", "Output file path", "output.wav")
   .addHelpText("after", modelsFooter("create audio"))
-  .action(NOT_IMPLEMENTED);
+  .action((opts) => { validateModel("create audio", opts.model); NOT_IMPLEMENTED(); });
 
 // ── edit ──────────────────────────────────────────────────────────────────────
 
@@ -94,7 +103,7 @@ edit
   .option("--seed <n>", "Random seed for reproducibility")
   .option("--output <path>", "Output file path", "output.png")
   .addHelpText("after", modelsFooter("edit image"))
-  .action(NOT_IMPLEMENTED);
+  .action((opts) => { validateModel("edit image", opts.model); NOT_IMPLEMENTED(); });
 
 edit
   .command("video")
@@ -110,7 +119,7 @@ edit
   .option("--seed <n>", "Random seed for reproducibility")
   .option("--output <path>", "Output file path", "output.mp4")
   .addHelpText("after", modelsFooter("edit video"))
-  .action(NOT_IMPLEMENTED);
+  .action((opts) => { validateModel("edit video", opts.model); NOT_IMPLEMENTED(); });
 
 if (process.argv.length <= 2) {
   program.help();

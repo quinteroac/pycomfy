@@ -73,3 +73,13 @@
 - The `MODELS` record (key = `"action media"`, value = `string[]`) is the canonical registry for known models per command. When implementing US-005 (model validation), import or duplicate this structure in the action handlers.
 - `parallax create image --help` correctly shows all flags plus the `Available models:` footer — verified by running `bun test`.
 - When US-006 (required-flag validation with custom error messages) is implemented, the `.requiredOption()` calls may need to be downgraded to `.option()` + manual checks in the action handler to produce the exact custom error format.
+
+## US-005 — Known-model validation
+
+**Summary:** Added `validateModel(key, model)` helper to `index.ts` that checks `opts.model` against the `MODELS` registry and prints `Error: unknown model "<value>" for <key>. Known models: ...` to stderr then exits 1. All five commands (`create image/video/audio`, `edit image/video`) were updated from `.action(NOT_IMPLEMENTED)` to `.action((opts) => { validateModel(key, opts.model); NOT_IMPLEMENTED(); })`. Six new tests added under the `parallax CLI — known-model validation (US-005)` suite.
+
+**Key Decisions:** Validation happens inside the action handler (after Commander parses and enforces required options), not at option-definition time. This keeps Commander's built-in `--model <name>` required-flag enforcement intact and lets custom model-error logic run cleanly.
+
+**Pitfalls Encountered:** An earlier edit accidentally dropped the `it("US-001-AC01:...` line from the test file. Verified by viewing the file after each edit. Always view the file after non-trivial edits to catch accidental deletions.
+
+**Useful Context for Future Agents:** The `MODELS` record key format is `"action media"` (e.g. `"create image"`). The error message format is `Error: unknown model "<value>" for <action> <media>. Known models: <comma-separated list>`. Tests pass all required options (`--prompt`, `--input` where needed) so Commander's required-flag check doesn't interfere with model validation testing.
