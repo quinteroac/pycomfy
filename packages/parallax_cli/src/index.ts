@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { Command } from "commander";
+import { Argument, Command } from "commander";
 
 const program = new Command();
 
@@ -11,13 +11,22 @@ program
 
 program
   .command("create")
-  .description("Generate a new image from a text prompt")
-  .argument("<prompt>", "Text prompt describing the image to generate")
-  .option("-o, --output <path>", "Output file path", "output.png")
-  .action((_prompt: string, _options: { output: string }) => {
-    console.error("Not yet implemented — coming soon.");
-    process.exit(1);
-  });
+  .description("Generate media from a text prompt")
+  .addArgument(
+    new Argument("<media>", "Media type to generate").choices(["image", "video", "audio"]),
+  )
+  .option("-p, --prompt <text>", "Text prompt describing the media to generate")
+  .option("-o, --output <path>", "Output file path")
+  .option("--duration <seconds>", "Duration in seconds (video and audio only)")
+  .action(
+    (
+      _media: string,
+      _options: { prompt?: string; output?: string; duration?: string },
+    ) => {
+      console.error("Not yet implemented — coming soon.");
+      process.exit(1);
+    },
+  );
 
 program
   .command("edit")

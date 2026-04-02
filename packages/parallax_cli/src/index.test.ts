@@ -16,6 +16,24 @@ async function runCLI(args: string[]): Promise<{ stdout: string; stderr: string;
   return { stdout, stderr, exitCode };
 }
 
+describe("parallax CLI — create subcommand help (US-002)", () => {
+  it("US-002-AC01: create --help prints usage for 'parallax create <media> [options]'", async () => {
+    const { stdout, exitCode } = await runCLI(["create", "--help"]);
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("create");
+    expect(stdout).toContain("<media>");
+    expect(stdout).toContain("[options]");
+  });
+
+  it("US-002-AC02: create --help lists media types image, video, audio", async () => {
+    const { stdout, exitCode } = await runCLI(["create", "--help"]);
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("image");
+    expect(stdout).toContain("video");
+    expect(stdout).toContain("audio");
+  });
+});
+
 describe("parallax CLI — top-level help (US-001)", () => {
   it("US-001-AC01: --help prints tool name, version, description, and subcommands", async () => {
     const { stdout, exitCode } = await runCLI(["--help"]);
