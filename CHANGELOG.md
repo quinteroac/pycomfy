@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [000035] - 2026-04-02
+
+### Added
+- Expose `vae_decode_audio()` in `comfy_diffusion/audio.py` — the final
+- Provide three pipeline modules (`checkpoint.py`, `split.py`, `split_4b.py`)
+- Allow developers to generate music from a text prompt with a single function
+- All tests pass on CPU (mocked weights).
+
 ## [Unreleased]
 
 ### Added
