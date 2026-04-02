@@ -36,3 +36,20 @@
 - `parallax create --help` now outputs `Usage: parallax create [options] <media>` with the choices listed inline. The `[options]` part is generated automatically by Commander.
 - When implementing the `action()` for this command, destructure `_media` as `"image" | "video" | "audio"` for type safety.
 - The existing test pattern (spawning the CLI via `Bun.spawn`) works for subcommand help as well — pass `["create", "--help"]` as args.
+
+## US-003 — `edit` subcommand help
+
+**Summary:** Refactored the `edit` command in `packages/parallax_cli/src/index.ts` from a fixed `<image> <prompt>` argument pair to a `<media>` choice argument with options `["image", "video"]`. Added `--input`, `--prompt`, and `--output` flags. Added two US-003 tests in `src/index.test.ts`.
+
+**Key Decisions:**
+- Used the same `Argument` + `.choices([...])` pattern established by the `create` command (US-002). Commander auto-renders the choices inline in help output.
+- Media types for `edit` are `image` and `video` only (no `audio`) — per the acceptance criteria.
+- Removed the old positional `<image>` and `<prompt>` arguments; input path and prompt are now `--input` and `--prompt` options for consistency with the `create` command style.
+
+**Pitfalls Encountered:**
+- None. The pattern from US-002 transferred directly.
+
+**Useful Context for Future Agents:**
+- `parallax edit --help` now outputs `Usage: parallax edit [options] <media>` with choices `"image"`, `"video"` shown inline by Commander.
+- When implementing the `action()` for this command, destructure `_media` as `"image" | "video"` for type safety.
+- The `Argument` import was already present from the `create` command — no new imports needed.

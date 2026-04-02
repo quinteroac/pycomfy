@@ -30,14 +30,22 @@ program
 
 program
   .command("edit")
-  .description("Edit an existing image using a text prompt")
-  .argument("<image>", "Path to the input image")
-  .argument("<prompt>", "Text prompt describing the desired edits")
-  .option("-o, --output <path>", "Output file path", "output.png")
-  .action((_image: string, _prompt: string, _options: { output: string }) => {
-    console.error("Not yet implemented — coming soon.");
-    process.exit(1);
-  });
+  .description("Edit existing media using a text prompt")
+  .addArgument(
+    new Argument("<media>", "Media type to edit").choices(["image", "video"]),
+  )
+  .option("-i, --input <path>", "Path to the input file")
+  .option("-p, --prompt <text>", "Text prompt describing the desired edits")
+  .option("-o, --output <path>", "Output file path")
+  .action(
+    (
+      _media: string,
+      _options: { input?: string; prompt?: string; output?: string },
+    ) => {
+      console.error("Not yet implemented — coming soon.");
+      process.exit(1);
+    },
+  );
 
 if (process.argv.length <= 2) {
   program.help();

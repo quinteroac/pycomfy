@@ -34,6 +34,23 @@ describe("parallax CLI — create subcommand help (US-002)", () => {
   });
 });
 
+describe("parallax CLI — edit subcommand help (US-003)", () => {
+  it("US-003-AC01: edit --help prints usage for 'parallax edit <media> [options]'", async () => {
+    const { stdout, exitCode } = await runCLI(["edit", "--help"]);
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("edit");
+    expect(stdout).toContain("<media>");
+    expect(stdout).toContain("[options]");
+  });
+
+  it("US-003-AC02: edit --help lists media types image and video", async () => {
+    const { stdout, exitCode } = await runCLI(["edit", "--help"]);
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("image");
+    expect(stdout).toContain("video");
+  });
+});
+
 describe("parallax CLI — top-level help (US-001)", () => {
   it("US-001-AC01: --help prints tool name, version, description, and subcommands", async () => {
     const { stdout, exitCode } = await runCLI(["--help"]);
