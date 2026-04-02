@@ -8,6 +8,10 @@ Covers:
           when --download-only is given.
   - AC04: no heavy imports at module top level; script parses without errors.
 
+US-003 acceptance criteria:
+  - US-003-AC01: --no-lora sets use_lora=False and steps=40 in run().
+  - US-003-AC02: explicit --steps takes precedence over the LoRA-derived default.
+
 US-002 acceptance criteria:
   - US-002-AC01: inference run with --image and --prompt completes without error.
   - US-002-AC02: default output prefix is ``qwen_edit_2511_output``.
@@ -525,4 +529,129 @@ def test_no_lora_flag_disables_lora(tmp_path: Path) -> None:
     call_kwargs = mock_run.call_args.kwargs
     assert call_kwargs.get("use_lora") is False, (
         f"Expected use_lora=False with --no-lora, got use_lora={call_kwargs.get('use_lora')}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# US-003-AC01 — --no-lora sets use_lora=False and steps=40 in run()
+# ---------------------------------------------------------------------------
+
+
+def test_no_lora_sets_steps_40(tmp_path: Path) -> None:
+    """US-003-AC01: run() called with use_lora=False and steps=40 when --no-lora is passed."""
+    from PIL import Image
+
+    input_image = tmp_path / "input.png"
+    Image.new("RGB", (64, 64)).save(str(input_image))
+
+    mock_run = MagicMock(return_value=[MagicMock()])
+
+    with (
+        patch("sys.argv", [
+            str(_SCRIPT),
+            "--models-dir", str(tmp_path),
+            "--image", str(input_image),
+            "--prompt", "test",
+            "--no-lora",
+            "--output", str(tmp_path / "out.png"),
+        ]),
+        patch("comfy_diffusion.downloader.download_models", return_value=None),
+        patch("comfy_diffusion.pipelines.image.qwen.edit_2511.manifest", return_value=[]),
+        patch(
+            "comfy_diffusion.runtime.check_runtime",
+            return_value={"python_version": "3.12"},
+        ),
+        patch("comfy_diffusion.pipelines.image.qwen.edit_2511.run", mock_run),
+    ):
+        mod = _load_script_module()
+        mod.main()  # type: ignore[attr-defined]
+
+    mock_run.assert_called_once()
+    call_kwargs = mock_run.call_args.kwargs
+    assert call_kwargs.get("use_lora") is False, (
+        f"Expected use_lora=False with --no-lora, got {call_kwargs.get('use_lora')}"
+    )
+    assert call_kwargs.get("steps") == 40, (
+        f"Expected steps=40 with --no-lora (no explicit --steps), got {call_kwargs.get('steps')}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# US-003-AC02 — explicit --steps overrides the LoRA-derived default
+# ---------------------------------------------------------------------------
+
+
+def test_explicit_steps_overrides_no_lora_default(tmp_path: Path) -> None:
+    """US-003-AC02: explicit --steps takes precedence over --no-lora derived default (40)."""
+    from PIL import Image
+
+    input_image = tmp_path / "input.png"
+    Image.new("RGB", (64, 64)).save(str(input_image))
+
+    mock_run = MagicMock(return_value=[MagicMock()])
+
+    with (
+        patch("sys.argv", [
+            str(_SCRIPT),
+            "--models-dir", str(tmp_path),
+            "--image", str(input_image),
+            "--prompt", "test",
+            "--no-lora",
+            "--steps", "20",
+            "--output", str(tmp_path / "out.png"),
+        ]),
+        patch("comfy_diffusion.downloader.download_models", return_value=None),
+        patch("comfy_diffusion.pipelines.image.qwen.edit_2511.manifest", return_value=[]),
+        patch(
+            "comfy_diffusion.runtime.check_runtime",
+            return_value={"python_version": "3.12"},
+        ),
+        patch("comfy_diffusion.pipelines.image.qwen.edit_2511.run", mock_run),
+    ):
+        mod = _load_script_module()
+        mod.main()  # type: ignore[attr-defined]
+
+    mock_run.assert_called_once()
+    call_kwargs = mock_run.call_args.kwargs
+    assert call_kwargs.get("steps") == 20, (
+        f"Expected steps=20 (explicit override), got {call_kwargs.get('steps')}"
+    )
+
+
+def test_explicit_steps_overrides_lora_default(tmp_path: Path) -> None:
+    """US-003-AC02: explicit --steps takes precedence over lora-derived default (4)."""
+    from PIL import Image
+
+    input_image = tmp_path / "input.png"
+    Image.new("RGB", (64, 64)).save(str(input_image))
+
+    mock_run = MagicMock(return_value=[MagicMock()])
+
+    with (
+        patch("sys.argv", [
+            str(_SCRIPT),
+            "--models-dir", str(tmp_path),
+            "--image", str(input_image),
+            "--prompt", "test",
+            "--steps", "10",
+            "--output", str(tmp_path / "out.png"),
+        ]),
+        patch("comfy_diffusion.downloader.download_models", return_value=None),
+        patch("comfy_diffusion.pipelines.image.qwen.edit_2511.manifest", return_value=[]),
+        patch(
+            "comfy_diffusion.runtime.check_runtime",
+            return_value={"python_version": "3.12"},
+        ),
+        patch("comfy_diffusion.pipelines.image.qwen.edit_2511.run", mock_run),
+    ):
+        mod = _load_script_module()
+        mod.main()  # type: ignore[attr-defined]
+
+    mock_run.assert_called_once()
+    call_kwargs = mock_run.call_args.kwargs
+    assert call_kwargs.get("steps") == 10, (
+        f"Expected steps=10 (explicit override with lora), got {call_kwargs.get('steps')}"
+    )
+    assert call_kwargs.get("use_lora") is True, (
+        f"Expected use_lora=True (no --no-lora), got {call_kwargs.get('use_lora')}"
     )

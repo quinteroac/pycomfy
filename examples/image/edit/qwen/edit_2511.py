@@ -70,7 +70,12 @@ def main() -> int:
         default=None,
         help="Optional third reference image path.",
     )
-    parser.add_argument("--steps", type=int, default=4, help="Number of denoising steps.")
+    parser.add_argument(
+        "--steps",
+        type=int,
+        default=None,
+        help="Number of denoising steps (default=4 with LoRA, 40 without).",
+    )
     parser.add_argument("--cfg", type=float, default=3.0, help="CFG guidance scale.")
     parser.add_argument("--seed", type=int, default=0, help="Random seed.")
     parser.add_argument(
@@ -146,8 +151,9 @@ def main() -> int:
         image3 = Image.open(str(image3_path)).convert("RGB")
 
     use_lora = not args.no_lora
+    steps = args.steps if args.steps is not None else (4 if use_lora else 40)
     print(
-        f"Editing image ({args.steps} steps, cfg={args.cfg}, "
+        f"Editing image ({steps} steps, cfg={args.cfg}, "
         f"lora={'on' if use_lora else 'off'}, seed={args.seed}) …"
     )
 
@@ -157,7 +163,7 @@ def main() -> int:
         image2=image2,
         image3=image3,
         models_dir=models_dir,
-        steps=args.steps,
+        steps=steps,
         cfg=args.cfg,
         use_lora=use_lora,
         seed=args.seed,
