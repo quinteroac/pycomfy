@@ -106,3 +106,13 @@
 **Pitfalls Encountered:** None — straightforward refactor of a stub function.
 
 **Useful Context for Future Agents:** When real pipeline execution is implemented, replace `notImplemented(...)` calls in each action handler with the actual invocation. The function signature and the model-validation guard above it remain unchanged.
+
+## US-008 — Installable binary
+
+**Summary:** Verified that `packages/parallax_cli` already satisfies all acceptance criteria for `bun link` installability. The `bin` field, shebang line, and TypeScript config were all in place from prior iterations.
+
+**Key Decisions:** No code changes were required. The `package.json` `bin` field (`"parallax": "./src/index.ts"`) and the `#!/usr/bin/env bun` shebang in `src/index.ts` are the only requirements for `bun link` to expose the `parallax` binary globally.
+
+**Pitfalls Encountered:** None — all prerequisites were already in place.
+
+**Useful Context for Future Agents:** `bun link` in a package directory registers the package globally using the `bin` entries in `package.json`. Bun handles `.ts` entry points natively — no build step or compiled output is needed. After `bun link`, the binary is available system-wide immediately.
