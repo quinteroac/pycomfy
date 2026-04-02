@@ -53,3 +53,23 @@
 - `parallax edit --help` now outputs `Usage: parallax edit [options] <media>` with choices `"image"`, `"video"` shown inline by Commander.
 - When implementing the `action()` for this command, destructure `_media` as `"image" | "video"` for type safety.
 - The `Argument` import was already present from the `create` command — no new imports needed.
+
+## US-004 — Media-level help (create image, create video, create audio, edit image, edit video)
+
+**Summary:** Refactored `create` and `edit` from single argument-based commands to nested sub-command trees (`create → image|video|audio`, `edit → image|video`). Each sub-command declares its media-specific flags and a help footer listing available models via `addHelpText("after", ...)`.
+
+**Key Decisions:**
+- Converted from `Argument("<media>").choices([...])` to proper sub-commands, which is the only way to have per-media-type flags with different sets of options.
+- Used `.usage("<media> [options]")` on both the `create` and `edit` parent commands to preserve the `<media>` string in their help output, keeping existing US-002 and US-003 tests passing without any changes.
+- Defined a single `MODELS` record as the source of truth for both the help footer text and future model validation (FR-4).
+- Used `.requiredOption()` for `--model`, `--prompt`, and `--input` (on edit commands) so they appear with `(required)` in the generated help and commander enforces them at parse time.
+- Extracted a shared `NOT_IMPLEMENTED` arrow function to avoid repeating the `console.error + process.exit(1)` stub in every action handler.
+
+**Pitfalls Encountered:**
+- `Argument` import was no longer needed after the refactor; removing it was necessary to keep the typecheck clean.
+- Commander generates usage as `parallax create [options] [command]` by default for parent commands with sub-commands. The `.usage()` override is required; without it the US-002 and US-003 tests fail on `toContain("<media>")`.
+
+**Useful Context for Future Agents:**
+- The `MODELS` record (key = `"action media"`, value = `string[]`) is the canonical registry for known models per command. When implementing US-005 (model validation), import or duplicate this structure in the action handlers.
+- `parallax create image --help` correctly shows all flags plus the `Available models:` footer — verified by running `bun test`.
+- When US-006 (required-flag validation with custom error messages) is implemented, the `.requiredOption()` calls may need to be downgraded to `.option()` + manual checks in the action handler to produce the exact custom error format.
