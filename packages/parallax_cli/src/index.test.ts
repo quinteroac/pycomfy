@@ -214,6 +214,71 @@ describe("parallax CLI — known-model validation (US-005)", () => {
   });
 });
 
+describe("parallax CLI — required-flag validation (US-006)", () => {
+  // AC01: omitting --model on create/edit commands
+  it("US-006-AC01: create image without --model prints 'Error: --model is required' and exits 1", async () => {
+    const { stderr, exitCode } = await runCLI(["create", "image", "--prompt", "test"]);
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain("Error: --model is required");
+  });
+
+  it("US-006-AC01: create video without --model prints 'Error: --model is required' and exits 1", async () => {
+    const { stderr, exitCode } = await runCLI(["create", "video", "--prompt", "test"]);
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain("Error: --model is required");
+  });
+
+  it("US-006-AC01: create audio without --model prints 'Error: --model is required' and exits 1", async () => {
+    const { stderr, exitCode } = await runCLI(["create", "audio", "--prompt", "test"]);
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain("Error: --model is required");
+  });
+
+  it("US-006-AC01: edit image without --model prints 'Error: --model is required' and exits 1", async () => {
+    const { stderr, exitCode } = await runCLI(["edit", "image", "--prompt", "test", "--input", "img.png"]);
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain("Error: --model is required");
+  });
+
+  it("US-006-AC01: edit video without --model prints 'Error: --model is required' and exits 1", async () => {
+    const { stderr, exitCode } = await runCLI(["edit", "video", "--prompt", "test", "--input", "vid.mp4"]);
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain("Error: --model is required");
+  });
+
+  // AC01: omitting --prompt on create/edit commands
+  it("US-006-AC01: create image without --prompt prints 'Error: --prompt is required' and exits 1", async () => {
+    const { stderr, exitCode } = await runCLI(["create", "image", "--model", "sdxl"]);
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain("Error: --prompt is required");
+  });
+
+  it("US-006-AC01: edit image without --prompt prints 'Error: --prompt is required' and exits 1", async () => {
+    const { stderr, exitCode } = await runCLI(["edit", "image", "--model", "qwen", "--input", "img.png"]);
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain("Error: --prompt is required");
+  });
+
+  // AC02: omitting --input on edit commands
+  it("US-006-AC02: edit image without --input prints 'Error: --input is required' and exits 1", async () => {
+    const { stderr, exitCode } = await runCLI(["edit", "image", "--model", "qwen", "--prompt", "test"]);
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain("Error: --input is required");
+  });
+
+  it("US-006-AC02: edit video without --input prints 'Error: --input is required' and exits 1", async () => {
+    const { stderr, exitCode } = await runCLI(["edit", "video", "--model", "wan21", "--prompt", "test"]);
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain("Error: --input is required");
+  });
+
+  // AC03: exit code 1
+  it("US-006-AC03: process exits with code 1 when required flag is missing", async () => {
+    const { exitCode } = await runCLI(["create", "image"]);
+    expect(exitCode).toBe(1);
+  });
+});
+
 describe("parallax CLI — top-level help (US-001)", () => {
   it("US-001-AC01: --help prints tool name, version, description, and subcommands", async () => {
     const { stdout, exitCode } = await runCLI(["--help"]);

@@ -83,3 +83,13 @@
 **Pitfalls Encountered:** An earlier edit accidentally dropped the `it("US-001-AC01:...` line from the test file. Verified by viewing the file after each edit. Always view the file after non-trivial edits to catch accidental deletions.
 
 **Useful Context for Future Agents:** The `MODELS` record key format is `"action media"` (e.g. `"create image"`). The error message format is `Error: unknown model "<value>" for <action> <media>. Known models: <comma-separated list>`. Tests pass all required options (`--prompt`, `--input` where needed) so Commander's required-flag check doesn't interfere with model validation testing.
+
+## US-006 — Required-flag validation
+
+**Summary:** Added user-friendly error messages for missing required CLI flags (`--model`, `--prompt`, `--input`). Commander's built-in `requiredOption` already enforces the required constraint and exits with code 1; the only change needed was to reformat the error message from Commander's default `error: required option '--model <name>' not specified` to the expected `Error: --model is required`.
+
+**Key Decisions:** Used Commander's `configureOutput({ writeErr })` on the root `program` instance with a regex transform. This single hook cascades to all subcommands so no per-subcommand changes were needed. The regex `/error: required option '(--[a-z-]+)[^']*' not specified/` captures the flag name and rewrites the message.
+
+**Pitfalls Encountered:** None — Commander's `requiredOption` already handles exit code 1 correctly. The only work was message reformatting.
+
+**Useful Context for Future Agents:** The `configureOutput` hook is set once on `program` and applies to all nested subcommands. If new subcommands are added with `requiredOption`, they automatically inherit the custom error format at no extra cost. The regex expects lowercase kebab-case flag names (`--[a-z-]+`), which matches all current flags.

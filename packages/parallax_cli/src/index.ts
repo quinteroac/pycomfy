@@ -30,11 +30,22 @@ const NOT_IMPLEMENTED = (): never => {
 
 const program = new Command();
 
+// Reformat commander's missing-required-option errors to "Error: --flag is required"
+function formatRequiredFlagError(msg: string): string {
+  return msg.replace(
+    /error: required option '(--[a-z-]+)[^']*' not specified/,
+    "Error: $1 is required"
+  );
+}
+
 program
   .name("parallax")
   .description("Parallax CLI — comfy-diffusion media generation")
   .version("0.1.0")
-  .addHelpText("before", "parallax v0.1.0\n");
+  .addHelpText("before", "parallax v0.1.0\n")
+  .configureOutput({
+    writeErr: (str) => process.stderr.write(formatRequiredFlagError(str)),
+  });
 
 // ── create ────────────────────────────────────────────────────────────────────
 
