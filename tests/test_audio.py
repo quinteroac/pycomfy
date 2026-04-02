@@ -24,6 +24,7 @@ from comfy_diffusion.audio import (
     ltxv_empty_latent_audio,
     ltxv_separate_av_latent,
     trim_audio_duration,
+    vae_decode_audio,
 )
 
 
@@ -62,6 +63,7 @@ def test_audio_module_exports_ltxv_audio_vae_helpers() -> None:
         "trim_audio_duration",
         "ltxv_audio_video_mask",
         "audio_encoder_encode",
+        "vae_decode_audio",
     ]
 
 
@@ -1041,6 +1043,65 @@ def test_audio_encoder_encode_has_no_top_level_comfy_or_torch_imports() -> None:
         "import comfy_diffusion\n"
         "from comfy_diffusion.audio import audio_encoder_encode\n"
         "assert 'torch' not in sys.modules, 'torch was imported at module level'\n"
+        "assert 'comfy' not in sys.modules, 'comfy was imported at module level'\n"
+        "print('ok')\n"
+    )
+    assert result.returncode == 0
+    assert result.stdout.strip() == "ok"
+
+
+# ---------------------------------------------------------------------------
+# vae_decode_audio
+# ---------------------------------------------------------------------------
+
+
+def test_vae_decode_audio_is_in_all() -> None:
+    assert "vae_decode_audio" in audio_module.__all__
+
+
+def test_vae_decode_audio_calls_vae_decode_and_movedim() -> None:
+    """AC-002: implementation calls vae.decode(latent["samples"]).movedim(-1, 1)."""
+    movedim_calls: list[tuple[Any, Any]] = []
+
+    class FakeWaveform:
+        def movedim(self, src: Any, dst: Any) -> "FakeWaveform":
+            movedim_calls.append((src, dst))
+            return self
+
+    fake_waveform = FakeWaveform()
+    decode_calls: list[Any] = []
+
+    class FakeVae:
+        def decode(self, samples: Any) -> FakeWaveform:
+            decode_calls.append(samples)
+            return fake_waveform
+
+    expected_samples = object()
+    latent = {"samples": expected_samples}
+
+    result = vae_decode_audio(FakeVae(), latent)
+
+    assert decode_calls == [expected_samples]
+    assert movedim_calls == [(-1, 1)]
+    assert result is fake_waveform
+
+
+def test_vae_decode_audio_is_importable() -> None:
+    result = _run_python(
+        "from comfy_diffusion.audio import vae_decode_audio; "
+        "assert vae_decode_audio.__name__ == 'vae_decode_audio'; "
+        "print('ok')"
+    )
+    assert result.returncode == 0
+    assert result.stdout.strip() == "ok"
+
+
+def test_vae_decode_audio_has_no_top_level_comfy_imports() -> None:
+    """AC-004: vae_decode_audio must not trigger top-level comfy.* imports."""
+    result = _run_python(
+        "import sys\n"
+        "import comfy_diffusion\n"
+        "from comfy_diffusion.audio import vae_decode_audio\n"
         "assert 'comfy' not in sys.modules, 'comfy was imported at module level'\n"
         "print('ok')\n"
     )
