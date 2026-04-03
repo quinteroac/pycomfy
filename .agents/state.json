@@ -1,5 +1,5 @@
 {
-  "current_iteration": "000039",
+  "current_iteration": "000040",
   "current_phase": "prototype",
   "phases": {
     "define": {
@@ -11,27 +11,12 @@
         {
           "index": 1,
           "status": "approved",
-          "file": "it_000039_product-requirement-document_001.md"
-        },
-        {
-          "index": 2,
-          "status": "approved",
-          "file": "it_000039_product-requirement-document_002.md"
-        },
-        {
-          "index": 3,
-          "status": "approved",
-          "file": "it_000039_product-requirement-document_003.md"
-        },
-        {
-          "index": 4,
-          "status": "approved",
-          "file": "it_000039_product-requirement-document_004.md"
+          "file": "it_000040_product-requirement-document_001.md"
         }
       ],
       "prd_generation": {
         "status": "completed",
-        "file": "it_000039_PRD.json"
+        "file": "it_000040_PRD_001.json"
       }
     },
     "prototype": {
@@ -39,66 +24,21 @@
         {
           "index": 1,
           "status": "completed",
-          "file": "it_000039_prototype-creation_001.json"
-        },
-        {
-          "index": 2,
-          "status": "completed",
-          "file": "it_000039_prototype-creation_002.json"
-        },
-        {
-          "index": 3,
-          "status": "completed",
-          "file": "it_000039_prototype-creation_003.json"
-        },
-        {
-          "index": 4,
-          "status": "completed",
-          "file": "it_000039_prototype-creation_004.json"
+          "file": "it_000040_prototype-creation_001.json"
         }
       ],
       "prototype_audit": [
         {
           "index": 1,
           "status": "completed",
-          "file": "it_000039_audit-report_001.json"
-        },
-        {
-          "index": 2,
-          "status": "completed",
-          "file": "it_000039_audit-report_002.json"
-        },
-        {
-          "index": 3,
-          "status": "completed",
-          "file": "it_000039_audit-report_003.json"
-        },
-        {
-          "index": 4,
-          "status": "completed",
-          "file": "it_000039_audit-report_004.json"
+          "file": "it_000040_audit-report_001.json"
         }
       ],
       "prototype_refactor": [
         {
           "index": 1,
           "status": "completed",
-          "file": "it_000039_refactor-plan_001.md"
-        },
-        {
-          "index": 2,
-          "status": "completed",
-          "file": "it_000039_refactor-plan_002.md"
-        },
-        {
-          "index": 3,
-          "status": "completed",
-          "file": "it_000039_refactor-plan_003.md"
-        },
-        {
-          "index": 4,
-          "status": "completed",
-          "file": "it_000039_refactor-plan_004.md"
+          "file": "it_000040_refactor-plan_001.md"
         }
       ],
       "prototype_approval": {
@@ -146,6 +86,6 @@
       }
     }
   },
-  "last_updated": "2026-04-03T18:25:11.165Z",
+  "last_updated": "2026-04-03T20:33:25.066Z",
   "updated_by": "nvst:approve-prototype"
 }

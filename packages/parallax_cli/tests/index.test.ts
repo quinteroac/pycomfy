@@ -3,7 +3,7 @@ import { join } from "path";
 import { mkdtemp, mkdir, writeFile, rm } from "fs/promises";
 import { tmpdir } from "os";
 
-const CLI = join(import.meta.dir, "index.ts");
+const CLI = join(import.meta.dir, "../src/index.ts");
 
 async function runCLI(args: string[]): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   const proc = Bun.spawn(["bun", "run", CLI, ...args], {
@@ -2846,5 +2846,149 @@ describe("parallax CLI — models-dir and repo-root resolution for create audio 
   it("US-004-AC04: CLI help exits 0 (smoke-tests typecheck for create audio)", async () => {
     const { exitCode } = await runCLI(["create", "audio", "--help"]);
     expect(exitCode).toBe(0);
+  });
+});
+
+describe("parallax CLI — refactored command handlers (US-006)", () => {
+  // AC01: registerCreate and registerEdit are exported
+  it("US-006-AC01: create --help exits 0 (registerCreate is wired)", async () => {
+    const { exitCode } = await runCLI(["create", "--help"]);
+    expect(exitCode).toBe(0);
+  });
+
+  it("US-006-AC01: edit --help exits 0 (registerEdit is wired)", async () => {
+    const { exitCode } = await runCLI(["edit", "--help"]);
+    expect(exitCode).toBe(0);
+  });
+
+  it("US-006-AC01: edit image --help shows image-specific flags", async () => {
+    const { stdout, exitCode } = await runCLI(["edit", "image", "--help"]);
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("--model");
+    expect(stdout).toContain("--prompt");
+    expect(stdout).toContain("--input");
+    expect(stdout).toContain("--steps");
+    expect(stdout).toContain("--cfg");
+    expect(stdout).toContain("--seed");
+    expect(stdout).toContain("--output");
+    expect(stdout).toContain("--models-dir");
+  });
+
+  it("US-006-AC01: edit video --help shows video-specific flags", async () => {
+    const { stdout, exitCode } = await runCLI(["edit", "video", "--help"]);
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("--model");
+    expect(stdout).toContain("--prompt");
+    expect(stdout).toContain("--input");
+    expect(stdout).toContain("--steps");
+    expect(stdout).toContain("--cfg");
+    expect(stdout).toContain("--seed");
+    expect(stdout).toContain("--output");
+    expect(stdout).toContain("--models-dir");
+  });
+
+  // AC02: --models-dir resolution is handled once per handler
+  it("US-006-AC02: create image missing --models-dir errors with canonical message", async () => {
+    const { stderr, exitCode } = await runCLIWithEnv(
+      ["create", "image", "--model", "sdxl", "--prompt", "test"],
+      { PYCOMFY_MODELS_DIR: undefined, PARALLAX_REPO_ROOT: "/tmp" },
+    );
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain("Error: --models-dir or PYCOMFY_MODELS_DIR is required");
+  });
+
+  it("US-006-AC02: create video missing --models-dir errors with canonical message", async () => {
+    const { stderr, exitCode } = await runCLIWithEnv(
+      ["create", "video", "--model", "ltx2", "--prompt", "test"],
+      { PYCOMFY_MODELS_DIR: undefined, PARALLAX_REPO_ROOT: "/tmp" },
+    );
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain("Error: --models-dir or PYCOMFY_MODELS_DIR is required");
+  });
+
+  it("US-006-AC02: create audio missing --models-dir errors with canonical message", async () => {
+    const { stderr, exitCode } = await runCLIWithEnv(
+      ["create", "audio", "--model", "ace_step", "--prompt", "test"],
+      { PYCOMFY_MODELS_DIR: undefined, PARALLAX_REPO_ROOT: "/tmp" },
+    );
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain("Error: --models-dir or PYCOMFY_MODELS_DIR is required");
+  });
+
+  // AC03: all existing commands preserve flags and behavior
+  it("US-006-AC03: create image --help lists all original flags", async () => {
+    const { stdout, exitCode } = await runCLI(["create", "image", "--help"]);
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("--negative-prompt");
+    expect(stdout).toContain("--width");
+    expect(stdout).toContain("--height");
+    expect(stdout).toContain("--steps");
+    expect(stdout).toContain("--cfg");
+    expect(stdout).toContain("--models-dir");
+  });
+
+  it("US-006-AC03: create video --help lists all original flags", async () => {
+    const { stdout, exitCode } = await runCLI(["create", "video", "--help"]);
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("--input");
+    expect(stdout).toContain("--width");
+    expect(stdout).toContain("--height");
+    expect(stdout).toContain("--length");
+    expect(stdout).toContain("--steps");
+    expect(stdout).toContain("--cfg");
+    expect(stdout).toContain("--models-dir");
+  });
+
+  it("US-006-AC03: create audio --help lists all original flags", async () => {
+    const { stdout, exitCode } = await runCLI(["create", "audio", "--help"]);
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("--length");
+    expect(stdout).toContain("--steps");
+    expect(stdout).toContain("--cfg");
+    expect(stdout).toContain("--bpm");
+    expect(stdout).toContain("--lyrics");
+    expect(stdout).toContain("--models-dir");
+  });
+
+  it("US-006-AC03: edit image --help lists default steps=20 and cfg=7", async () => {
+    const { stdout, exitCode } = await runCLI(["edit", "image", "--help"]);
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("20");
+    expect(stdout).toContain("7");
+  });
+
+  it("US-006-AC03: edit video --help lists default steps=30 and cfg=6", async () => {
+    const { stdout, exitCode } = await runCLI(["edit", "video", "--help"]);
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("30");
+    expect(stdout).toContain("6");
+  });
+});
+
+describe("parallax CLI — clean entry point (US-008)", () => {
+  it("US-008-AC01/AC02: index.ts is under 20 lines and has no inline logic", async () => {
+    const { readFileSync } = await import("fs");
+    const { join } = await import("path");
+    const src = readFileSync(join(import.meta.dir, "../src/index.ts"), "utf-8");
+    const lines = src.split("\n").filter((l) => l.trim().length > 0);
+    // Under 20 non-blank lines
+    expect(lines.length).toBeLessThan(20);
+    // Only the three register calls are present
+    expect(src).toContain("registerInstall");
+    expect(src).toContain("registerCreate");
+    expect(src).toContain("registerEdit");
+    // No model data or spawnPipeline
+    expect(src).not.toContain("spawnPipeline");
+    expect(src).not.toContain("MODELS");
+    // No inline function definitions (no 'function ')
+    expect(src).not.toMatch(/^function /m);
+  });
+
+  it("US-008-AC03: parallax --help lists install, create, edit commands", async () => {
+    const { stdout, exitCode } = await runCLI(["--help"]);
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("install");
+    expect(stdout).toContain("create");
+    expect(stdout).toContain("edit");
   });
 });

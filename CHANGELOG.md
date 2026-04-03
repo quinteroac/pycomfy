@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [000040] - 2026-04-03
+
+### Added
+- Enable distribution of `parallax` as a self-contained compiled binary (Linux x64, macOS arm64)
+- Provide a guided `parallax install` command with interactive clack UI for first-time setup
+- Persist user configuration in `~/.config/parallax/config.json` so env vars are not required on every invocation
+- Decouple model registry, argument builders, config I/O, and subprocess runner from command handlers
+- All existing black-box CLI tests continue to pass after the refactor
+
 ## [000039] - 2026-04-03
 
 ### Added

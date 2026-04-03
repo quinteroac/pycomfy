@@ -1,0 +1,111 @@
+{
+  "iteration": "000040",
+  "prd_index": "001",
+  "generated_at": "2026-04-03T19:15:40.000Z",
+  "executive_summary": "The refactor of `packages/parallax_cli` is largely complete and well-structured. All 277 tests pass, typecheck succeeds with zero errors, and the layered architecture (config, runner, registry, per-media builders, command handlers) is cleanly implemented. US-001 through US-006, US-008, and US-009 comply fully. The main gaps are in US-007 (interactive installer) and FR-8 (`build:win` script and @clack/prompts version specifier). The interactive installer omits the uv PATH detection, uv venv/sync execution, reinstall confirmation prompt, and uses a different default models-dir and outro message than specified.",
+  "verification_by_fr": [
+    {
+      "frId": "FR-1",
+      "assessment": "comply",
+      "notes": "readConfig() in config.ts merges ~/.config/parallax/config.json with PARALLAX_REPO_ROOT / PYCOMFY_MODELS_DIR env var overrides; env vars take precedence."
+    },
+    {
+      "frId": "FR-2",
+      "assessment": "comply",
+      "notes": "writeConfig() creates the ~/.config/parallax/ directory with mkdirSync({recursive:true}) if absent and writes JSON. Uses writeFileSync (not fully atomic via rename, but acceptable)."
+    },
+    {
+      "frId": "FR-3",
+      "assessment": "comply",
+      "notes": "spawnPipeline(scriptRelPath, args, config) resolves join(config.repoRoot, scriptRelPath) and spawns [config.uvPath ?? 'uv', 'run', 'python', ...]. No direct process.env access."
+    },
+    {
+      "frId": "FR-4",
+      "assessment": "comply",
+      "notes": "src/models/registry.ts is the single source of truth. All model validation, script resolution, and help-text generation use this module. index.ts and command handlers contain no model data."
+    },
+    {
+      "frId": "FR-5",
+      "assessment": "comply",
+      "notes": "install.ts detects TTY via process.stdout.isTTY and falls back to non-interactive when false."
+    },
+    {
+      "frId": "FR-6",
+      "assessment": "comply",
+      "notes": "CI flags --non-interactive, --install-dir, --models-dir, --variant are registered and tested (11 install tests pass)."
+    },
+    {
+      "frId": "FR-7",
+      "assessment": "comply",
+      "notes": "readConfig() ensures PARALLAX_REPO_ROOT and PYCOMFY_MODELS_DIR always override stored config values. All existing CLI tests pass with env vars set."
+    },
+    {
+      "frId": "FR-8",
+      "assessment": "partially_comply",
+      "notes": "build:linux, build:mac, and build scripts are present. build:win script is MISSING. @clack/prompts is in dependencies but uses 'latest' rather than the specified '^0.9.x' version pin."
+    },
+    {
+      "frId": "FR-9",
+      "assessment": "comply",
+      "notes": "File structure matches the required layered layout: src/config.ts, src/runner.ts, src/models/registry.ts, src/models/image.ts, src/models/video.ts, src/models/audio.ts, src/commands/create.ts, src/commands/edit.ts, src/commands/install.ts, src/index.ts."
+    }
+  ],
+  "verification_by_us": [
+    {
+      "usId": "US-001",
+      "assessment": "comply",
+      "notes": "AC01: build:linux, build:mac, build scripts present. AC02: @clack/prompts in dependencies. AC03: Build scripts are syntactically correct (cannot verify binary output in CI). AC04: bun run typecheck passes with 0 errors."
+    },
+    {
+      "usId": "US-002",
+      "assessment": "comply",
+      "notes": "AC01: readConfig(), writeConfig(), configExists() all exported from src/config.ts. AC02: Config at ~/.config/parallax/config.json with repoRoot, modelsDir, uvPath, installedAt fields (plus variant). AC03: env vars take precedence confirmed in code. AC04: typecheck passes."
+    },
+    {
+      "usId": "US-003",
+      "assessment": "comply",
+      "notes": "AC01: spawnPipeline(scriptRelPath, args, config) signature implemented. AC02: No process.env.PARALLAX_REPO_ROOT reference inside runner.ts. AC03: Backward compat achieved via readConfig() in command handlers before calling spawnPipeline."
+    },
+    {
+      "usId": "US-004",
+      "assessment": "comply",
+      "notes": "AC01: MODELS, IMAGE_SCRIPTS, VIDEO_MODEL_CONFIG, AUDIO_SCRIPTS all exported from registry.ts. AC02: getModels(), getScript(), getModelConfig() exported and tested (13 registry tests pass). AC03: index.ts contains no model data."
+    },
+    {
+      "usId": "US-005",
+      "assessment": "comply",
+      "notes": "AC01: image.ts buildArgs handles z_image omit-negative-prompt/cfg special case. AC02: video.ts buildArgs handles omitSteps, cfgFlag, --image vs --input mapping. AC03: audio.ts buildArgs maps --prompt→--tags and --length→--duration. AC04: Action handlers in create.ts call only buildArgs() and spawnPipeline()."
+    },
+    {
+      "usId": "US-006",
+      "assessment": "comply",
+      "notes": "AC01: registerCreate(program) and registerEdit(program) exported. AC02: resolveModelsDir() handles flag > config > env precedence in each handler (note: function is defined in both create.ts and edit.ts — minor duplication across files, but not duplicated within a handler). AC03: All existing CLI commands preserve flags, defaults, and behavior; 277 tests pass."
+    },
+    {
+      "usId": "US-007",
+      "assessment": "partially_comply",
+      "notes": "AC01: registerInstall(program) exported, install command registered with all required flags — PASS. AC02 (interactive flow) — PARTIAL: prompts for install dir, models dir, variant and calls writeConfig() with installedAt — PASS; but missing: (1) check for existing config before reinstalling, (2) uv PATH detection and download to ~/.local/bin, (3) uv venv + uv sync --extra <variant> execution with spinner. Default models-dir is ~/.parallax/models instead of PRD-specified ~/parallax-models. Outro message differs from specified 'Listo. Ejecuta: parallax create image --help'. AC03: Non-interactive flags work — PASS. AC04: Auto non-interactive fallback when !isTTY — PASS. AC05: --non-interactive runs to completion — PASS (verified by tests)."
+    },
+    {
+      "usId": "US-008",
+      "assessment": "comply",
+      "notes": "AC01: index.ts only imports and calls registerInstall, registerCreate, registerEdit. AC02: No model data, no inline logic, no spawnPipeline call in index.ts (19 lines total). AC03: parallax --help lists all commands correctly."
+    },
+    {
+      "usId": "US-009",
+      "assessment": "comply",
+      "notes": "277 tests pass, 0 fail across 8 test files (bun test). All existing CLI invocations work with PARALLAX_REPO_ROOT set as env var."
+    }
+  ],
+  "minor_observations": [
+    "resolveModelsDir() is defined independently in both create.ts and edit.ts. A shared utils export (e.g. src/utils.ts) would eliminate this duplication and reduce future drift.",
+    "@clack/prompts is pinned to 'latest' instead of the PRD-specified '^0.9.x'. This could cause breaking changes on future installs; a fixed semver range is preferable.",
+    "build:win script is absent from package.json. FR-8 explicitly requires it (even though Windows is not tested in this iteration).",
+    "Default models-dir in install.ts is ~/.parallax/models; PRD US-007 specifies ~/parallax-models as the default. Minor behavioral discrepancy for first-time users.",
+    "Interactive install.ts outro message is 'Configuration saved. Run `parallax create` to get started.' instead of PRD-specified 'Listo. Ejecuta: parallax create image --help'.",
+    "The interactive installer skips uv environment setup entirely (no uv venv, no uv sync). The current implementation is a config-writer only. This is the largest gap in US-007.",
+    "writeConfig() uses writeFileSync (non-atomic write). Under concurrent access or power failure, a partial write could corrupt config.json. An atomic write pattern (write to tmp then rename) would be safer.",
+    "No unit tests for config.ts or install.ts interactive paths (per PRD non-goals, this is intentional for this iteration)."
+  ],
+  "conclusions_and_recommendations": "The refactor achieves its primary goals: layered architecture, clean entry point, centralized model registry, decoupled runner, and full backward compatibility. All tests pass and typecheck is clean. Two items require follow-up: (1) US-007 interactive installer is incomplete — the uv venv/sync execution, uv PATH detection, reinstall confirmation, correct default models-dir, and the specified outro message are all missing. This should be addressed in a follow-up iteration or hotfix. (2) FR-8 is partially met — add 'build:win' to package.json scripts and pin @clack/prompts to '^0.9.x'. Recommended refactor actions: add build:win script, pin @clack/prompts version, complete the uv setup steps in install.ts runInteractive(), fix the default models-dir to ~/parallax-models, update the outro message, and extract resolveModelsDir() to a shared location."
+}

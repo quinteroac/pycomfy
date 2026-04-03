@@ -8,9 +8,14 @@
   "scripts": {
     "dev": "bun run --watch src/index.ts",
     "start": "bun run src/index.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build:linux": "bun build --compile --target=bun-linux-x64 ./src/index.ts --outfile dist/parallax-linux",
+    "build:mac": "bun build --compile --target=bun-darwin-x64 ./src/index.ts --outfile dist/parallax-macos",
+    "build:win": "bun build --compile --target=bun-windows-x64 ./src/index.ts --outfile dist/parallax-windows.exe",
+    "build": "bun run build:linux && bun run build:mac"
   },
   "dependencies": {
+    "@clack/prompts": "^0.9.x",
     "@parallax/sdk": "workspace:*",
     "commander": "12.x"
   },

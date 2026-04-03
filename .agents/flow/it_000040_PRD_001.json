@@ -1,0 +1,236 @@
+{
+  "goals": [
+    "Enable distribution of `parallax` as a self-contained compiled binary (Linux x64, macOS arm64)",
+    "Provide a guided `parallax install` command with interactive clack UI for first-time setup",
+    "Persist user configuration in `~/.config/parallax/config.json` so env vars are not required on every invocation",
+    "Decouple model registry, argument builders, config I/O, and subprocess runner from command handlers",
+    "All existing black-box CLI tests continue to pass after the refactor"
+  ],
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Compiled binary distribution",
+      "description": "As a developer, I want to run `bun run build` and get a self-contained `parallax` binary (Linux + macOS) so that I can distribute and run the CLI without Bun installed on the target machine.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-001-AC01",
+          "text": "`package.json` includes `build:linux`, `build:mac`, and `build` scripts using `bun build --compile`"
+        },
+        {
+          "id": "US-001-AC02",
+          "text": "`@clack/prompts` is added to `dependencies` in `package.json`"
+        },
+        {
+          "id": "US-001-AC03",
+          "text": "`bun run build` completes without errors and produces binaries in `dist/`"
+        },
+        {
+          "id": "US-001-AC04",
+          "text": "`bun run typecheck` passes with zero errors"
+        }
+      ]
+    },
+    {
+      "id": "US-002",
+      "title": "Persistent configuration layer (`config.ts`)",
+      "description": "As a CLI user, I want my `repoRoot` and `modelsDir` saved after install so that I don't need to export env vars on every terminal session.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-002-AC01",
+          "text": "`src/config.ts` exports `readConfig()`, `writeConfig(config)`, and `configExists()` functions"
+        },
+        {
+          "id": "US-002-AC02",
+          "text": "Config is stored as JSON at `~/.config/parallax/config.json` with fields: `repoRoot`, `modelsDir`, `uvPath`, `installedAt`"
+        },
+        {
+          "id": "US-002-AC03",
+          "text": "`readConfig()` merges persisted config with env vars; env vars (`PARALLAX_REPO_ROOT`, `PYCOMFY_MODELS_DIR`) take precedence over stored values (backward compat for CI)"
+        },
+        {
+          "id": "US-002-AC04",
+          "text": "`bun run typecheck` passes"
+        }
+      ]
+    },
+    {
+      "id": "US-003",
+      "title": "Decoupled subprocess runner (`runner.ts`)",
+      "description": "As a maintainer, I want `spawnPipeline` to receive `repoRoot` and `uvPath` as parameters so that it no longer reads `process.env.PARALLAX_REPO_ROOT` directly and can work with values sourced from the config layer.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-003-AC01",
+          "text": "`src/runner.ts` exports `spawnPipeline(scriptRelPath, args, config)` accepting a resolved config object"
+        },
+        {
+          "id": "US-003-AC02",
+          "text": "No direct reference to `process.env.PARALLAX_REPO_ROOT` inside `runner.ts`"
+        },
+        {
+          "id": "US-003-AC03",
+          "text": "All existing CLI commands still work when `PARALLAX_REPO_ROOT` is set as env var (backward compat via `readConfig()`)"
+        }
+      ]
+    },
+    {
+      "id": "US-004",
+      "title": "Centralized model registry (`models/registry.ts`)",
+      "description": "As a maintainer, I want all model lists, script paths, and model config in a single module so that adding a new model requires editing exactly one file.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-004-AC01",
+          "text": "`src/models/registry.ts` exports `MODELS`, `IMAGE_SCRIPTS`, `VIDEO_MODEL_CONFIG`, `AUDIO_SCRIPTS` (moved from `index.ts`)"
+        },
+        {
+          "id": "US-004-AC02",
+          "text": "Exports `getModels(action, media): string[]`, `getScript(action, media, model): string | undefined`, `getModelConfig(media, model): ModelConfig | undefined`"
+        },
+        {
+          "id": "US-004-AC03",
+          "text": "`index.ts` no longer contains model data — all model lookups go through `registry.ts`"
+        }
+      ]
+    },
+    {
+      "id": "US-005",
+      "title": "Per-media argument builders (`models/image.ts`, `models/video.ts`, `models/audio.ts`)",
+      "description": "As a maintainer, I want model-specific argument logic isolated per media type so that action handlers contain no inline special-cases.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-005-AC01",
+          "text": "`src/models/image.ts` exports `buildArgs(opts, modelsDir): string[]`; handles the `z_image` omit-negative-prompt/cfg special case"
+        },
+        {
+          "id": "US-005-AC02",
+          "text": "`src/models/video.ts` exports `buildArgs(opts, modelsDir): string[]`; handles `omitSteps`, `cfgFlag`, and `--image` vs `--input` mapping"
+        },
+        {
+          "id": "US-005-AC03",
+          "text": "`src/models/audio.ts` exports `buildArgs(opts, modelsDir): string[]`; handles `--prompt → --tags` and `--length → --duration` mapping"
+        },
+        {
+          "id": "US-005-AC04",
+          "text": "Action handlers in `commands/create.ts` call only `buildArgs()` and `spawnPipeline()` — no inline model logic"
+        }
+      ]
+    },
+    {
+      "id": "US-006",
+      "title": "Refactored command handlers (`commands/create.ts`, `commands/edit.ts`)",
+      "description": "As a maintainer, I want action handlers reduced to validate → resolve config → buildArgs → spawnPipeline so that each handler is under 20 lines and free of model-specific conditionals.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-006-AC01",
+          "text": "`src/commands/create.ts` and `src/commands/edit.ts` export `registerCreate(program)` and `registerEdit(program)` respectively"
+        },
+        {
+          "id": "US-006-AC02",
+          "text": "`--models-dir` resolution (flag > config > env) is handled once per handler, not duplicated"
+        },
+        {
+          "id": "US-006-AC03",
+          "text": "All existing `parallax create image/video/audio` and `parallax edit image/video` commands preserve their flags, defaults, and behavior"
+        }
+      ]
+    },
+    {
+      "id": "US-007",
+      "title": "Interactive installer (`commands/install.ts`)",
+      "description": "As a first-time user, I want to run `parallax install` and be guided through environment setup so that I don't need to manually configure paths and env vars.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-007-AC01",
+          "text": "`src/commands/install.ts` exports `registerInstall(program)` and registers a `install` command"
+        },
+        {
+          "id": "US-007-AC02",
+          "text": "Interactive TTY flow (using `@clack/prompts`):"
+        },
+        {
+          "id": "US-007-AC03",
+          "text": "Non-interactive mode: `parallax install --non-interactive --install-dir <path> --models-dir <path> --variant cuda|cpu` accepts all settings as flags, skips all prompts"
+        },
+        {
+          "id": "US-007-AC04",
+          "text": "If `!process.stdout.isTTY` (no TTY detected), falls back to non-interactive mode automatically using flag values or defaults"
+        },
+        {
+          "id": "US-007-AC05",
+          "text": "`parallax install --non-interactive` runs to completion without crash (on a machine with `uv` in PATH)"
+        }
+      ]
+    },
+    {
+      "id": "US-008",
+      "title": "Clean entry point (`index.ts`)",
+      "description": "As a maintainer, I want `index.ts` to contain only program setup and command registration so that the entry point is under 20 lines.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-008-AC01",
+          "text": "`src/index.ts` imports and calls `registerInstall`, `registerCreate`, `registerEdit` only"
+        },
+        {
+          "id": "US-008-AC02",
+          "text": "No model data, no inline logic, no `spawnPipeline` call in `index.ts`"
+        },
+        {
+          "id": "US-008-AC03",
+          "text": "`parallax --help` still lists all commands correctly"
+        }
+      ]
+    },
+    {
+      "id": "US-009",
+      "title": "Existing tests continue to pass",
+      "description": "As a maintainer, I want the refactor to be transparent to existing black-box tests so that the CLI contract is not broken.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-009-AC01",
+          "text": "`bun test` (or equivalent runner for `src/index.test.ts`) passes with zero failures"
+        },
+        {
+          "id": "US-009-AC02",
+          "text": "All existing CLI invocations in the test file work unchanged with `PARALLAX_REPO_ROOT` set as env var"
+        }
+      ]
+    }
+  ],
+  "functionalRequirements": [
+    {
+      "id": "FR-1",
+      "description": "** `src/config.ts` — `readConfig()` merges `~/.config/parallax/config.json` (if exists) with `process.env` overrides; returns a `ParallaxConfig` object"
+    },
+    {
+      "id": "FR-2",
+      "description": "** `src/config.ts` — `writeConfig(config: ParallaxConfig)` creates `~/.config/parallax/` if absent and writes JSON atomically"
+    },
+    {
+      "id": "FR-3",
+      "description": "** `src/runner.ts` — `spawnPipeline(scriptRelPath, args, config)` resolves the full script path as `join(config.repoRoot, scriptRelPath)` and spawns `[config.uvPath ?? \"uv\", \"run\", \"python\", ...]`"
+    },
+    {
+      "id": "FR-4",
+      "description": "** `src/models/registry.ts` — is the single source of truth; all model validation, help-text generation, and script resolution use this module"
+    },
+    {
+      "id": "FR-5",
+      "description": "** `commands/install.ts` — detects TTY via `process.stdout.isTTY`; falls back to non-interactive when false"
+    },
+    {
+      "id": "FR-6",
+      "description": "** `commands/install.ts` — CI flags `--non-interactive`, `--install-dir`, `--models-dir`, `--variant` allow fully scripted installation"
+    },
+    {
+      "id": "FR-7",
+      "description": "** Backward compatibility — `PARALLAX_REPO_ROOT` and `PYCOMFY_MODELS_DIR` env vars continue to take precedence over stored config values in all commands"
+    },
+    {
+      "id": "FR-8",
+      "description": "** `package.json` — adds `@clack/prompts ^0.9.x` to `dependencies` and `build:linux`, `build:mac`, `build:win`, `build` scripts"
+    },
+    {
+      "id": "FR-9",
+      "description": "** File structure after refactor matches exactly the layout defined in `CLI_REFACTOR_PLAN.md` (T1–T9)"
+    }
+  ]
+}
