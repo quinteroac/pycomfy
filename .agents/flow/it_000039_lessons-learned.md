@@ -107,3 +107,21 @@
 - The `create video` action builds args in two phases: (1) common flags (`--models-dir`, `--prompt`, `--width`, `--height`, `--length`, `--output`); (2) model-specific flags (`--steps` conditional on model, `--cfg`/`--cfg-pass1` per model). Any new distilled model should add another `!== "<model>"` guard to the `--steps` skip, or refactor into a per-model config object.
 - `examples/video/ltx/ltx23/t2v.py` already existed and accepts `--cfg`, `--prompt`, `--width`, `--height`, `--length`, `--seed`, `--output`, `--models-dir` — no Python changes were needed.
 - The `--steps` AC test using a fake Python script that exits 2 if it receives `--steps` is the canonical pattern for "flag must NOT be forwarded" assertions in this test suite.
+
+## US-003 — wan21 video generation via CLI
+
+**Summary:** Wired `parallax create video --model wan21` to spawn `uv run python examples/video/wan/wan21/t2v.py`. Added `wan21` to `VIDEO_SCRIPTS` and added a `US-003` test suite with 8 tests covering all acceptance criteria. Updated the US-007 stub test which previously expected `wan21` to print "not yet implemented" — changed it to use `wan22` instead.
+
+**Key Decisions:**
+- `VIDEO_SCRIPTS["wan21"] = "examples/video/wan/wan21/t2v.py"` — one-liner addition. The existing `create video` action already handles `--steps` and `--cfg` for the default (non-ltx2, non-ltx23) branch, so `wan21` required zero logic changes in the action handler.
+- The US-007 stub test targeted `wan21` specifically; it was updated to `wan22` (still unimplemented) to preserve coverage of the stub path.
+- Added `makeFakeWan21Root` test helper following the established `makeFake<Model>Root` pattern.
+
+**Pitfalls Encountered:**
+- The US-007 stub test `"create video with valid flags prints stub message and exits 0"` would have failed after wiring `wan21` — it was updated proactively before running tests.
+- The user story AC05 ("Typecheck / lint passes") was verified via `bun run typecheck` in `packages/parallax_cli/`.
+
+**Useful Context for Future Agents:**
+- `VIDEO_SCRIPTS` is the single source of truth for which video models dispatch to real Python scripts vs. fall through to `notImplemented()`. Adding a new model is a one-line change to this map.
+- The default branch in the args-building logic forwards both `--steps` and `--cfg` — this is correct for `wan21`, `wan22`, and any future standard-sampler video model.
+- The US-007 stub describe block should always test a model that is NOT yet in `VIDEO_SCRIPTS`. Update it to a different unimplemented model (currently `wan22`) when wiring new models.
