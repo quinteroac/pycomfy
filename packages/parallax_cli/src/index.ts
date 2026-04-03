@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { join } from "path";
 import { Command } from "commander";
 
 // Known models per action+media — single source of truth for help text and validation
@@ -8,6 +9,14 @@ const MODELS: Record<string, string[]> = {
   "create audio": ["ace_step"],
   "edit image": ["qwen"],
   "edit video": ["wan21", "wan22"],
+};
+
+// Script paths (relative to PARALLAX_REPO_ROOT) for each implemented image model.
+// Models absent from this map fall through to notImplemented().
+const IMAGE_SCRIPTS: Partial<Record<string, string>> = {
+  sdxl:    "examples/image/generation/sdxl/t2i.py",
+  anima:   "examples/image/generation/anima/t2i.py",
+  z_image: "examples/image/generation/z_image/turbo.py",
 };
 
 function modelsFooter(key: string): string {
@@ -26,6 +35,22 @@ function validateModel(key: string, model: string): void {
 function notImplemented(action: string, media: string, model: string): never {
   console.log(`[parallax] ${action} ${media} --model ${model} — not yet implemented (coming soon)`);
   process.exit(0);
+}
+
+// Spawn `uv run python <script>` with inherited stdio; exit with the child's exit code.
+async function spawnPipeline(scriptRelPath: string, args: string[]): Promise<void> {
+  const repoRoot = process.env.PARALLAX_REPO_ROOT;
+  if (!repoRoot) {
+    console.error("Error: PARALLAX_REPO_ROOT is required");
+    process.exit(1);
+  }
+
+  const proc = Bun.spawn(
+    ["uv", "run", "python", join(repoRoot, scriptRelPath), ...args],
+    { stdin: "inherit", stdout: "inherit", stderr: "inherit", cwd: repoRoot },
+  );
+
+  process.exit(await proc.exited);
 }
 
 const program = new Command();
@@ -66,8 +91,41 @@ create
   .option("--cfg <value>", "CFG guidance scale", "7")
   .option("--seed <n>", "Random seed for reproducibility")
   .option("--output <path>", "Output file path", "output.png")
+  .option("--models-dir <path>", "Models directory (overrides PYCOMFY_MODELS_DIR)")
   .addHelpText("after", modelsFooter("create image"))
-  .action((opts) => { validateModel("create image", opts.model); notImplemented("create", "image", opts.model); });
+  .action(async (opts) => {
+    validateModel("create image", opts.model);
+
+    const script = IMAGE_SCRIPTS[opts.model];
+    if (!script) {
+      notImplemented("create", "image", opts.model);
+    }
+
+    const modelsDir = opts.modelsDir ?? process.env.PYCOMFY_MODELS_DIR;
+    if (!modelsDir) {
+      console.error("Error: --models-dir or PYCOMFY_MODELS_DIR is required");
+      process.exit(1);
+    }
+
+    const args: string[] = [
+      "--models-dir", modelsDir,
+      "--prompt", opts.prompt,
+      "--width", opts.width,
+      "--height", opts.height,
+      "--steps", opts.steps,
+      "--output", opts.output,
+    ];
+
+    // z_image turbo has no --negative-prompt or --cfg parameters
+    if (opts.model !== "z_image") {
+      if (opts.negativePrompt) args.push("--negative-prompt", opts.negativePrompt);
+      args.push("--cfg", opts.cfg);
+    }
+
+    if (opts.seed !== undefined) args.push("--seed", opts.seed);
+
+    await spawnPipeline(script, args);
+  });
 
 create
   .command("video")

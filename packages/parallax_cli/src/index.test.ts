@@ -16,6 +16,32 @@ async function runCLI(args: string[]): Promise<{ stdout: string; stderr: string;
   return { stdout, stderr, exitCode };
 }
 
+// Spawn CLI with explicit env overrides (undefined value = unset the key).
+async function runCLIWithEnv(
+  args: string[],
+  envOverrides: Record<string, string | undefined>,
+): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  const env: Record<string, string> = {};
+  for (const [k, v] of Object.entries(process.env)) {
+    if (v !== undefined) env[k] = v;
+  }
+  for (const [k, v] of Object.entries(envOverrides)) {
+    if (v === undefined) delete env[k];
+    else env[k] = v;
+  }
+  const proc = Bun.spawn(["bun", "run", CLI, ...args], {
+    stdout: "pipe",
+    stderr: "pipe",
+    env,
+  });
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
+  return { stdout, stderr, exitCode };
+}
+
 describe("parallax CLI — create subcommand help (US-002)", () => {
   it("US-002-AC01: create --help prints usage for 'parallax create <media> [options]'", async () => {
     const { stdout, exitCode } = await runCLI(["create", "--help"]);
@@ -280,12 +306,6 @@ describe("parallax CLI — required-flag validation (US-006)", () => {
 });
 
 describe("parallax CLI — stub execution (US-007)", () => {
-  it("US-007-AC01/02: create image with valid flags prints stub message and exits 0", async () => {
-    const { stdout, exitCode } = await runCLI(["create", "image", "--model", "sdxl", "--prompt", "test"]);
-    expect(exitCode).toBe(0);
-    expect(stdout).toContain("[parallax] create image --model sdxl — not yet implemented (coming soon)");
-  });
-
   it("US-007-AC01/02: create video with valid flags prints stub message and exits 0", async () => {
     const { stdout, exitCode } = await runCLI(["create", "video", "--model", "wan21", "--prompt", "test"]);
     expect(exitCode).toBe(0);
@@ -308,6 +328,63 @@ describe("parallax CLI — stub execution (US-007)", () => {
     const { stdout, exitCode } = await runCLI(["edit", "video", "--model", "wan21", "--prompt", "test", "--input", "vid.mp4"]);
     expect(exitCode).toBe(0);
     expect(stdout).toContain("[parallax] edit video --model wan21 — not yet implemented (coming soon)");
+  });
+
+  it("US-007: create image --model flux_klein still prints notImplemented (not yet wired)", async () => {
+    const { stdout, exitCode } = await runCLIWithEnv(
+      ["create", "image", "--model", "flux_klein", "--prompt", "test", "--models-dir", "/tmp"],
+      { PARALLAX_REPO_ROOT: "/tmp" },
+    );
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("[parallax] create image --model flux_klein — not yet implemented (coming soon)");
+  });
+});
+
+describe("parallax CLI — sdxl image generation (US-001-it39)", () => {
+  it("US-001-AC04: missing PYCOMFY_MODELS_DIR and --models-dir exits 1 with clear error", async () => {
+    const { stderr, exitCode } = await runCLIWithEnv(
+      ["create", "image", "--model", "sdxl", "--prompt", "test"],
+      { PYCOMFY_MODELS_DIR: undefined, PARALLAX_REPO_ROOT: undefined },
+    );
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain("Error: --models-dir or PYCOMFY_MODELS_DIR is required");
+  });
+
+  it("US-001-AC04: --models-dir flag takes precedence; missing PARALLAX_REPO_ROOT exits 1", async () => {
+    const { stderr, exitCode } = await runCLIWithEnv(
+      ["create", "image", "--model", "sdxl", "--prompt", "test", "--models-dir", "/tmp"],
+      { PARALLAX_REPO_ROOT: undefined },
+    );
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain("Error: PARALLAX_REPO_ROOT is required");
+  });
+
+  it("US-001-AC02: all optional flags are forwarded (no error about flags before PARALLAX_REPO_ROOT check)", async () => {
+    const { stderr, exitCode } = await runCLIWithEnv(
+      [
+        "create", "image", "--model", "sdxl", "--prompt", "test",
+        "--models-dir", "/tmp", "--negative-prompt", "bad quality",
+        "--width", "512", "--height", "512", "--steps", "10", "--cfg", "5", "--seed", "42",
+        "--output", "out.png",
+      ],
+      { PARALLAX_REPO_ROOT: undefined },
+    );
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain("Error: PARALLAX_REPO_ROOT is required");
+  });
+
+  it("US-001-AC03: CLI exits with non-zero when subprocess fails (bad PARALLAX_REPO_ROOT path)", async () => {
+    const { exitCode } = await runCLIWithEnv(
+      ["create", "image", "--model", "sdxl", "--prompt", "test", "--models-dir", "/tmp"],
+      { PARALLAX_REPO_ROOT: "/nonexistent-parallax-root-12345" },
+    );
+    expect(exitCode).not.toBe(0);
+  });
+
+  it("US-001: --models-dir option is listed in create image --help", async () => {
+    const { stdout, exitCode } = await runCLI(["create", "image", "--help"]);
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("--models-dir");
   });
 });
 
