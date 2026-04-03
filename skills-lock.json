@@ -1,0 +1,145 @@
+{
+  "version": 1,
+  "skills": {
+    "adapt": {
+      "source": "/tmp/nvst-skills-1775252806398",
+      "sourceType": "local",
+      "computedHash": "3fded6e553443eaa7b8436861890a3d1de14c91e135b7aad06d940aa55015b1c"
+    },
+    "animate": {
+      "source": "/tmp/nvst-skills-1775252806398",
+      "sourceType": "local",
+      "computedHash": "562469b7779c1ff3c0a2e1a7837e5cbfd830a3c8196a2f371a57694ea737350d"
+    },
+    "approve-prototype": {
+      "source": "/tmp/nvst-skills-1775252806398",
+      "sourceType": "local",
+      "computedHash": "850cde0d343acc1c9c4856c83f90d62ed97a836d2d026eafb94bc36c3d2ff616"
+    },
+    "audit": {
+      "source": "/tmp/nvst-skills-1775252806398",
+      "sourceType": "local",
+      "computedHash": "63c41e87ad3ddb1684d7d9e7cf07ef7e799c9685b35f24afd81bbdcafda7c8b9"
+    },
+    "audit-prototype": {
+      "source": "/tmp/nvst-skills-1775252806398",
+      "sourceType": "local",
+      "computedHash": "b027e7a201ffdee5af3a5029a03bf306d213455a8037668a6230453643ada5f6"
+    },
+    "bolder": {
+      "source": "/tmp/nvst-skills-1775252806398",
+      "sourceType": "local",
+      "computedHash": "fb9ec2f4dd0a44719b99eb85a2e26ea46a2f2ae4e2b22801111215787ea3b1e8"
+    },
+    "clarify": {
+      "source": "/tmp/nvst-skills-1775252806398",
+      "sourceType": "local",
+      "computedHash": "393956ea473e9ad29ec398965890e6e73f755df92dab05275a76cf0788fb74ae"
+    },
+    "colorize": {
+      "source": "/tmp/nvst-skills-1775252806398",
+      "sourceType": "local",
+      "computedHash": "97f273908f651175582b312202b14e7d37cacdd1bde89c3a0cbb4ca6d184acf6"
+    },
+    "create-project-context": {
+      "source": "/tmp/nvst-skills-1775252806398",
+      "sourceType": "local",
+      "computedHash": "e9518eb3c510e8c7a433d251e38d8ed6fdcc03da9f6a021943344fab8dfb2b34"
+    },
+    "create-prototype": {
+      "source": "/tmp/nvst-skills-1775252806398",
+      "sourceType": "local",
+      "computedHash": "062c87758e51756b18de0c3c6188bc298883f3ff8db8e465af93506ea4c98716"
+    },
+    "critique": {
+      "source": "/tmp/nvst-skills-1775252806398",
+      "sourceType": "local",
+      "computedHash": "a543c6c481ebcacea4d9a9a9179dd3e117450631f4ea800f31b2ad802c9123e0"
+    },
+    "define-requirement": {
+      "source": "/tmp/nvst-skills-1775252806398",
+      "sourceType": "local",
+      "computedHash": "969c97a68a101c6d33c16a7d7422b27c985f1186818dcd40d94d7c983e095fa6"
+    },
+    "delight": {
+      "source": "/tmp/nvst-skills-1775252806398",
+      "sourceType": "local",
+      "computedHash": "9ce58b0dc89b3493bc517d654854a0f5efcf5eee6eeab1862ba843b59059dea7"
+    },
+    "distill": {
+      "source": "/tmp/nvst-skills-1775252806398",
+      "sourceType": "local",
+      "computedHash": "280e2376ed0ffbc22cb0d3cc31d3e3bc7f098c7a3e8aa29d1f46dde4a62fb881"
+    },
+    "execute-automated-fix": {
+      "source": "/tmp/nvst-skills-1775252806398",
+      "sourceType": "local",
+      "computedHash": "58a5b561c289b5741cb0abb0d262e56a7202c0c63f166291353d274d90f2919a"
+    },
+    "extract": {
+      "source": "/tmp/nvst-skills-1775252806398",
+      "sourceType": "local",
+      "computedHash": "9af9fdc46ce96d32b9d71ffb49b189f2fb17fed475d66e9cb93cadd1e8d7f9d4"
+    },
+    "frontend-design": {
+      "source": "/tmp/nvst-skills-1775252806398",
+      "sourceType": "local",
+      "computedHash": "36eadc076de481da717af0ee2f1f8d2cad4009f24c0709846b5b35cd747c3b6a"
+    },
+    "harden": {
+      "source": "/tmp/nvst-skills-1775252806398",
+      "sourceType": "local",
+      "computedHash": "5559f51c20201ef82d60f3c9f3f6dbf7d4aa48a8c885932921cc8fa7e1f0cb5c"
+    },
+    "ideate": {
+      "source": "/tmp/nvst-skills-1775252806398",
+      "sourceType": "local",
+      "computedHash": "10e37dfbb5fa16860866c34cb0f3a4579b572a73d9f2586bf265e626998db382"
+    },
+    "normalize": {
+      "source": "/tmp/nvst-skills-1775252806398",
+      "sourceType": "local",
+      "computedHash": "5da58722a355c6fa4994f9be538188a91cdc449750ccdd30cacb3cd0eb3ceea3"
+    },
+    "onboard": {
+      "source": "/tmp/nvst-skills-1775252806398",
+      "sourceType": "local",
+      "computedHash": "52a25b344dbb70bbe0983672e1e8496e9a834c944c7dfc3de617bc92b663caf4"
+    },
+    "optimize": {
+      "source": "/tmp/nvst-skills-1775252806398",
+      "sourceType": "local",
+      "computedHash": "08d62e1366687c0d1e740d5cf3e54f7572c1e8051808bab2792d89b1ad5fc6b1"
+    },
+    "polish": {
+      "source": "/tmp/nvst-skills-1775252806398",
+      "sourceType": "local",
+      "computedHash": "ecd112cdd3fa8625bdc3abcd84d28cb0c3d165cbf3112302e79c4ef09e6ed218"
+    },
+    "quieter": {
+      "source": "/tmp/nvst-skills-1775252806398",
+      "sourceType": "local",
+      "computedHash": "807052d79e0c55817a77b9c64cbf3324ec0c4b572821a2c1b1baf755097bb99d"
+    },
+    "refactor-prototype": {
+      "source": "/tmp/nvst-skills-1775252806398",
+      "sourceType": "local",
+      "computedHash": "5a760e017c5ab08354b9b9d2749125e693135a637b229a5d8881c0b06f45263f"
+    },
+    "refine-project-context": {
+      "source": "/tmp/nvst-skills-1775252806398",
+      "sourceType": "local",
+      "computedHash": "97179b0ec72250b71b815832fa70892dd7d70f3d6ace1b2d05f6b41d3267674d"
+    },
+    "refine-requirement": {
+      "source": "/tmp/nvst-skills-1775252806398",
+      "sourceType": "local",
+      "computedHash": "460ee83d6944307bba44d92b3be73544e3483cee5f17ff90c9bff0e3824c6545"
+    },
+    "teach-impeccable": {
+      "source": "/tmp/nvst-skills-1775252806398",
+      "sourceType": "local",
+      "computedHash": "ba5f3b6831d3861638b96fb700341f094b00fe4adef98977e256de70fb7f1239"
+    }
+  }
+}
