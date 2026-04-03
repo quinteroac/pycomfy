@@ -282,3 +282,19 @@ A `makeFakeWan22I2vRoot()` helper and a full `describe("parallax CLI — wan22 i
 **Useful Context for Future Agents:**
 - `--cfg` default is `"2"`, `--bpm` default is `"120"`, `--lyrics` default is `""`. These are forwarded unconditionally (even empty lyrics), so the subprocess always receives all three flags.
 - When adding more audio generation flags in future iterations, follow the same test pattern: default-value test + custom-value test, both using `makeFakeAceStepRoot` with a `print(sys.argv)` fake script.
+
+## US-004 — models-dir and repo-root resolution for create audio
+
+**Summary:** Added a dedicated `describe("parallax CLI — models-dir and repo-root resolution for create audio (US-004-it39)")` test block with 6 tests. No production code changes were needed — the implementation was already complete in `src/index.ts` lines 242-254, which resolves `opts.modelsDir ?? process.env.PYCOMFY_MODELS_DIR` and forwards it as `--models-dir` to the subprocess.
+
+**Key Decisions:**
+- Used `makeFakeAceStepRoot` (already defined in the test file) to create a minimal temp repo for subprocess argument inspection tests.
+- Added two variants for AC01 (flag-takes-precedence and env-var-fallback) and two for AC03 (env-sourced path and flag-sourced path) to cover both resolution paths explicitly.
+- AC04 (typecheck) is covered by a `--help` smoke test plus the `tsc --noEmit` run.
+
+**Pitfalls Encountered:**
+- The AC criteria in the PRD JSON were truncated. The full semantics were reconstructed from the lessons-learned entries already in this file and by inspecting the production code directly.
+
+**Useful Context for Future Agents:**
+- The `--models-dir` / `PYCOMFY_MODELS_DIR` resolution pattern is identical across `create image`, `create video`, and `create audio`. The error message is always `"Error: --models-dir or PYCOMFY_MODELS_DIR is required"`.
+- The `PARALLAX_REPO_ROOT` check lives in `spawnPipeline()` — it fires only after models-dir passes, so tests that assert `PARALLAX_REPO_ROOT` errors must first provide a valid `--models-dir`.

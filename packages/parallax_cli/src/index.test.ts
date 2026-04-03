@@ -2694,3 +2694,95 @@ describe("parallax CLI — create audio extended generation flags (US-003-it39)"
     expect(exitCode).toBe(0);
   });
 });
+
+describe("parallax CLI — models-dir and repo-root resolution for create audio (US-004-it39)", () => {
+  // AC01: --models-dir flag takes precedence over PYCOMFY_MODELS_DIR for create audio.
+  it("US-004-AC01: --models-dir flag overrides PYCOMFY_MODELS_DIR on create audio", async () => {
+    const tmpRoot = await makeFakeAceStepRoot(
+      'import sys; print(" ".join(sys.argv[1:])); sys.exit(0)\n',
+    );
+    try {
+      const { stdout, exitCode } = await runCLIWithEnv(
+        ["create", "audio", "--model", "ace_step", "--prompt", "lo-fi beats", "--models-dir", "/flag/models"],
+        { PARALLAX_REPO_ROOT: tmpRoot, PYCOMFY_MODELS_DIR: "/env/models" },
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain("/flag/models");
+      expect(stdout).not.toContain("/env/models");
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("US-004-AC01: PYCOMFY_MODELS_DIR is used when --models-dir is absent on create audio", async () => {
+    const tmpRoot = await makeFakeAceStepRoot(
+      'import sys; print(" ".join(sys.argv[1:])); sys.exit(0)\n',
+    );
+    try {
+      const { stdout, exitCode } = await runCLIWithEnv(
+        ["create", "audio", "--model", "ace_step", "--prompt", "lo-fi beats"],
+        { PARALLAX_REPO_ROOT: tmpRoot, PYCOMFY_MODELS_DIR: "/env/models" },
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain("--models-dir");
+      expect(stdout).toContain("/env/models");
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  // AC02: If PARALLAX_REPO_ROOT is not set, the CLI prints a clear error and exits 1.
+  it("US-004-AC02: missing PARALLAX_REPO_ROOT prints error and exits 1 on create audio", async () => {
+    const { stderr, exitCode } = await runCLIWithEnv(
+      ["create", "audio", "--model", "ace_step", "--prompt", "lo-fi beats", "--models-dir", "/tmp"],
+      { PARALLAX_REPO_ROOT: undefined },
+    );
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain("Error: PARALLAX_REPO_ROOT is required");
+  });
+
+  // AC03: The resolved models path is forwarded as --models-dir <path> to the subprocess.
+  it("US-004-AC03: resolved models-dir from env is forwarded as --models-dir to create audio subprocess", async () => {
+    const tmpRoot = await makeFakeAceStepRoot(
+      'import sys; print(" ".join(sys.argv[1:])); sys.exit(0)\n',
+    );
+    try {
+      const { stdout, exitCode } = await runCLIWithEnv(
+        ["create", "audio", "--model", "ace_step", "--prompt", "lo-fi beats"],
+        { PARALLAX_REPO_ROOT: tmpRoot, PYCOMFY_MODELS_DIR: "/resolved/audio/models" },
+      );
+      expect(exitCode).toBe(0);
+      const parts = stdout.split(" ");
+      const idx = parts.indexOf("--models-dir");
+      expect(idx).toBeGreaterThanOrEqual(0);
+      expect(parts[idx + 1]?.trim()).toBe("/resolved/audio/models");
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("US-004-AC03: resolved models-dir from flag is forwarded as --models-dir to create audio subprocess", async () => {
+    const tmpRoot = await makeFakeAceStepRoot(
+      'import sys; print(" ".join(sys.argv[1:])); sys.exit(0)\n',
+    );
+    try {
+      const { stdout, exitCode } = await runCLIWithEnv(
+        ["create", "audio", "--model", "ace_step", "--prompt", "lo-fi beats", "--models-dir", "/flag/audio/models"],
+        { PARALLAX_REPO_ROOT: tmpRoot, PYCOMFY_MODELS_DIR: undefined },
+      );
+      expect(exitCode).toBe(0);
+      const parts = stdout.split(" ");
+      const idx = parts.indexOf("--models-dir");
+      expect(idx).toBeGreaterThanOrEqual(0);
+      expect(parts[idx + 1]?.trim()).toBe("/flag/audio/models");
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  // AC04: Typecheck / lint passes.
+  it("US-004-AC04: CLI help exits 0 (smoke-tests typecheck for create audio)", async () => {
+    const { exitCode } = await runCLI(["create", "audio", "--help"]);
+    expect(exitCode).toBe(0);
+  });
+});
