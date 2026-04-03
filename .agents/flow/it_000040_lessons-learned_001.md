@@ -51,3 +51,20 @@
 - `runner.ts` must never reference `process.env` directly — it always receives values through the `ParallaxConfig` parameter.
 - When `uv` is not in PATH, Bun throws an ENOENT exception whose stderr output begins with source-context line numbers (e.g. `"13 |  if (!repoRoot)"`), not with `"Error:"`. Use this characteristic to distinguish spawn failures from CLI validation errors in tests.
 - The 11 `ace_step model component flags` test failures in `index.test.ts` are pre-existing (they test a yet-to-be-implemented story) and are unrelated to this story.
+
+## US-004 — Centralized model registry (`models/registry.ts`)
+
+**Summary:** Created `packages/parallax_cli/src/models/registry.ts` exporting `MODELS`, `IMAGE_SCRIPTS`, `VIDEO_MODEL_CONFIG`, `AUDIO_SCRIPTS` (moved from `index.ts`), plus three helper functions: `getModels(action, media)`, `getScript(action, media, model)`, `getModelConfig(media, model)`. Updated `index.ts` to remove all model data and import exclusively from `registry.ts`. The `VideoModelConfig` interface was renamed to `ModelConfig` per AC02.
+
+**Key Decisions:**
+- `getScript` for video always returns the `t2v` path by default; callers must inspect `getModelConfig` and check `.i2v` themselves to select the i2v script. This keeps the API simple while still exposing all the data needed.
+- `VIDEO_MODEL_CONFIG` is no longer imported directly in `index.ts` — the video action uses `getModelConfig("video", model)` instead, so all data access is centralized.
+- `modelsFooter` and `validateModel` helper functions in `index.ts` were updated to accept `(action, media)` params and delegate to `getModels()`.
+
+**Pitfalls Encountered:**
+- Bun 1.3.4 has a bug where `expect.stringContaining(...)` used inside `toMatchObject` corrupts the actual object property in the test's view, causing the subsequent `.toBe()` assertion on `getScript()` to receive `StringContaining "ltx2"` instead of the real string value. Workaround: avoid asymmetric matchers (`expect.stringContaining`) inside `toMatchObject` when the same constant is read again in a later test. Use explicit property access + `.toContain()` instead.
+
+**Useful Context for Future Agents:**
+- The `models/registry.ts` pattern means that adding a new model now requires only editing `registry.ts` — no changes to `index.ts` are needed for model data.
+- `getModelConfig` currently only returns configs for `media === "video"`. If future media types (audio, image) gain per-model config objects, extend `getModelConfig` in `registry.ts` only.
+- Do not use `expect.stringContaining()` inside `toMatchObject()` in Bun 1.3.4 tests — it causes the matcher object to leak into subsequent `.toBe()` assertions on the same property.
