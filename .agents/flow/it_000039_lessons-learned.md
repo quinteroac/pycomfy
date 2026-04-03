@@ -266,3 +266,19 @@ A `makeFakeWan22I2vRoot()` helper and a full `describe("parallax CLI — wan22 i
 - `AUDIO_SCRIPTS.ace_step` now points to `examples/audio/ace/t2a.py` (not `t2a_pipeline.py`).
 - The `t2a.py` script is the split-components variant accepting `--unet`, `--vae`, `--text-encoder-1`, `--text-encoder-2`. The pipeline variant `t2a_pipeline.py` auto-downloads everything and does not accept component flags.
 - All four component env vars follow the pattern `PYCOMFY_ACE_<COMPONENT>`.
+
+## US-003 — extended generation flags
+
+**Summary:** Added a dedicated US-003-it39 test suite for `--cfg`, `--lyrics`, and `--bpm` flags on `create audio`. The production code in `index.ts` already had all three flags implemented (from the US-002 iteration), so only tests were added.
+
+**Key Decisions:**
+- Reused the `makeFakeAceStepRoot` helper (creates a fake `examples/audio/ace/t2a.py`) to avoid real subprocess side-effects.
+- Named the describe block `(US-003-it39)` to avoid collision with the existing `(US-003)` blocks for image and video.
+- Added two tests per AC: one checking custom value forwarding and one checking the default value, giving complete coverage.
+
+**Pitfalls Encountered:**
+- The production code was already complete; the only work was adding tests. Verifying this upfront (checking `index.ts` lines 223-260) avoided unnecessary re-implementation.
+
+**Useful Context for Future Agents:**
+- `--cfg` default is `"2"`, `--bpm` default is `"120"`, `--lyrics` default is `""`. These are forwarded unconditionally (even empty lyrics), so the subprocess always receives all three flags.
+- When adding more audio generation flags in future iterations, follow the same test pattern: default-value test + custom-value test, both using `makeFakeAceStepRoot` with a `print(sys.argv)` fake script.

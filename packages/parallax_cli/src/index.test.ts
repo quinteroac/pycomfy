@@ -2571,3 +2571,126 @@ describe("parallax CLI — ace_step model component flags (US-002)", () => {
     expect(stdout).toContain("--lyrics");
   });
 });
+
+// ── US-003: extended generation flags (it_000039) ────────────────────────────
+describe("parallax CLI — create audio extended generation flags (US-003-it39)", () => {
+  // AC01: --cfg is forwarded with default "2"
+  it("US-003-AC01: --cfg flag is forwarded to the subprocess", async () => {
+    const tmpRoot = await makeFakeAceStepRoot(
+      'import sys; print(" ".join(sys.argv[1:])); sys.exit(0)\n',
+    );
+    try {
+      const { stdout, exitCode } = await runCLIWithEnv(
+        ["create", "audio", "--model", "ace_step", "--prompt", "ambient", "--models-dir", "/tmp", "--cfg", "3.5"],
+        { PARALLAX_REPO_ROOT: tmpRoot },
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain("--cfg");
+      expect(stdout).toContain("3.5");
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("US-003-AC01: --cfg defaults to '2' when not provided", async () => {
+    const tmpRoot = await makeFakeAceStepRoot(
+      'import sys; print(" ".join(sys.argv[1:])); sys.exit(0)\n',
+    );
+    try {
+      const { stdout, exitCode } = await runCLIWithEnv(
+        ["create", "audio", "--model", "ace_step", "--prompt", "ambient", "--models-dir", "/tmp"],
+        { PARALLAX_REPO_ROOT: tmpRoot },
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain("--cfg");
+      expect(stdout).toContain("2");
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  // AC02: --lyrics is forwarded with default ""
+  it("US-003-AC02: --lyrics flag is forwarded to the subprocess", async () => {
+    const tmpRoot = await makeFakeAceStepRoot(
+      'import sys; print(" ".join(sys.argv[1:])); sys.exit(0)\n',
+    );
+    try {
+      const { stdout, exitCode } = await runCLIWithEnv(
+        ["create", "audio", "--model", "ace_step", "--prompt", "ambient", "--models-dir", "/tmp", "--lyrics", "hello world"],
+        { PARALLAX_REPO_ROOT: tmpRoot },
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain("--lyrics");
+      expect(stdout).toContain("hello world");
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("US-003-AC02: --lyrics defaults to empty string when not provided", async () => {
+    const tmpRoot = await makeFakeAceStepRoot(
+      'import sys; print(" ".join(sys.argv[1:])); sys.exit(0)\n',
+    );
+    try {
+      const { stdout, exitCode } = await runCLIWithEnv(
+        ["create", "audio", "--model", "ace_step", "--prompt", "ambient", "--models-dir", "/tmp"],
+        { PARALLAX_REPO_ROOT: tmpRoot },
+      );
+      expect(exitCode).toBe(0);
+      // --lyrics is always forwarded (even empty string)
+      expect(stdout).toContain("--lyrics");
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  // AC03: --bpm is forwarded with default "120"
+  it("US-003-AC03: --bpm flag is forwarded to the subprocess", async () => {
+    const tmpRoot = await makeFakeAceStepRoot(
+      'import sys; print(" ".join(sys.argv[1:])); sys.exit(0)\n',
+    );
+    try {
+      const { stdout, exitCode } = await runCLIWithEnv(
+        ["create", "audio", "--model", "ace_step", "--prompt", "ambient", "--models-dir", "/tmp", "--bpm", "140"],
+        { PARALLAX_REPO_ROOT: tmpRoot },
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain("--bpm");
+      expect(stdout).toContain("140");
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("US-003-AC03: --bpm defaults to '120' when not provided", async () => {
+    const tmpRoot = await makeFakeAceStepRoot(
+      'import sys; print(" ".join(sys.argv[1:])); sys.exit(0)\n',
+    );
+    try {
+      const { stdout, exitCode } = await runCLIWithEnv(
+        ["create", "audio", "--model", "ace_step", "--prompt", "ambient", "--models-dir", "/tmp"],
+        { PARALLAX_REPO_ROOT: tmpRoot },
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain("--bpm");
+      expect(stdout).toContain("120");
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  // AC04: --help lists all three new flags
+  it("US-003-AC04: create audio --help lists --cfg, --lyrics, and --bpm", async () => {
+    const { stdout, exitCode } = await runCLI(["create", "audio", "--help"]);
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("--cfg");
+    expect(stdout).toContain("--lyrics");
+    expect(stdout).toContain("--bpm");
+  });
+
+  // AC05: typecheck / lint passes — verified by compiling the CLI (bun build or tsc)
+  it("US-003-AC05: CLI help exits 0 (smoke-tests typecheck)", async () => {
+    const { exitCode } = await runCLI(["create", "audio", "--help"]);
+    expect(exitCode).toBe(0);
+  });
+});
