@@ -68,3 +68,21 @@
 - The `models/registry.ts` pattern means that adding a new model now requires only editing `registry.ts` — no changes to `index.ts` are needed for model data.
 - `getModelConfig` currently only returns configs for `media === "video"`. If future media types (audio, image) gain per-model config objects, extend `getModelConfig` in `registry.ts` only.
 - Do not use `expect.stringContaining()` inside `toMatchObject()` in Bun 1.3.4 tests — it causes the matcher object to leak into subsequent `.toBe()` assertions on the same property.
+
+## US-005 — Per-media argument builders (`models/image.ts`, `models/video.ts`, `models/audio.ts`)
+
+**Summary:** Created three new argument builder files (`src/models/image.ts`, `src/models/video.ts`, `src/models/audio.ts`) each exporting `buildArgs(opts, modelsDir): string[]`. Created `src/commands/create.ts` exporting `setupCreateCommand(program: Command)` with all three action handlers calling only `buildArgs()` and `spawnPipeline()`. Updated `index.ts` to replace the inline create command block with a single `setupCreateCommand(program)` call.
+
+**Key Decisions:**
+- `video.ts` imports `getModelConfig` from `registry.ts` internally — the `buildArgs` signature stays clean (`opts, modelsDir`) without callers needing to pass the config.
+- Helper functions `validateModel`, `modelsFooter`, `notImplemented` are duplicated locally in both `commands/create.ts` and `index.ts` (for the edit command handlers). This is a small trade-off for clean file separation without introducing a shared utils file.
+- The video action in `commands/create.ts` still derives `useI2v` and selects the script (t2v vs i2v) before calling `buildArgs()` — script selection is handler responsibility, arg building is model responsibility.
+- `index.ts` no longer imports `existsSync`, `readConfig`, `spawnPipeline`, `getScript`, or `getModelConfig` — those imports moved to `commands/create.ts`.
+
+**Pitfalls Encountered:**
+- None significant. The refactoring was straightforward since the inline logic was already well-structured.
+
+**Useful Context for Future Agents:**
+- `src/commands/create.ts` exports `setupCreateCommand(program: Command): void` — the pattern for future `commands/edit.ts` is the same.
+- When adding a new media type or model, `buildArgs` in the appropriate model file is the only place that needs to handle the special cases; action handlers stay clean.
+- The 11 pre-existing `ace_step model component flags` test failures are unrelated to this story and remain.
