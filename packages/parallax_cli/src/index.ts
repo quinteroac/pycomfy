@@ -19,6 +19,11 @@ const IMAGE_SCRIPTS: Partial<Record<string, string>> = {
   z_image: "examples/image/generation/z_image/turbo.py",
 };
 
+// Script paths for each implemented video model.
+const VIDEO_SCRIPTS: Partial<Record<string, string>> = {
+  ltx2: "examples/video/ltx/ltx2/t2v.py",
+};
+
 function modelsFooter(key: string): string {
   return `\nAvailable models: ${MODELS[key].join(", ")}`;
 }
@@ -139,8 +144,41 @@ create
   .option("--cfg <value>", "CFG guidance scale", "6")
   .option("--seed <n>", "Random seed for reproducibility")
   .option("--output <path>", "Output file path", "output.mp4")
+  .option("--models-dir <path>", "Models directory (overrides PYCOMFY_MODELS_DIR)")
   .addHelpText("after", modelsFooter("create video"))
-  .action((opts) => { validateModel("create video", opts.model); notImplemented("create", "video", opts.model); });
+  .action(async (opts) => {
+    validateModel("create video", opts.model);
+
+    const script = VIDEO_SCRIPTS[opts.model];
+    if (!script) {
+      notImplemented("create", "video", opts.model);
+    }
+
+    const modelsDir = opts.modelsDir ?? process.env.PYCOMFY_MODELS_DIR;
+    if (!modelsDir) {
+      console.error("Error: --models-dir or PYCOMFY_MODELS_DIR is required");
+      process.exit(1);
+    }
+
+    const args: string[] = [
+      "--models-dir", modelsDir,
+      "--prompt", opts.prompt,
+      "--width", opts.width,
+      "--height", opts.height,
+      "--length", opts.length,
+      "--steps", opts.steps,
+      "--output", opts.output,
+    ];
+
+    // ltx2 t2v uses --cfg-pass1 instead of a bare --cfg flag
+    if (opts.model === "ltx2") {
+      args.push("--cfg-pass1", opts.cfg);
+    }
+
+    if (opts.seed !== undefined) args.push("--seed", opts.seed);
+
+    await spawnPipeline(script, args);
+  });
 
 create
   .command("audio")

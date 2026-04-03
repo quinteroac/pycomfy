@@ -72,3 +72,21 @@
 - When the user story says "AC03: If neither is set, the CLI prints…", the acceptance criteria text was truncated in the PRD. The implemented error message is `"Error: --models-dir or PYCOMFY_MODELS_DIR is required"` — use this exact string for future tests or error-message changes.
 - `makeFakeSdxlRoot` is now a reusable helper in the test file alongside `makeFakeZImageRoot`. Use it whenever tests need to verify subprocess argument forwarding for SDXL.
 - The `PYCOMFY_MODELS_DIR` env var is only checked on `create image`; other commands (`create video`, `create audio`, `edit image`, `edit video`) do not yet dispatch to a Python subprocess and therefore don't validate it.
+
+## US-001 — ltx2 video generation via CLI
+
+**Summary:** Implemented `parallax create video --model ltx2` to spawn `examples/video/ltx/ltx2/t2v.py` with forwarded flags. Added `VIDEO_SCRIPTS` map and `--models-dir` option to `create video`. The `--cfg` CLI flag is translated to `--cfg-pass1` for ltx2 (since the pipeline uses two-pass CFG and only exposes `--cfg-pass1`/`--cfg-pass2`).
+
+**Key Decisions:**
+- Added a separate `VIDEO_SCRIPTS` map (parallel to `IMAGE_SCRIPTS`) for clean extensibility when other video models are implemented.
+- `--models-dir` was missing from the `create video` command definition — added it as an optional flag consistent with `create image`.
+- The `--cfg` → `--cfg-pass1` remapping is model-specific, guarded by `if (opts.model === "ltx2")`. Future models may use different flag names.
+
+**Pitfalls Encountered:**
+- The AC03 test for "bare `--cfg` is not forwarded" requires checking `"--cfg " ` (with trailing space) in stdout to distinguish from `"--cfg-pass1"` which contains `--cfg` as a prefix. A Python `in sys.argv` check (exact element match) is cleaner and avoids this substring ambiguity.
+- The stub test `US-007-AC01/02` used `wan21` (not `ltx2`), so it continued to hit `notImplemented()` after `ltx2` was wired up — no change needed to that test.
+
+**Useful Context for Future Agents:**
+- `makeFakeLtx2Root` is now a reusable test helper alongside `makeFakeSdxlRoot` and `makeFakeZImageRoot`. Add `makeFake<Model>Root` helpers for each new video model as it is implemented.
+- The `PYCOMFY_MODELS_DIR` env var resolution for `create video` now follows the same pattern as `create image` — `opts.modelsDir ?? process.env.PYCOMFY_MODELS_DIR`.
+- `VIDEO_SCRIPTS` is the single source of truth for which video models are live vs. stubbed. Add new entries there to enable dispatch without touching the action logic.
