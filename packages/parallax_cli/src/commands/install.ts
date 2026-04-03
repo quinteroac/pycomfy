@@ -4,10 +4,17 @@
 import { Command } from "commander";
 import { cpSync, existsSync } from "fs";
 import { homedir } from "os";
-import { join } from "path";
+import { dirname, join } from "path";
 import { configExists, readConfig, writeConfig } from "../config";
 
-const BUNDLED_RUNTIME_DIR = join(import.meta.dir, "../../runtime");
+// In dev mode import.meta.dir resolves to the source directory where runtime/ is a sibling.
+// In a compiled binary import.meta.dir holds the compile-time source path which no longer
+// exists on disk; dirname(process.execPath) gives the directory containing the binary, where
+// the build scripts copy runtime/ during the dist step.
+const _devRuntimeDir = join(import.meta.dir, "../../runtime");
+const BUNDLED_RUNTIME_DIR = existsSync(_devRuntimeDir)
+  ? _devRuntimeDir
+  : join(dirname(process.execPath), "runtime");
 const INSTALLED_RUNTIME_DIR = join(homedir(), ".config", "parallax", "runtime");
 
 const DEFAULT_INSTALL_DIR = join(homedir(), ".parallax");
@@ -153,7 +160,7 @@ async function runInteractive(opts: InstallOpts): Promise<void> {
     uvPath,
   );
 
-  outro("Listo. Ejecuta: parallax create image --help");
+  outro("Done. Run: parallax create image --help");
 }
 
 async function detectOrInstallUv(
