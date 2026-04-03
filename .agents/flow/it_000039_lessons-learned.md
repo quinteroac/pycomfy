@@ -181,3 +181,21 @@
 **Pitfalls Encountered:** None — the existing CLI architecture made this a clean extension. The `makeFakeLtx23Root` helper (for t2v) already existed; a separate `makeFakeLtx23I2vRoot` helper was needed for i2v since the scripts live at different paths (`i2v.py` vs `t2v.py`).
 
 **Useful Context for Future Agents:** The `VIDEO_SCRIPTS` map holds the default (t2v) script per model. i2v routing is handled inline in the action handler with an explicit guard on `opts.input !== undefined`. Any new model supporting i2v should follow the same pattern: add a ternary for `opts.model === "<model>" && opts.input !== undefined` before falling back to `VIDEO_SCRIPTS`. All tests are in `packages/parallax_cli/src/index.test.ts` and run with `bun test`.
+
+## US-003 — wan21 i2v via CLI
+
+**Summary:** Added `parallax create video --model wan21 --input <path>` routing to `examples/video/wan/wan21/i2v.py`. When `--input` is supplied with `--model wan21`, the CLI routes to `i2v.py` instead of `t2v.py`, and `--input` is forwarded as `--image` (matching `i2v.py`'s argparser). Updated the `--input` option description to mention `wan21`. Added 10 new tests; all 137 tests pass.
+
+**Key Decisions:**
+- Extended the script-routing ternary chain with `(opts.model === "wan21" && opts.input !== undefined) ? "examples/video/wan/wan21/i2v.py" :` — symmetric with ltx2/ltx23 i2v routing already in place.
+- Expanded the `--image` forwarding guard from `(ltx2 || ltx23)` to `(ltx2 || ltx23 || wan21)` so `--input` is remapped to `--image` for wan21 as well.
+- Added `makeFakeWan21I2vRoot` test helper (creates `i2v.py` in the temp root) alongside the existing `makeFakeWan21Root` (creates `t2v.py`).
+- Added regression test confirming wan21 **without** `--input` still routes to `t2v.py`.
+
+**Pitfalls Encountered:**
+- None. The architecture was already prepared by previous agents — wan21 i2v was a clean additive change following the exact same pattern as ltx2/ltx23 i2v.
+
+**Useful Context for Future Agents:**
+- `examples/video/wan/wan21/i2v.py` accepts `--image` (not `--input`) — the CLI-to-subprocess rename is applied inside the `create video` action handler for all three i2v-capable models (ltx2, ltx23, wan21).
+- The routing ternary in `index.ts` now has 3 i2v guards. If more models gain i2v, consider refactoring to a `VIDEO_I2V_SCRIPTS` map as noted in the US-001 lessons.
+- The `makeFakeWan21Root` helper only creates `t2v.py`; `makeFakeWan21I2vRoot` only creates `i2v.py`. Use both in regression tests to validate the routing split.

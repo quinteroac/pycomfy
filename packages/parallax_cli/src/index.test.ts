@@ -1769,3 +1769,165 @@ describe("parallax CLI — ltx23 i2v video generation (US-002)", () => {
     }
   });
 });
+
+// Helper: create a temporary PARALLAX_REPO_ROOT with a fake wan21 i2v.py script.
+async function makeFakeWan21I2vRoot(scriptBody: string): Promise<string> {
+  const tmpRoot = await mkdtemp(join(tmpdir(), "wan21_i2v_test_"));
+  const scriptDir = join(tmpRoot, "examples", "video", "wan", "wan21");
+  await mkdir(scriptDir, { recursive: true });
+  await writeFile(join(scriptDir, "i2v.py"), scriptBody);
+  return tmpRoot;
+}
+
+describe("parallax CLI — wan21 i2v video generation (US-003-it39)", () => {
+  // AC01: running the command spawns uv run python examples/video/wan/wan21/i2v.py
+  it("US-003-AC01: missing PYCOMFY_MODELS_DIR with --input exits 1 with clear error", async () => {
+    const { stderr, exitCode } = await runCLIWithEnv(
+      ["create", "video", "--model", "wan21", "--prompt", "test", "--input", "img.png"],
+      { PYCOMFY_MODELS_DIR: undefined, PARALLAX_REPO_ROOT: undefined },
+    );
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain("Error: --models-dir or PYCOMFY_MODELS_DIR is required");
+  });
+
+  it("US-003-AC01: with --input and --models-dir set, CLI reaches subprocess spawn (PARALLAX_REPO_ROOT check)", async () => {
+    const { stderr, exitCode } = await runCLIWithEnv(
+      ["create", "video", "--model", "wan21", "--prompt", "test", "--input", "img.png", "--models-dir", "/tmp"],
+      { PARALLAX_REPO_ROOT: undefined },
+    );
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain("Error: PARALLAX_REPO_ROOT is required");
+  });
+
+  it("US-003-AC01: subprocess (i2v.py) is spawned and exit code propagated (exit 0 from fake script)", async () => {
+    const tmpRoot = await makeFakeWan21I2vRoot("import sys; sys.exit(0)\n");
+    try {
+      const { exitCode } = await runCLIWithEnv(
+        ["create", "video", "--model", "wan21", "--prompt", "test", "--input", "img.png", "--models-dir", "/tmp"],
+        { PARALLAX_REPO_ROOT: tmpRoot },
+      );
+      expect(exitCode).toBe(0);
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  // AC02: --input <path> is forwarded as --image <path>
+  it("US-003-AC02: --input is forwarded as --image to the wan21 i2v subprocess", async () => {
+    const tmpRoot = await makeFakeWan21I2vRoot(
+      'import sys; print(" ".join(sys.argv[1:])); sys.exit(0)\n',
+    );
+    try {
+      const { stdout, exitCode } = await runCLIWithEnv(
+        ["create", "video", "--model", "wan21", "--prompt", "test", "--input", "/path/to/img.png", "--models-dir", "/tmp"],
+        { PARALLAX_REPO_ROOT: tmpRoot },
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain("--image");
+      expect(stdout).toContain("/path/to/img.png");
+      // bare --input must not be forwarded to the subprocess
+      expect(stdout).not.toContain("--input");
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  // AC03: --prompt, --width, --height, --length, --steps, --cfg, --seed are forwarded
+  it("US-003-AC03: --prompt, --width, --height, --length, --steps, --cfg, --seed, --output are forwarded", async () => {
+    const tmpRoot = await makeFakeWan21I2vRoot(
+      'import sys; print(" ".join(sys.argv[1:])); sys.exit(0)\n',
+    );
+    try {
+      const { stdout, exitCode } = await runCLIWithEnv(
+        [
+          "create", "video", "--model", "wan21", "--prompt", "a cat in the snow",
+          "--input", "img.png", "--models-dir", "/tmp",
+          "--width", "512", "--height", "512", "--length", "33",
+          "--steps", "20", "--cfg", "6", "--seed", "42", "--output", "wan21_i2v.mp4",
+        ],
+        { PARALLAX_REPO_ROOT: tmpRoot },
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain("--prompt");
+      expect(stdout).toContain("a cat in the snow");
+      expect(stdout).toContain("--width");
+      expect(stdout).toContain("512");
+      expect(stdout).toContain("--height");
+      expect(stdout).toContain("512");
+      expect(stdout).toContain("--length");
+      expect(stdout).toContain("33");
+      expect(stdout).toContain("--steps");
+      expect(stdout).toContain("20");
+      expect(stdout).toContain("--cfg");
+      expect(stdout).toContain("6");
+      expect(stdout).toContain("--seed");
+      expect(stdout).toContain("42");
+      expect(stdout).toContain("--output");
+      expect(stdout).toContain("wan21_i2v.mp4");
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  // AC04: --models-dir is forwarded
+  it("US-003-AC04: --models-dir is forwarded to the wan21 i2v subprocess", async () => {
+    const tmpRoot = await makeFakeWan21I2vRoot(
+      'import sys; print(" ".join(sys.argv[1:])); sys.exit(0)\n',
+    );
+    try {
+      const { stdout, exitCode } = await runCLIWithEnv(
+        ["create", "video", "--model", "wan21", "--prompt", "test", "--input", "img.png", "--models-dir", "/my/models"],
+        { PARALLAX_REPO_ROOT: tmpRoot },
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain("--models-dir");
+      expect(stdout).toContain("/my/models");
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  // AC05: CLI exits with the subprocess exit code
+  it("US-003-AC05: CLI exits with non-zero when i2v subprocess fails (bad PARALLAX_REPO_ROOT path)", async () => {
+    const { exitCode } = await runCLIWithEnv(
+      ["create", "video", "--model", "wan21", "--prompt", "test", "--input", "img.png", "--models-dir", "/tmp"],
+      { PARALLAX_REPO_ROOT: "/nonexistent-parallax-root-12345" },
+    );
+    expect(exitCode).not.toBe(0);
+  });
+
+  it("US-003-AC05: CLI propagates wan21 i2v subprocess exit code 3 verbatim", async () => {
+    const tmpRoot = await makeFakeWan21I2vRoot("import sys; sys.exit(3)\n");
+    try {
+      const { exitCode } = await runCLIWithEnv(
+        ["create", "video", "--model", "wan21", "--prompt", "test", "--input", "img.png", "--models-dir", "/tmp"],
+        { PARALLAX_REPO_ROOT: tmpRoot },
+      );
+      expect(exitCode).toBe(3);
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  // AC06: typecheck / lint passes (validated by running `bun run tsc --noEmit`)
+  it("US-003-AC06: --input option is listed in create video --help", async () => {
+    const { stdout, exitCode } = await runCLI(["create", "video", "--help"]);
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("--input");
+    expect(stdout).toContain("wan21");
+  });
+
+  // Regression: wan21 without --input still routes to t2v.py
+  it("US-003-regression: wan21 without --input still uses t2v.py (t2v mode)", async () => {
+    const tmpRoot = await makeFakeWan21Root("import sys; sys.exit(0)\n");
+    try {
+      const { exitCode } = await runCLIWithEnv(
+        ["create", "video", "--model", "wan21", "--prompt", "test", "--models-dir", "/tmp"],
+        { PARALLAX_REPO_ROOT: tmpRoot },
+      );
+      expect(exitCode).toBe(0);
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+});
