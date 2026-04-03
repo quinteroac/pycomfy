@@ -125,3 +125,19 @@
 - `VIDEO_SCRIPTS` is the single source of truth for which video models dispatch to real Python scripts vs. fall through to `notImplemented()`. Adding a new model is a one-line change to this map.
 - The default branch in the args-building logic forwards both `--steps` and `--cfg` — this is correct for `wan21`, `wan22`, and any future standard-sampler video model.
 - The US-007 stub describe block should always test a model that is NOT yet in `VIDEO_SCRIPTS`. Update it to a different unimplemented model (currently `wan22`) when wiring new models.
+
+## US-004 — wan22 video generation via CLI
+
+**Summary:** Wired `parallax create video --model wan22` to spawn `uv run python examples/video/wan/wan22/t2v.py`. Added `wan22` to `VIDEO_SCRIPTS` (one-liner). Updated the US-007 stub test that was targeting `wan22` — moved it to `edit video --model wan22` (still unimplemented). Added a `US-004` test suite with `makeFakeWan22Root` helper following the exact wan21/US-003 pattern.
+
+**Key Decisions:**
+- The existing `create video` action handler already forwards `--steps` and `--cfg` by default (the only exceptions are `ltx23` which skips `--steps`, and `ltx2` which uses `--cfg-pass1`). `wan22` uses the standard path with no special-casing needed.
+- `VIDEO_SCRIPTS` now has entries for all four models in `MODELS["create video"]`, leaving no "create video" stub. The US-007 stub test was redirected to `edit video --model wan22` to preserve stub-path coverage.
+- Test helper `makeFakeWan22Root` matches the `makeFakeWan21Root` naming convention established in US-003.
+
+**Pitfalls Encountered:**
+- None. This was a pure additive change — one line in `VIDEO_SCRIPTS`, a one-line stub-test update, and a new test suite mirroring US-003.
+
+**Useful Context for Future Agents:**
+- After this story, all four `create video` models (`ltx2`, `ltx23`, `wan21`, `wan22`) are wired. Any future "create video" stub test must use a newly added model or a different command (e.g., `create audio`, `edit video`).
+- The US-007 stub test for `edit video --model wan22` will need to be updated if/when `wan22` i2v or another `edit video` command is implemented.

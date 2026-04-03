@@ -24,6 +24,7 @@ const VIDEO_SCRIPTS: Partial<Record<string, string>> = {
   ltx2:  "examples/video/ltx/ltx2/t2v.py",
   ltx23: "examples/video/ltx/ltx23/t2v.py",
   wan21: "examples/video/wan/wan21/t2v.py",
+  wan22: "examples/video/wan/wan22/t2v.py",
 };
 
 function modelsFooter(key: string): string {

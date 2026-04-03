@@ -308,10 +308,10 @@ describe("parallax CLI — required-flag validation (US-006)", () => {
 });
 
 describe("parallax CLI — stub execution (US-007)", () => {
-  it("US-007-AC01/02: create video with unimplemented model prints stub message and exits 0", async () => {
-    const { stdout, exitCode } = await runCLI(["create", "video", "--model", "wan22", "--prompt", "test"]);
+  it("US-007-AC01/02: edit video with unimplemented model prints stub message and exits 0", async () => {
+    const { stdout, exitCode } = await runCLI(["edit", "video", "--model", "wan22", "--prompt", "test", "--input", "vid.mp4"]);
     expect(exitCode).toBe(0);
-    expect(stdout).toContain("[parallax] create video --model wan22 — not yet implemented (coming soon)");
+    expect(stdout).toContain("[parallax] edit video --model wan22 — not yet implemented (coming soon)");
   });
 
   it("US-007-AC01/02: create audio with valid flags prints stub message and exits 0", async () => {
@@ -1168,6 +1168,132 @@ describe("parallax CLI — wan21 video generation (US-003)", () => {
     try {
       const { exitCode } = await runCLIWithEnv(
         ["create", "video", "--model", "wan21", "--prompt", "test", "--models-dir", "/tmp"],
+        { PARALLAX_REPO_ROOT: tmpRoot },
+      );
+      expect(exitCode).toBe(3);
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+});
+
+// Helper: create a temporary PARALLAX_REPO_ROOT with a fake wan22 t2v.py script.
+async function makeFakeWan22Root(scriptBody: string): Promise<string> {
+  const tmpRoot = await mkdtemp(join(tmpdir(), "wan22_test_"));
+  const scriptDir = join(tmpRoot, "examples", "video", "wan", "wan22");
+  await mkdir(scriptDir, { recursive: true });
+  await writeFile(join(scriptDir, "t2v.py"), scriptBody);
+  return tmpRoot;
+}
+
+describe("parallax CLI — wan22 video generation (US-004)", () => {
+  // AC01: running the command spawns uv run python examples/video/wan/wan22/t2v.py
+  it("US-004-AC01: missing PYCOMFY_MODELS_DIR and --models-dir exits 1 with clear error", async () => {
+    const { stderr, exitCode } = await runCLIWithEnv(
+      ["create", "video", "--model", "wan22", "--prompt", "test"],
+      { PYCOMFY_MODELS_DIR: undefined, PARALLAX_REPO_ROOT: undefined },
+    );
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain("Error: --models-dir or PYCOMFY_MODELS_DIR is required");
+  });
+
+  it("US-004-AC01: with --models-dir set, CLI reaches subprocess spawn (PARALLAX_REPO_ROOT check)", async () => {
+    const { stderr, exitCode } = await runCLIWithEnv(
+      ["create", "video", "--model", "wan22", "--prompt", "test", "--models-dir", "/tmp"],
+      { PARALLAX_REPO_ROOT: undefined },
+    );
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain("Error: PARALLAX_REPO_ROOT is required");
+  });
+
+  it("US-004-AC01: subprocess is spawned and its exit code propagated (exit 0 from fake script)", async () => {
+    const tmpRoot = await makeFakeWan22Root("import sys; sys.exit(0)\n");
+    try {
+      const { exitCode } = await runCLIWithEnv(
+        ["create", "video", "--model", "wan22", "--prompt", "test", "--models-dir", "/tmp"],
+        { PARALLAX_REPO_ROOT: tmpRoot },
+      );
+      expect(exitCode).toBe(0);
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  // AC02: --prompt, --width, --height, --length, --steps, --cfg, --seed are forwarded
+  it("US-004-AC02: --prompt, --width, --height, --length, --steps, --cfg, --seed, --output are forwarded to subprocess", async () => {
+    const tmpRoot = await makeFakeWan22Root(
+      'import sys; print(" ".join(sys.argv[1:])); sys.exit(0)\n',
+    );
+    try {
+      const { stdout, exitCode } = await runCLIWithEnv(
+        [
+          "create", "video", "--model", "wan22", "--prompt", "a mountain river",
+          "--models-dir", "/tmp",
+          "--width", "832", "--height", "480", "--length", "81",
+          "--steps", "4", "--cfg", "1", "--seed", "99", "--output", "river.mp4",
+        ],
+        { PARALLAX_REPO_ROOT: tmpRoot },
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain("--prompt");
+      expect(stdout).toContain("a mountain river");
+      expect(stdout).toContain("--width");
+      expect(stdout).toContain("832");
+      expect(stdout).toContain("--height");
+      expect(stdout).toContain("480");
+      expect(stdout).toContain("--length");
+      expect(stdout).toContain("81");
+      expect(stdout).toContain("--steps");
+      expect(stdout).toContain("4");
+      expect(stdout).toContain("--cfg");
+      expect(stdout).toContain("1");
+      expect(stdout).toContain("--seed");
+      expect(stdout).toContain("99");
+      expect(stdout).toContain("--output");
+      expect(stdout).toContain("river.mp4");
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  // AC03: --models-dir is forwarded
+  it("US-004-AC03: --models-dir is forwarded to the wan22 subprocess", async () => {
+    const tmpRoot = await makeFakeWan22Root(
+      'import sys; print(" ".join(sys.argv[1:])); sys.exit(0)\n',
+    );
+    try {
+      const { stdout, exitCode } = await runCLIWithEnv(
+        ["create", "video", "--model", "wan22", "--prompt", "test", "--models-dir", "/my/models"],
+        { PARALLAX_REPO_ROOT: tmpRoot },
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain("--models-dir");
+      expect(stdout).toContain("/my/models");
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("US-004-AC03: --models-dir option is listed in create video --help", async () => {
+    const { stdout, exitCode } = await runCLI(["create", "video", "--help"]);
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("--models-dir");
+  });
+
+  // AC04: CLI exits with the subprocess exit code
+  it("US-004-AC04: CLI exits with non-zero when subprocess fails (bad PARALLAX_REPO_ROOT path)", async () => {
+    const { exitCode } = await runCLIWithEnv(
+      ["create", "video", "--model", "wan22", "--prompt", "test", "--models-dir", "/tmp"],
+      { PARALLAX_REPO_ROOT: "/nonexistent-parallax-root-12345" },
+    );
+    expect(exitCode).not.toBe(0);
+  });
+
+  it("US-004-AC04: CLI propagates subprocess exit code 3 verbatim", async () => {
+    const tmpRoot = await makeFakeWan22Root("import sys; sys.exit(3)\n");
+    try {
+      const { exitCode } = await runCLIWithEnv(
+        ["create", "video", "--model", "wan22", "--prompt", "test", "--models-dir", "/tmp"],
         { PARALLAX_REPO_ROOT: tmpRoot },
       );
       expect(exitCode).toBe(3);
