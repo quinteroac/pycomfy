@@ -1,5 +1,7 @@
 import { describe, it, expect } from "bun:test";
 import { join } from "path";
+import { mkdtemp, mkdir, writeFile, rm } from "fs/promises";
+import { tmpdir } from "os";
 
 const CLI = join(import.meta.dir, "index.ts");
 
@@ -462,5 +464,160 @@ describe("parallax CLI — top-level help (US-001)", () => {
     expect(stdout).toContain("parallax");
     expect(stdout).toContain("create");
     expect(stdout).toContain("edit");
+  });
+});
+
+// Helper: create a temporary PARALLAX_REPO_ROOT with a fake z_image turbo.py script.
+async function makeFakeZImageRoot(scriptBody: string): Promise<string> {
+  const tmpRoot = await mkdtemp(join(tmpdir(), "z_image_test_"));
+  const scriptDir = join(tmpRoot, "examples", "image", "generation", "z_image");
+  await mkdir(scriptDir, { recursive: true });
+  await writeFile(join(scriptDir, "turbo.py"), scriptBody);
+  return tmpRoot;
+}
+
+describe("parallax CLI — z_image image generation (US-003-it39)", () => {
+  // AC01: command spawns subprocess — verified by progressing past validation to
+  // PARALLAX_REPO_ROOT check, which only happens after spawnPipeline is about to run.
+  it("US-003-AC01: missing PYCOMFY_MODELS_DIR and --models-dir exits 1 with clear error", async () => {
+    const { stderr, exitCode } = await runCLIWithEnv(
+      ["create", "image", "--model", "z_image", "--prompt", "test"],
+      { PYCOMFY_MODELS_DIR: undefined, PARALLAX_REPO_ROOT: undefined },
+    );
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain("Error: --models-dir or PYCOMFY_MODELS_DIR is required");
+  });
+
+  it("US-003-AC01: with --models-dir set, CLI reaches subprocess spawn (PARALLAX_REPO_ROOT check)", async () => {
+    const { stderr, exitCode } = await runCLIWithEnv(
+      ["create", "image", "--model", "z_image", "--prompt", "test", "--models-dir", "/tmp"],
+      { PARALLAX_REPO_ROOT: undefined },
+    );
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain("Error: PARALLAX_REPO_ROOT is required");
+  });
+
+  it("US-003-AC01: subprocess is spawned and its exit code propagated (exit 0 from fake script)", async () => {
+    const tmpRoot = await makeFakeZImageRoot("import sys; sys.exit(0)\n");
+    try {
+      const { exitCode } = await runCLIWithEnv(
+        ["create", "image", "--model", "z_image", "--prompt", "test", "--models-dir", "/tmp"],
+        { PARALLAX_REPO_ROOT: tmpRoot },
+      );
+      expect(exitCode).toBe(0);
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  // AC02: --width, --height, --steps, --seed, --output are forwarded verbatim.
+  it("US-003-AC02: --width, --height, --steps, --seed, --output are forwarded to the subprocess", async () => {
+    // Fake script prints its argv so we can assert the flags were forwarded.
+    const tmpRoot = await makeFakeZImageRoot(
+      'import sys; print(" ".join(sys.argv[1:])); sys.exit(0)\n',
+    );
+    try {
+      const { stdout, exitCode } = await runCLIWithEnv(
+        [
+          "create", "image", "--model", "z_image", "--prompt", "hello world",
+          "--models-dir", "/tmp",
+          "--width", "512", "--height", "768", "--steps", "4", "--seed", "99",
+          "--output", "my_out.png",
+        ],
+        { PARALLAX_REPO_ROOT: tmpRoot },
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain("--width");
+      expect(stdout).toContain("512");
+      expect(stdout).toContain("--height");
+      expect(stdout).toContain("768");
+      expect(stdout).toContain("--steps");
+      expect(stdout).toContain("4");
+      expect(stdout).toContain("--seed");
+      expect(stdout).toContain("99");
+      expect(stdout).toContain("--output");
+      expect(stdout).toContain("my_out.png");
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  // AC03: --negative-prompt and --cfg are NOT forwarded to the z_image subprocess.
+  it("US-003-AC03: --negative-prompt is NOT forwarded (subprocess exits 2 if it receives it, 0 otherwise)", async () => {
+    const tmpRoot = await makeFakeZImageRoot(
+      'import sys\nif "--negative-prompt" in sys.argv[1:]:\n    sys.exit(2)\nsys.exit(0)\n',
+    );
+    try {
+      const { exitCode } = await runCLIWithEnv(
+        [
+          "create", "image", "--model", "z_image", "--prompt", "test",
+          "--models-dir", "/tmp", "--negative-prompt", "bad quality",
+        ],
+        { PARALLAX_REPO_ROOT: tmpRoot },
+      );
+      // Would be 2 if --negative-prompt were forwarded; 0 confirms it was dropped.
+      expect(exitCode).toBe(0);
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("US-003-AC03: --cfg is NOT forwarded (subprocess exits 2 if it receives it, 0 otherwise)", async () => {
+    const tmpRoot = await makeFakeZImageRoot(
+      'import sys\nif "--cfg" in sys.argv[1:]:\n    sys.exit(2)\nsys.exit(0)\n',
+    );
+    try {
+      const { exitCode } = await runCLIWithEnv(
+        [
+          "create", "image", "--model", "z_image", "--prompt", "test",
+          "--models-dir", "/tmp", "--cfg", "7.5",
+        ],
+        { PARALLAX_REPO_ROOT: tmpRoot },
+      );
+      // Would be 2 if --cfg were forwarded; 0 confirms it was dropped.
+      expect(exitCode).toBe(0);
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("US-003-AC03: --negative-prompt and --cfg together are both NOT forwarded", async () => {
+    const tmpRoot = await makeFakeZImageRoot(
+      'import sys\nargs = sys.argv[1:]\nif "--negative-prompt" in args or "--cfg" in args:\n    sys.exit(2)\nsys.exit(0)\n',
+    );
+    try {
+      const { exitCode } = await runCLIWithEnv(
+        [
+          "create", "image", "--model", "z_image", "--prompt", "test",
+          "--models-dir", "/tmp", "--negative-prompt", "bad", "--cfg", "7",
+        ],
+        { PARALLAX_REPO_ROOT: tmpRoot },
+      );
+      expect(exitCode).toBe(0);
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  // AC04: CLI exits with the subprocess exit code.
+  it("US-003-AC04: CLI exits with non-zero when subprocess fails (bad PARALLAX_REPO_ROOT path)", async () => {
+    const { exitCode } = await runCLIWithEnv(
+      ["create", "image", "--model", "z_image", "--prompt", "test", "--models-dir", "/tmp"],
+      { PARALLAX_REPO_ROOT: "/nonexistent-parallax-root-12345" },
+    );
+    expect(exitCode).not.toBe(0);
+  });
+
+  it("US-003-AC04: CLI propagates subprocess exit code 3 verbatim", async () => {
+    const tmpRoot = await makeFakeZImageRoot("import sys; sys.exit(3)\n");
+    try {
+      const { exitCode } = await runCLIWithEnv(
+        ["create", "image", "--model", "z_image", "--prompt", "test", "--models-dir", "/tmp"],
+        { PARALLAX_REPO_ROOT: tmpRoot },
+      );
+      expect(exitCode).toBe(3);
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
   });
 });

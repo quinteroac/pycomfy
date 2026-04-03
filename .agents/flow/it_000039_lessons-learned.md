@@ -36,3 +36,22 @@
 **Useful Context for Future Agents:**
 - When US-001 was implemented, the agent pre-wired `anima` and `z_image` into `IMAGE_SCRIPTS` alongside `sdxl`, so US-002 and US-003 only needed test coverage — not production code changes.
 - The pattern `runCLIWithEnv([...], { PARALLAX_REPO_ROOT: undefined })` is the canonical way to test flag-forwarding without actually spawning a real subprocess — it triggers the `PARALLAX_REPO_ROOT` guard after all flag parsing succeeds.
+
+## US-003 — z_image image generation via CLI
+
+**Summary:** Added 9 tests to `packages/parallax_cli/src/index.test.ts` covering all 5 acceptance criteria for the z_image turbo pipeline CLI integration. No production code changes were needed — the CLI already had z_image wired in `IMAGE_SCRIPTS` and the special-casing for dropping `--negative-prompt`/`--cfg`.
+
+**Key Decisions:**
+- Used temporary directories with fake Python scripts (created via `fs/promises` + `os.tmpdir()`) to test subprocess argument forwarding (AC02) and non-forwarding (AC03) without needing real model weights.
+- For AC03, the fake script exits code 2 if it receives forbidden flags — the test asserts exit code 0, giving a clear signal if the CLI regresses and starts forwarding those flags.
+- For AC04, the subprocess exit code propagation was tested both with a bad `PARALLAX_REPO_ROOT` (non-zero exit) and a fake script that exits with code 3 (exact propagation).
+- Added `import { mkdtemp, mkdir, writeFile, rm } from "fs/promises"` and `import { tmpdir } from "os"` to the test file — both are Node-compatible APIs supported by Bun.
+
+**Pitfalls Encountered:**
+- The describe block name `(US-003)` conflicts with the existing `parallax CLI — edit subcommand help (US-003)` block. Used `(US-003-it39)` as a suffix to avoid confusion — Bun doesn't care about duplicate describe labels, but it is confusing for humans.
+- The `makeFakeZImageRoot` helper must create the full relative path `examples/image/generation/z_image/turbo.py` under the temp dir, matching the `IMAGE_SCRIPTS` map in `index.ts`.
+
+**Useful Context for Future Agents:**
+- The fake-script pattern (create a Python script in a temp dir, point `PARALLAX_REPO_ROOT` at it) is the canonical way to test exact argument forwarding in this CLI test suite. Reuse `makeFakeZImageRoot` or an equivalent helper for other pipeline models.
+- All temp dirs are cleaned up via `rm(tmpRoot, { recursive: true, force: true })` in a `finally` block — this pattern should be followed for any future subprocess tests.
+- The test file now requires `fs/promises` and `os` imports — they are at the top of the file alongside the existing `bun:test` and `path` imports.
