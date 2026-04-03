@@ -33,3 +33,21 @@
 - The config file location `~/.config/parallax/config.json` is the single source of truth — if future stories need to change this path, update it in `config.ts` only.
 - `writeConfig` creates the `~/.config/parallax/` directory recursively if it doesn't exist, so callers don't need to check.
 - Tests back up and restore the real `~/.config/parallax/config.json` so they won't corrupt a developer's config if run on a machine that already has one.
+
+## US-003 — Decoupled subprocess runner (`runner.ts`)
+
+**Summary:** Created `packages/parallax_cli/src/runner.ts` exporting `spawnPipeline(scriptRelPath, args, config)`. Updated `index.ts` to import `readConfig` from `config.ts` and `spawnPipeline` from `runner.ts`, passing the resolved config object at each call site. Removed the local `spawnPipeline` function from `index.ts`.
+
+**Key Decisions:**
+- `runner.ts` accepts `ParallaxConfig` (imported as a type) — `repoRoot` and `uvPath` come from the config object. `uvPath` defaults to `"uv"` via destructuring default.
+- `index.ts` calls `readConfig()` inline at each `spawnPipeline(script, args, readConfig())` call site. This is safe because `readConfig()` is pure/idempotent.
+- Backward compat is fully handled by `readConfig()` in `config.ts` which already reads `PARALLAX_REPO_ROOT` and `PYCOMFY_MODELS_DIR` from env and merges them over stored config values.
+
+**Pitfalls Encountered:**
+- When editing `index.ts` to replace the local function, an edit accidentally dropped the `});` closing and `create\n  .command("video")` lines, causing a TypeScript syntax error. Always verify the structure around multi-line replacements.
+- AC03 test assertions using `.not.toContain("PARALLAX_REPO_ROOT is required")` fail when `uv` is not in PATH: Bun includes source code context in exception stack traces, and the string appears as a code excerpt inside the trace. Fix: use `.not.toMatch(/^Error: PARALLAX_REPO_ROOT is required/)` to match only the console.error output at the start of stderr, not within a stack trace body.
+
+**Useful Context for Future Agents:**
+- `runner.ts` must never reference `process.env` directly — it always receives values through the `ParallaxConfig` parameter.
+- When `uv` is not in PATH, Bun throws an ENOENT exception whose stderr output begins with source-context line numbers (e.g. `"13 |  if (!repoRoot)"`), not with `"Error:"`. Use this characteristic to distinguish spawn failures from CLI validation errors in tests.
+- The 11 `ace_step model component flags` test failures in `index.test.ts` are pre-existing (they test a yet-to-be-implemented story) and are unrelated to this story.

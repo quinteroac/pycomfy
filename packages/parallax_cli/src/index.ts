@@ -1,7 +1,8 @@
 #!/usr/bin/env bun
-import { join } from "path";
 import { existsSync } from "fs";
 import { Command } from "commander";
+import { readConfig } from "./config";
+import { spawnPipeline } from "./runner";
 
 // Known models per action+media — single source of truth for help text and validation
 const MODELS: Record<string, string[]> = {
@@ -56,22 +57,6 @@ function validateModel(key: string, model: string): void {
 function notImplemented(action: string, media: string, model: string): never {
   console.log(`[parallax] ${action} ${media} --model ${model} — not yet implemented (coming soon)`);
   process.exit(0);
-}
-
-// Spawn `uv run python <script>` with inherited stdio; exit with the child's exit code.
-async function spawnPipeline(scriptRelPath: string, args: string[]): Promise<void> {
-  const repoRoot = process.env.PARALLAX_REPO_ROOT;
-  if (!repoRoot) {
-    console.error("Error: PARALLAX_REPO_ROOT is required");
-    process.exit(1);
-  }
-
-  const proc = Bun.spawn(
-    ["uv", "run", "python", join(repoRoot, scriptRelPath), ...args],
-    { stdin: "inherit", stdout: "inherit", stderr: "inherit", cwd: repoRoot },
-  );
-
-  process.exit(await proc.exited);
 }
 
 const program = new Command();
@@ -146,7 +131,7 @@ create
 
     if (opts.seed !== undefined) args.push("--seed", opts.seed);
 
-    await spawnPipeline(script, args);
+    await spawnPipeline(script, args, readConfig());
   });
 
 create
@@ -208,7 +193,7 @@ create
 
     if (opts.seed !== undefined) args.push("--seed", opts.seed);
 
-    await spawnPipeline(script, args);
+    await spawnPipeline(script, args, readConfig());
   });
 
 create
@@ -252,7 +237,7 @@ create
 
     if (opts.seed !== undefined) args.push("--seed", opts.seed);
 
-    await spawnPipeline(script, args);
+    await spawnPipeline(script, args, readConfig());
   });
 
 // ── edit ──────────────────────────────────────────────────────────────────────
