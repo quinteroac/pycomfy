@@ -24,7 +24,7 @@ import pytest
 # ---------------------------------------------------------------------------
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
-_EXAMPLES_DIR = _REPO_ROOT / "examples" / "video" / "ltx"
+_EXAMPLES_DIR = _REPO_ROOT / "packages" / "parallax_cli" / "runtime" / "video" / "ltx"
 
 _CANNY_SCRIPT = _EXAMPLES_DIR / "ltx2" / "canny.py"
 _DEPTH_SCRIPT = _EXAMPLES_DIR / "ltx2" / "depth.py"

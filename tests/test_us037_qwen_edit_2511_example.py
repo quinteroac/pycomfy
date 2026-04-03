@@ -38,7 +38,7 @@ import pytest
 # ---------------------------------------------------------------------------
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
-_SCRIPT = _REPO_ROOT / "examples" / "image" / "edit" / "qwen" / "edit_2511.py"
+_SCRIPT = _REPO_ROOT / "packages" / "parallax_cli" / "runtime" / "image" / "edit" / "qwen" / "edit_2511.py"
 
 # Heavy modules that must NOT be imported at the module top level.
 _FORBIDDEN_TOP_LEVEL = {

@@ -23,11 +23,11 @@ import pytest
 # ---------------------------------------------------------------------------
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
-_EXAMPLES_DIR = _REPO_ROOT / "examples"
+_EXAMPLES_DIR = _REPO_ROOT / "packages" / "parallax_cli" / "runtime"
 
-_T2V_SCRIPT = _EXAMPLES_DIR / "video_wan21_t2v.py"
-_I2V_SCRIPT = _EXAMPLES_DIR / "video_wan21_i2v.py"
-_FLF2V_SCRIPT = _EXAMPLES_DIR / "video_wan21_flf2v.py"
+_T2V_SCRIPT = _EXAMPLES_DIR / "video" / "wan" / "wan21" / "t2v.py"
+_I2V_SCRIPT = _EXAMPLES_DIR / "video" / "wan" / "wan21" / "i2v.py"
+_FLF2V_SCRIPT = _EXAMPLES_DIR / "video" / "wan" / "wan21" / "flf2v.py"
 
 _ALL_SCRIPTS = [
     pytest.param(_T2V_SCRIPT, id="t2v"),
