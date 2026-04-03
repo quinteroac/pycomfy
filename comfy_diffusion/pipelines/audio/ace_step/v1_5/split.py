@@ -64,7 +64,7 @@ __all__ = ["manifest", "run"]
 _HF_REPO = "Comfy-Org/ace_step_1.5_ComfyUI_files"
 
 # Relative destination paths (resolved against models_dir by download_models).
-_UNET_DEST = Path("diffusion_models") / "acestep_v1.5_turbo.safetensors"
+_UNET_DEST = Path("diffusion_models") / "acestep_v1.5_base.safetensors"
 _CLIP_0_6B_DEST = Path("text_encoders") / "qwen_0.6b_ace15.safetensors"
 _CLIP_1_7B_DEST = Path("text_encoders") / "qwen_1.7b_ace15.safetensors"
 _VAE_DEST = Path("vae") / "ace_1.5_vae.safetensors"
@@ -88,22 +88,22 @@ def manifest() -> list[ModelEntry]:
     return [
         HFModelEntry(
             repo_id=_HF_REPO,
-            filename="diffusion_models/acestep_v1.5_turbo.safetensors",
+            filename="split_files/diffusion_models/acestep_v1.5_base.safetensors",
             dest=_UNET_DEST,
         ),
         HFModelEntry(
             repo_id=_HF_REPO,
-            filename="text_encoders/qwen_0.6b_ace15.safetensors",
+            filename="split_files/text_encoders/qwen_0.6b_ace15.safetensors",
             dest=_CLIP_0_6B_DEST,
         ),
         HFModelEntry(
             repo_id=_HF_REPO,
-            filename="text_encoders/qwen_1.7b_ace15.safetensors",
+            filename="split_files/text_encoders/qwen_1.7b_ace15.safetensors",
             dest=_CLIP_1_7B_DEST,
         ),
         HFModelEntry(
             repo_id=_HF_REPO,
-            filename="vae/ace_1.5_vae.safetensors",
+            filename="split_files/vae/ace_1.5_vae.safetensors",
             dest=_VAE_DEST,
         ),
     ]

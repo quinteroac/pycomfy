@@ -1,0 +1,71 @@
+{
+  "iteration": "000039",
+  "prd_index": "001",
+  "prd_file": "it_000039_product-requirement-document_001.md",
+  "generated_at": "2026-04-03T05:51:43.522Z",
+  "executive_summary": "The implementation in packages/parallax_cli/src/index.ts fully satisfies all functional requirements and user story acceptance criteria defined in PRD-001. The create image action handler correctly dispatches to the three Python scripts (sdxl, anima, z_image), resolves PARALLAX_REPO_ROOT for script path construction, spawns subprocesses via `uv run python` with inherited stdio, propagates the child's exit code, and handles models-dir resolution from either the --models-dir flag or PYCOMFY_MODELS_DIR env var with a clear error when neither is present. The z_image turbo special case (omitting --negative-prompt and --cfg) is correctly implemented. TypeScript type-checking passes cleanly.",
+  "verification_by_fr": [
+    {
+      "frId": "FR-1",
+      "assessment": "comply",
+      "notes": "IMAGE_SCRIPTS map correctly routes sdxl → examples/image/generation/sdxl/t2i.py, anima → examples/image/generation/anima/t2i.py, z_image → examples/image/generation/z_image/turbo.py. Models absent from the map fall through to notImplemented()."
+    },
+    {
+      "frId": "FR-2",
+      "assessment": "comply",
+      "notes": "spawnPipeline() checks process.env.PARALLAX_REPO_ROOT, prints 'Error: PARALLAX_REPO_ROOT is required' and calls process.exit(1) when unset. Script path is constructed with join(repoRoot, scriptRelPath)."
+    },
+    {
+      "frId": "FR-3",
+      "assessment": "comply",
+      "notes": "Subprocess is spawned as ['uv', 'run', 'python', <scriptPath>, ...args] in spawnPipeline()."
+    },
+    {
+      "frId": "FR-4",
+      "assessment": "comply",
+      "notes": "FR-4a (env var): opts.modelsDir ?? process.env.PYCOMFY_MODELS_DIR. FR-4b (explicit flag): --models-dir option defined and takes precedence via the ?? operator. Resolved value passed as --models-dir <path> to the subprocess."
+    },
+    {
+      "frId": "FR-5",
+      "assessment": "comply",
+      "notes": "Bun.spawn called with { stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' }."
+    },
+    {
+      "frId": "FR-6",
+      "assessment": "comply",
+      "notes": "process.exit(await proc.exited) propagates the child process exit code."
+    },
+    {
+      "frId": "FR-7",
+      "assessment": "comply",
+      "notes": "The guard `if (opts.model !== 'z_image')` prevents both --negative-prompt and --cfg from being appended for z_image. Confirmed against turbo.py which accepts neither flag."
+    }
+  ],
+  "verification_by_us": [
+    {
+      "usId": "US-001",
+      "assessment": "comply",
+      "notes": "sdxl dispatches to sdxl/t2i.py. All flags (--negative-prompt, --width, --height, --steps, --cfg, --seed, --output) forwarded correctly. PYCOMFY_MODELS_DIR / --models-dir guard prints correct error and exits 1. tsc --noEmit passes."
+    },
+    {
+      "usId": "US-002",
+      "assessment": "comply",
+      "notes": "anima dispatches to anima/t2i.py. Same flag forwarding as sdxl. Exit code propagated. tsc --noEmit passes."
+    },
+    {
+      "usId": "US-003",
+      "assessment": "comply",
+      "notes": "z_image dispatches to z_image/turbo.py. --width, --height, --steps, --seed, --output forwarded; --prompt also forwarded (required by turbo.py). --negative-prompt and --cfg silently omitted via model guard. tsc --noEmit passes."
+    },
+    {
+      "usId": "US-004",
+      "assessment": "comply",
+      "notes": "PYCOMFY_MODELS_DIR read from env; --models-dir flag overrides via ?? operator. Error message matches spec exactly: 'Error: --models-dir or PYCOMFY_MODELS_DIR is required'. Resolved path passed as --models-dir to subprocess."
+    }
+  ],
+  "minor_observations": [
+    "The --prompt flag is forwarded to z_image turbo even though the AC only lists --width/--height/--steps/--seed/--output. This is correct behaviour — turbo.py accepts --prompt and it is a required field — but the AC omitted it from the list, which may cause confusion during manual review.",
+    "The --cfg default value of '7' is always present in opts.cfg (commander sets defaults). For non-z_image models, CFG is always forwarded even when the user did not explicitly set it. This is acceptable given the default is intentional, but worth noting."
+  ],
+  "conclusions_and_recommendations": "The prototype fully satisfies PRD-001 with no gaps or non-compliance. All seven functional requirements and all four user story acceptance criteria are met. The codebase is clean, TypeScript type-checking passes, and the subprocess wiring is correct. Recommended next step: proceed to the Refactor phase. No corrective changes are required before refactoring."
+}

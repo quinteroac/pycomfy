@@ -168,10 +168,8 @@ def main() -> int:
         fps=args.fps,
         cfg=args.cfg,
         seed=args.seed,
-        guide_strength_pass1=args.guide_strength_pass1,
-        guide_strength_pass2=args.guide_strength_pass2,
-        distilled_lora_strength=args.distilled_lora_strength,
-        te_lora_strength=args.te_lora_strength,
+        # i2v currently uses a single guide strength in comfy_diffusion.
+        guide_strength=args.guide_strength_pass2,
     )
 
     frames = result["frames"]

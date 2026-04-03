@@ -1,0 +1,37 @@
+{
+  "iteration": "000039",
+  "prd_index": "001",
+  "overall_assessment": "comply",
+  "generated_at": "2026-04-03T05:51:43.522Z",
+  "refactor_tasks": [
+    {
+      "id": "RT-001",
+      "title": "Add critical-path unit tests",
+      "priority": "high",
+      "description": "Add pytest/bun tests covering: PARALLAX_REPO_ROOT missing → exit 1; PYCOMFY_MODELS_DIR missing → exit 1; z_image excludes --cfg and --negative-prompt; correct script path selected per model."
+    },
+    {
+      "id": "RT-002",
+      "title": "Add doc comment for z_image exclusion",
+      "priority": "low",
+      "description": "Add a short comment above the z_image guard block explaining why --negative-prompt and --cfg are omitted for z_image turbo."
+    }
+  ],
+  "compliance_summary": {
+    "fr_results": [
+      { "frId": "FR-1", "assessment": "comply" },
+      { "frId": "FR-2", "assessment": "comply" },
+      { "frId": "FR-3", "assessment": "comply" },
+      { "frId": "FR-4", "assessment": "comply" },
+      { "frId": "FR-5", "assessment": "comply" },
+      { "frId": "FR-6", "assessment": "comply" },
+      { "frId": "FR-7", "assessment": "comply" }
+    ],
+    "us_results": [
+      { "usId": "US-001", "assessment": "comply" },
+      { "usId": "US-002", "assessment": "comply" },
+      { "usId": "US-003", "assessment": "comply" },
+      { "usId": "US-004", "assessment": "comply" }
+    ]
+  }
+}

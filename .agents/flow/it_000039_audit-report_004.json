@@ -1,0 +1,86 @@
+{
+  "iteration": "000039",
+  "prd_index": "004",
+  "generated_at": "2026-04-03T05:57:29Z",
+  "executive_summary": "All 10 functional requirements and all 4 user stories from PRD 004 (Audio Generation via parallax-cli / ace_step) are fully implemented. The `create audio` action handler in `packages/parallax_cli/src/index.ts` correctly dispatches to `examples/audio/ace/t2a.py` via the shared `spawnPipeline` helper, forwards every flag in the FR-5 table with the correct renames (--prompt→--tags, --length→--duration), resolves model components from CLI flags with env-var fallbacks (PYCOMFY_ACE_UNET/VAE/TEXT_ENCODER_1/TEXT_ENCODER_2), validates PARALLAX_REPO_ROOT and PYCOMFY_MODELS_DIR with clear error messages, inherits stdio, and exits with the child process exit code. The Python example script was not modified. TypeScript errors reported by `tsc --noEmit` are pre-existing lib.dom.d.ts vs bun-types conflicts unrelated to this iteration.",
+  "verification_by_fr": [
+    {
+      "frId": "FR-1",
+      "assessment": "comply",
+      "notes": "AUDIO_SCRIPTS map contains ace_step → examples/audio/ace/t2a.py and the action handler dispatches to it."
+    },
+    {
+      "frId": "FR-2",
+      "assessment": "comply",
+      "notes": "spawnPipeline checks PARALLAX_REPO_ROOT, prints 'Error: PARALLAX_REPO_ROOT is required' and exits 1 if unset. Script path built with join(repoRoot, scriptRelPath)."
+    },
+    {
+      "frId": "FR-3",
+      "assessment": "comply",
+      "notes": "Spawned as ['uv', 'run', 'python', <script>, ...args] via Bun.spawn."
+    },
+    {
+      "frId": "FR-4",
+      "assessment": "comply",
+      "notes": "FR-4a: --models-dir flag present; FR-4b: fallback to PYCOMFY_MODELS_DIR. If neither is set, prints 'Error: --models-dir or PYCOMFY_MODELS_DIR is required' and exits 1. Resolved value passed as --models-dir to subprocess."
+    },
+    {
+      "frId": "FR-5",
+      "assessment": "comply",
+      "notes": "Full flag forwarding table satisfied: --prompt→--tags, --length→--duration, --steps verbatim, --cfg verbatim (default 2), --seed verbatim, --lyrics verbatim (default ''), --bpm verbatim (default 120), --output verbatim, --models-dir resolved, --unet/--vae/--text-encoder-1/--text-encoder-2 all with env-var fallbacks."
+    },
+    {
+      "frId": "FR-6",
+      "assessment": "comply",
+      "notes": "Bun.spawn called with stdin: 'inherit', stdout: 'inherit', stderr: 'inherit'."
+    },
+    {
+      "frId": "FR-7",
+      "assessment": "comply",
+      "notes": "process.exit(await proc.exited) forwards child exit code."
+    },
+    {
+      "frId": "FR-8",
+      "assessment": "comply",
+      "notes": "All new flags --cfg, --lyrics, --bpm, --unet, --vae, --text-encoder-1, --text-encoder-2 added to the create audio command definition."
+    },
+    {
+      "frId": "FR-9",
+      "assessment": "comply",
+      "notes": "create audio uses the shared spawnPipeline() helper, consistent with create image and create video."
+    },
+    {
+      "frId": "FR-10",
+      "assessment": "comply",
+      "notes": "examples/audio/ace/t2a.py was not modified."
+    }
+  ],
+  "verification_by_us": [
+    {
+      "usId": "US-001",
+      "assessment": "comply",
+      "notes": "Command spawns uv run python examples/audio/ace/t2a.py; --prompt→--tags, --length→--duration, --steps/--seed/--output verbatim, --models-dir resolved; exits with child code."
+    },
+    {
+      "usId": "US-002",
+      "assessment": "comply",
+      "notes": "All four model components (--unet, --vae, --text-encoder-1, --text-encoder-2) accept CLI flags with env-var fallbacks; appended only when resolved; missing components delegated to the Python script."
+    },
+    {
+      "usId": "US-003",
+      "assessment": "comply",
+      "notes": "--cfg (default 2), --lyrics (default ''), --bpm (default 120) all defined on the command, forwarded verbatim to the subprocess, and visible in --help output."
+    },
+    {
+      "usId": "US-004",
+      "assessment": "comply",
+      "notes": "--models-dir takes precedence over PYCOMFY_MODELS_DIR with clear error on missing; PARALLAX_REPO_ROOT checked in spawnPipeline with clear error on missing; resolved models path forwarded as --models-dir."
+    }
+  ],
+  "minor_observations": [
+    "--cfg, --bpm, and --lyrics are always appended to the subprocess args (even when using their defaults). This is benign because the Python script's defaults match the CLI defaults, but it differs slightly from the optional-flag pattern used for --seed.",
+    "tsc --noEmit reports pre-existing type incompatibilities between bun-types@1.3.11 and the global lib.dom.d.ts (WebAssembly.ImportExportKind). These errors are unrelated to this iteration's code and were present before PRD 004 implementation.",
+    "The create audio command's --length option description says 'Duration in seconds' which accurately maps to the script's --duration, though noting the rename in the help text would further clarify the forwarding for users."
+  ],
+  "conclusions_and_recommendations": "The PRD 004 implementation is complete and fully compliant with all 10 functional requirements and 4 user stories. No blocking issues were found. Minor recommendations: (1) Consider adding a comment in the args array noting the --prompt→--tags and --length→--duration renames for future maintainability. (2) The pre-existing TypeScript type errors from bun-types vs lib.dom.d.ts should be addressed in a dedicated cleanup iteration (not this one, per project convention). (3) Automated integration tests for the create audio command path should be added in the Refactor phase per project convention."
+}

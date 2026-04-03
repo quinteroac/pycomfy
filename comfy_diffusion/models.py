@@ -98,6 +98,30 @@ class ModelManager:
         model, clip, vae = loaded[:3]
         return CheckpointResult(model=model, clip=clip, vae=vae)
 
+    def load_checkpoint_from_path(self, path: str | Path) -> CheckpointResult:
+        """Load a checkpoint from an absolute path, extracting model, clip, and vae.
+
+        Equivalent to ComfyUI's ``CheckpointLoaderSimple`` — works with bundled
+        checkpoints that contain both the diffusion model and the VAE.
+        """
+        ensure_comfyui_on_path()
+
+        import folder_paths
+        from comfy import sd as comfy_sd
+
+        p = Path(path)
+        if not p.is_absolute() or not p.is_file():
+            raise FileNotFoundError(f"checkpoint file not found: {p}")
+
+        loaded = comfy_sd.load_checkpoint_guess_config(
+            str(p),
+            output_vae=True,
+            output_clip=False,
+            embedding_directory=folder_paths.get_folder_paths("embeddings"),
+        )
+        model, clip, vae = loaded[:3]
+        return CheckpointResult(model=model, clip=clip, vae=vae)
+
     def load_vae(self, path: str | Path) -> Any:
         """Load a standalone VAE from a path or filename.
 

@@ -1,4 +1,6 @@
 #!/usr/bin/env bun
+import { join } from "path";
+import { existsSync } from "fs";
 import { Command } from "commander";
 
 // Known models per action+media — single source of truth for help text and validation
@@ -8,6 +10,34 @@ const MODELS: Record<string, string[]> = {
   "create audio": ["ace_step"],
   "edit image": ["qwen"],
   "edit video": ["wan21", "wan22"],
+};
+
+// Script paths (relative to PARALLAX_REPO_ROOT) for each implemented image model.
+// Models absent from this map fall through to notImplemented().
+const IMAGE_SCRIPTS: Partial<Record<string, string>> = {
+  sdxl:    "examples/image/generation/sdxl/t2i.py",
+  anima:   "examples/image/generation/anima/t2i.py",
+  z_image: "examples/image/generation/z_image/turbo.py",
+};
+
+// Per-model video config: script paths and flag-forwarding rules.
+interface VideoModelConfig {
+  t2v: string;
+  i2v?: string;       // i2v.py path; defined for models that support image-to-video
+  cfgFlag: string;    // "--cfg" or "--cfg-pass1" depending on model interface
+  omitSteps?: true;   // set for distilled models that accept no --steps argument
+}
+
+const VIDEO_MODEL_CONFIG: Record<string, VideoModelConfig> = {
+  ltx2:  { t2v: "examples/video/ltx/ltx2/t2v.py",  i2v: "examples/video/ltx/ltx2/i2v.py",  cfgFlag: "--cfg-pass1" },
+  ltx23: { t2v: "examples/video/ltx/ltx23/t2v.py", i2v: "examples/video/ltx/ltx23/i2v.py", cfgFlag: "--cfg", omitSteps: true },
+  wan21: { t2v: "examples/video/wan/wan21/t2v.py",  i2v: "examples/video/wan/wan21/i2v.py",  cfgFlag: "--cfg" },
+  wan22: { t2v: "examples/video/wan/wan22/t2v.py",  i2v: "examples/video/wan/wan22/i2v.py",  cfgFlag: "--cfg" },
+};
+
+// Script paths for each implemented audio model.
+const AUDIO_SCRIPTS: Partial<Record<string, string>> = {
+  ace_step: "examples/audio/ace/t2a.py",
 };
 
 function modelsFooter(key: string): string {
@@ -26,6 +56,22 @@ function validateModel(key: string, model: string): void {
 function notImplemented(action: string, media: string, model: string): never {
   console.log(`[parallax] ${action} ${media} --model ${model} — not yet implemented (coming soon)`);
   process.exit(0);
+}
+
+// Spawn `uv run python <script>` with inherited stdio; exit with the child's exit code.
+async function spawnPipeline(scriptRelPath: string, args: string[]): Promise<void> {
+  const repoRoot = process.env.PARALLAX_REPO_ROOT;
+  if (!repoRoot) {
+    console.error("Error: PARALLAX_REPO_ROOT is required");
+    process.exit(1);
+  }
+
+  const proc = Bun.spawn(
+    ["uv", "run", "python", join(repoRoot, scriptRelPath), ...args],
+    { stdin: "inherit", stdout: "inherit", stderr: "inherit", cwd: repoRoot },
+  );
+
+  process.exit(await proc.exited);
 }
 
 const program = new Command();
@@ -66,14 +112,49 @@ create
   .option("--cfg <value>", "CFG guidance scale", "7")
   .option("--seed <n>", "Random seed for reproducibility")
   .option("--output <path>", "Output file path", "output.png")
+  .option("--models-dir <path>", "Models directory (overrides PYCOMFY_MODELS_DIR)")
   .addHelpText("after", modelsFooter("create image"))
-  .action((opts) => { validateModel("create image", opts.model); notImplemented("create", "image", opts.model); });
+  .action(async (opts) => {
+    validateModel("create image", opts.model);
+
+    const script = IMAGE_SCRIPTS[opts.model];
+    if (!script) {
+      notImplemented("create", "image", opts.model);
+    }
+
+    const modelsDir = opts.modelsDir ?? process.env.PYCOMFY_MODELS_DIR;
+    if (!modelsDir) {
+      console.error("Error: --models-dir or PYCOMFY_MODELS_DIR is required");
+      process.exit(1);
+    }
+
+    const args: string[] = [
+      "--models-dir", modelsDir,
+      "--prompt", opts.prompt,
+      "--width", opts.width,
+      "--height", opts.height,
+      "--steps", opts.steps,
+      "--output", opts.output,
+    ];
+
+    // z_image turbo.py accepts neither --negative-prompt nor --cfg; omit both to
+    // avoid "unrecognized arguments" errors from the Python script.
+    if (opts.model !== "z_image") {
+      if (opts.negativePrompt) args.push("--negative-prompt", opts.negativePrompt);
+      args.push("--cfg", opts.cfg);
+    }
+
+    if (opts.seed !== undefined) args.push("--seed", opts.seed);
+
+    await spawnPipeline(script, args);
+  });
 
 create
   .command("video")
   .description("Generate a video from a text prompt")
   .requiredOption("--model <name>", `Model to use (choices: ${MODELS["create video"].join(", ")})`)
   .requiredOption("--prompt <text>", "Text prompt describing the video to generate")
+  .option("--input <path>", "Input image path for image-to-video (ltx2, ltx23, wan21, wan22)")
   .option("--width <pixels>", "Video width in pixels", "832")
   .option("--height <pixels>", "Video height in pixels", "480")
   .option("--length <frames>", "Number of frames to generate", "81")
@@ -81,8 +162,54 @@ create
   .option("--cfg <value>", "CFG guidance scale", "6")
   .option("--seed <n>", "Random seed for reproducibility")
   .option("--output <path>", "Output file path", "output.mp4")
+  .option("--models-dir <path>", "Models directory (overrides PYCOMFY_MODELS_DIR)")
   .addHelpText("after", modelsFooter("create video"))
-  .action((opts) => { validateModel("create video", opts.model); notImplemented("create", "video", opts.model); });
+  .action(async (opts) => {
+    validateModel("create video", opts.model);
+
+    if (opts.input !== undefined && !existsSync(opts.input)) {
+      console.error(`Error: input file not found: ${opts.input}`);
+      process.exit(1);
+    }
+
+    const modelConfig = VIDEO_MODEL_CONFIG[opts.model];
+    const useI2v = opts.input !== undefined && modelConfig?.i2v !== undefined;
+    const script = modelConfig
+      ? (useI2v ? modelConfig.i2v! : modelConfig.t2v)
+      : undefined;
+
+    if (!script) {
+      notImplemented("create", "video", opts.model);
+    }
+
+    const modelsDir = opts.modelsDir ?? process.env.PYCOMFY_MODELS_DIR;
+    if (!modelsDir) {
+      console.error("Error: --models-dir or PYCOMFY_MODELS_DIR is required");
+      process.exit(1);
+    }
+
+    const args: string[] = [
+      "--models-dir", modelsDir,
+      "--prompt", opts.prompt,
+      "--width", opts.width,
+      "--height", opts.height,
+      "--length", opts.length,
+      "--output", opts.output,
+    ];
+
+    // i2v.py expects --image (not --input) for the source frame
+    if (useI2v) args.push("--image", opts.input!);
+
+    // Distilled models omit --steps; all others receive it
+    if (!modelConfig?.omitSteps) args.push("--steps", opts.steps);
+
+    // Per-model cfg flag name (e.g. --cfg-pass1 for ltx2)
+    args.push(modelConfig?.cfgFlag ?? "--cfg", opts.cfg);
+
+    if (opts.seed !== undefined) args.push("--seed", opts.seed);
+
+    await spawnPipeline(script, args);
+  });
 
 create
   .command("audio")
@@ -91,10 +218,42 @@ create
   .requiredOption("--prompt <text>", "Text prompt describing the audio to generate")
   .option("--length <seconds>", "Duration in seconds", "30")
   .option("--steps <n>", "Number of sampling steps", "60")
+  .option("--cfg <value>", "CFG guidance scale", "2")
+  .option("--bpm <n>", "Beats per minute", "120")
+  .option("--lyrics <text>", "Lyrics text (ace_step)", "")
   .option("--seed <n>", "Random seed for reproducibility")
   .option("--output <path>", "Output file path", "output.wav")
+  .option("--models-dir <path>", "Models directory (overrides PYCOMFY_MODELS_DIR)")
   .addHelpText("after", modelsFooter("create audio"))
-  .action((opts) => { validateModel("create audio", opts.model); notImplemented("create", "audio", opts.model); });
+  .action(async (opts) => {
+    validateModel("create audio", opts.model);
+
+    const script = AUDIO_SCRIPTS[opts.model];
+    if (!script) {
+      notImplemented("create", "audio", opts.model);
+    }
+
+    const modelsDir = opts.modelsDir ?? process.env.PYCOMFY_MODELS_DIR;
+    if (!modelsDir) {
+      console.error("Error: --models-dir or PYCOMFY_MODELS_DIR is required");
+      process.exit(1);
+    }
+
+    const args: string[] = [
+      "--models-dir", modelsDir,
+      "--tags", opts.prompt,         // CLI --prompt → script --tags
+      "--duration", opts.length,     // CLI --length → script --duration
+      "--steps", opts.steps,
+      "--cfg", opts.cfg,
+      "--bpm", opts.bpm,
+      "--lyrics", opts.lyrics,
+      "--output", opts.output,
+    ];
+
+    if (opts.seed !== undefined) args.push("--seed", opts.seed);
+
+    await spawnPipeline(script, args);
+  });
 
 // ── edit ──────────────────────────────────────────────────────────────────────
 

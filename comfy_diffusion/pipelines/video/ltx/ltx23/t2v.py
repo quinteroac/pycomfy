@@ -209,8 +209,11 @@ def run(
     audio_vae_path = Path(audio_vae_filename) if audio_vae_filename else vae_path
 
     # Load models.
-    model = mm.load_unet(unet_path)
-    vae = mm.load_vae(vae_path)
+    # The LTX-Video 2.3 distilled checkpoint bundles UNet + VAE, so load it
+    # through the checkpoint path when no explicit VAE override is provided.
+    ckpt = mm.load_checkpoint_from_path(unet_path)
+    model = ckpt.model
+    vae = ckpt.vae if vae_filename is None else mm.load_vae(vae_path)
     audio_vae = mm.load_ltxv_audio_vae(audio_vae_path)
     clip = mm.load_ltxav_text_encoder(te_path, unet_path)
 

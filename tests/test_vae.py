@@ -435,7 +435,7 @@ def test_vae_decode_batch_tiled_with_4d_samples_calls_decode_tiled_per_frame() -
     assert all(isinstance(image, Image.Image) for image in images)
 
 
-def test_vae_decode_batch_tiled_with_5d_samples_flattens_batch_and_time() -> None:
+def test_vae_decode_batch_tiled_with_5d_samples_decodes_temporally() -> None:
     samples = _FakeTensor(
         [
             [
@@ -460,13 +460,54 @@ def test_vae_decode_batch_tiled_with_5d_samples_flattens_batch_and_time() -> Non
             overlap: int,
         ) -> _FakeTensor:
             calls.append((value.tolist(), tile_x, tile_y, overlap))
-            return _FakeTensor([[[[0.2, 0.4, 0.6]]]])
+            # Return (B=2, T=2, H=1, W=1, C=3).
+            return _FakeTensor(
+                [
+                    [
+                        [[[0.2, 0.4, 0.6]]],
+                        [[[0.2, 0.4, 0.6]]],
+                    ],
+                    [
+                        [[[0.2, 0.4, 0.6]]],
+                        [[[0.2, 0.4, 0.6]]],
+                    ],
+                ]
+            )
 
     images = vae_decode_batch_tiled(_FakeVae(), {"samples": samples}, tile_size=128, overlap=16)
 
     assert len(images) == 4
-    assert len(calls) == 4
-    assert all(call[1:] == (128, 128, 16) for call in calls)
+    assert len(calls) == 1
+    assert calls[0][1:] == (128, 128, 16)
+
+
+def test_vae_decode_batch_tiled_with_bcthw_latent_preserves_channel_dim() -> None:
+    torch = pytest.importorskip("torch")
+
+    samples = torch.zeros((1, 128, 11, 16, 24), dtype=torch.float32)
+    seen_shapes: list[tuple[int, ...]] = []
+
+    class _FakeVae:
+        def decode_tiled(
+            self,
+            value: Any,
+            *,
+            tile_x: int,
+            tile_y: int,
+            overlap: int,
+        ) -> Any:
+            seen_shapes.append(tuple(value.shape))
+            assert tile_x == 64
+            assert tile_y == 64
+            assert overlap == 8
+            # Return a single decoded frame in BHWC format.
+            return torch.zeros((1, 8, 8, 3), dtype=torch.float32)
+
+    images = vae_decode_batch_tiled(_FakeVae(), {"samples": samples}, tile_size=64, overlap=8)
+
+    assert len(images) == 11
+    assert len(seen_shapes) == 1
+    assert seen_shapes[0] == (1, 128, 11, 16, 24)
 
 
 def test_vae_decode_batch_tiled_uses_decode_tiled_protocol_signature() -> None:

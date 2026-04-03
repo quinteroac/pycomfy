@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [000039] - 2026-04-03
+
+### Added
+- **PRD 001 — Image Generation via parallax-cli (sdxl, anima, z_image):** `parallax create image --model sdxl --prompt "..."` produces a PNG on disk.
+- **PRD 001 — Image Generation via parallax-cli (sdxl, anima, z_image):** `parallax create image --model anima --prompt "..."` produces a PNG on disk.
+- **PRD 001 — Image Generation via parallax-cli (sdxl, anima, z_image):** `parallax create image --model z_image --prompt "..."` produces a PNG on disk.
+- **PRD 001 — Image Generation via parallax-cli (sdxl, anima, z_image):** The models directory is resolved from the `PYCOMFY_MODELS_DIR` environment variable
+- **PRD 001 — Image Generation via parallax-cli (sdxl, anima, z_image):** The `--output` flag in the CLI maps directly to `--output` in the subprocess.
+- **PRD 002 — Video Generation via parallax-cli (ltx2, ltx23, wan21, wan22):** `parallax create video --model ltx2 --prompt "..."` produces an MP4 on disk.
+- **PRD 002 — Video Generation via parallax-cli (ltx2, ltx23, wan21, wan22):** `parallax create video --model ltx23 --prompt "..."` produces an MP4 on disk.
+- **PRD 002 — Video Generation via parallax-cli (ltx2, ltx23, wan21, wan22):** `parallax create video --model wan21 --prompt "..."` produces an MP4 on disk.
+- **PRD 002 — Video Generation via parallax-cli (ltx2, ltx23, wan21, wan22):** `parallax create video --model wan22 --prompt "..."` produces an MP4 on disk.
+- **PRD 002 — Video Generation via parallax-cli (ltx2, ltx23, wan21, wan22):** The models directory is resolved from `PYCOMFY_MODELS_DIR` / `--models-dir`
+- **PRD 002 — Video Generation via parallax-cli (ltx2, ltx23, wan21, wan22):** Env var and repo-root resolution follow the same pattern established in PRD 001
+- **PRD 003 — Image-to-Video Generation via parallax-cli (ltx2, ltx23, wan21, wan22):** `parallax create video --model ltx2 --input image.png --prompt "..."` produces an MP4.
+- **PRD 003 — Image-to-Video Generation via parallax-cli (ltx2, ltx23, wan21, wan22):** `parallax create video --model ltx23 --input image.png --prompt "..."` produces an MP4.
+- **PRD 003 — Image-to-Video Generation via parallax-cli (ltx2, ltx23, wan21, wan22):** `parallax create video --model wan21 --input image.png --prompt "..."` produces an MP4.
+- **PRD 003 — Image-to-Video Generation via parallax-cli (ltx2, ltx23, wan21, wan22):** `parallax create video --model wan22 --input image.png --prompt "..."` produces an MP4.
+- **PRD 003 — Image-to-Video Generation via parallax-cli (ltx2, ltx23, wan21, wan22):** The `--input` flag selects the i2v code path; omitting it preserves the existing t2v
+- **PRD 003 — Image-to-Video Generation via parallax-cli (ltx2, ltx23, wan21, wan22):** Flag forwarding follows each script's exact interface (e.g. `--cfg` → `--cfg-pass1`
+- **PRD 004 — Audio Generation via parallax-cli (ace_step):** `parallax create audio --model ace_step --prompt "electronic ambient" --output out.wav`
+- **PRD 004 — Audio Generation via parallax-cli (ace_step):** Model component filenames (`--unet`, `--vae`, `--text-encoder-1`, `--text-encoder-2`)
+- **PRD 004 — Audio Generation via parallax-cli (ace_step):** Extended generation parameters (`--cfg`, `--lyrics`, `--bpm`) are exposed as
+- **PRD 004 — Audio Generation via parallax-cli (ace_step):** Env var and repo-root resolution follow the same pattern established in PRDs 001–003
+
 ## [000038] - 2026-04-03
 
 ### Added

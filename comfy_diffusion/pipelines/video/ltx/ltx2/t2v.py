@@ -191,7 +191,7 @@ def run(
     from comfy_diffusion.lora import apply_lora
     from comfy_diffusion.models import ModelManager
     from comfy_diffusion.runtime import check_runtime
-    from comfy_diffusion.sampling import basic_scheduler, cfg_guider, get_sampler, random_noise, sample_custom
+    from comfy_diffusion.sampling import cfg_guider, get_sampler, ltxv_scheduler, manual_sigmas, random_noise, sample_custom
     from comfy_diffusion.vae import vae_decode_batch_tiled
 
     check_result = check_runtime()
@@ -216,14 +216,14 @@ def run(
     audio_vae_path = Path(audio_vae_filename) if audio_vae_filename else vae_path
 
     # Load models.
-    model = mm.load_unet(unet_path)
-    vae = mm.load_vae(vae_path)
+    # The LTX-Video 2 checkpoint bundles UNet + VAE in a single file, so use
+    # load_checkpoint_from_path (mirrors CheckpointLoaderSimple) to extract both.
+    ckpt = mm.load_checkpoint_from_path(unet_path)
+    model = ckpt.model
+    vae = ckpt.vae if vae_filename is None else mm.load_vae(vae_path)
     audio_vae = mm.load_ltxv_audio_vae(audio_vae_path)
     clip = mm.load_ltxav_text_encoder(te_path, unet_path)
     upscale_model = mm.load_latent_upscale_model(upscaler_path)
-
-    # Apply distilled LoRA.
-    model, clip = apply_lora(model, clip, lora_path, lora_strength, lora_strength)
 
     # Text conditioning + frame-rate metadata.
     positive, negative = encode_prompt(clip, prompt, negative_prompt)
@@ -234,17 +234,29 @@ def run(
     audio_latent = ltxv_empty_latent_audio(audio_vae, frames_number=length, frame_rate=fps)
     av_latent = ltxv_concat_av_latent(video_latent, audio_latent)
 
-    # Single-pass sampling.
-    sigmas = basic_scheduler(model, "lcm", steps)
-    guider = cfg_guider(model, positive, negative, cfg_pass2)
-    noise = random_noise(seed)
     sampler_obj = get_sampler("euler_ancestral")
-    _, denoised = sample_custom(noise, guider, sampler_obj, sigmas, av_latent)
 
-    # Separate, upsample video, decode.
-    video_latent_out, audio_latent_out = ltxv_separate_av_latent(denoised)
-    video_latent_up = ltxv_latent_upsample(video_latent_out, upscale_model=upscale_model, vae=vae)
-    frames = vae_decode_batch_tiled(vae, video_latent_up)
+    # Pass 1: base model, LTXVScheduler, half-resolution.
+    sigmas1 = ltxv_scheduler(steps, 2.05, 0.95, latent=av_latent)
+    guider1 = cfg_guider(model, positive, negative, cfg_pass1)
+    noise = random_noise(seed)
+    _, denoised1 = sample_custom(noise, guider1, sampler_obj, sigmas1, av_latent)
+
+    # Separate AV latent, spatially upsample video, re-concat for pass 2.
+    video_latent_out1, audio_latent_out1 = ltxv_separate_av_latent(denoised1)
+    video_latent_up = ltxv_latent_upsample(video_latent_out1, upscale_model=upscale_model, vae=vae)
+    av_latent2 = ltxv_concat_av_latent(video_latent_up, audio_latent_out1)
+
+    # Pass 2: distilled LoRA model, ManualSigmas, full resolution.
+    model_lora, _ = apply_lora(model, clip, lora_path, lora_strength, lora_strength)
+    sigmas2 = manual_sigmas("0.909375, 0.725, 0.421875, 0.0")
+    guider2 = cfg_guider(model_lora, positive, negative, cfg_pass2)
+    noise2 = random_noise(seed)
+    _, denoised2 = sample_custom(noise2, guider2, sampler_obj, sigmas2, av_latent2)
+
+    # Decode video and audio from pass-2 output.
+    video_latent_out, audio_latent_out = ltxv_separate_av_latent(denoised2)
+    frames = vae_decode_batch_tiled(vae, video_latent_out)
     audio = ltxv_audio_vae_decode(audio_vae, audio_latent_out)
 
     return {"frames": frames, "audio": audio}

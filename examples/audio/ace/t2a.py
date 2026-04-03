@@ -1,19 +1,33 @@
 #!/usr/bin/env python3
-"""
-ACE Step 1.5 text-to-audio example using comfy_diffusion.
+"""ACE Step 1.5 text-to-audio example using comfy_diffusion.
 
-Uses split components:
-    - UNet from diffusion_models/
-    - VAE from vae/
-    - 2 text encoders from text_encoders/ (ACE Step 1.5 uses DualCLIP)
+Uses the high-level ``manifest()`` + ``run()`` API from
+``comfy_diffusion.pipelines.audio.ace_step.v1_5.split`` so model downloads
+are handled automatically (idempotent, SHA-256 verified).
 
-Encodes conditioning with encode_ace_step_15_audio, creates empty latent with
-empty_ace_step_15_latent_audio, runs sampling, and decodes to WAV.
+Usage
+-----
+::
 
-  uv run python examples/ace_step_15_example.py --models-dir /path/to/models \\
-    --unet ace_step_15_unet.safetensors --vae ace_step_15_vae.safetensors \\
-        --text-encoder-1 qwen_0.6b_ace15.safetensors --text-encoder-2 qwen_4b_ace15.safetensors \\
-        --tags "electronic" --duration 30 --output out.wav
+    # Set models directory via environment variable (or pass via --models-dir)
+    export PYCOMFY_MODELS_DIR=/path/to/models
+
+    # Download models then generate audio
+    uv run python examples/audio/ace/t2a.py \\
+        --tags "electronic ambient, synth, atmospheric" \\
+        --duration 30 \\
+        --output out.wav
+
+    # Full options
+    uv run python examples/audio/ace/t2a.py \\
+        --models-dir /path/to/models \\
+        --tags "neo-soul, warm groove, live drums" \\
+        --duration 60 \\
+        --steps 60 \\
+        --cfg 2.0 \\
+        --bpm 95 \\
+        --seed 42 \\
+        --output my_track.wav
 """
 
 from __future__ import annotations
@@ -22,55 +36,6 @@ import argparse
 import os
 import sys
 from pathlib import Path
-from typing import Any
-
-
-def _negative_conditioning_ace(clip: Any, duration: float) -> Any:
-    """Return negative conditioning for ACE (empty tags, minimal duration)."""
-    from comfy_diffusion.audio import encode_ace_step_15_audio
-
-    return encode_ace_step_15_audio(
-        clip,
-        tags="",
-        lyrics="",
-        seed=0,
-        bpm=120,
-        duration=min(1.0, duration),
-        timesignature="4",
-        language="en",
-        keyscale="C major",
-        generate_audio_codes=False,
-        cfg_scale=2.0,
-    )
-
-
-def _ace_step_15_conditioning(
-    clip: Any,
-    tags: str,
-    lyrics: str,
-    seed: int,
-    bpm: int,
-    duration: float,
-    cfg: float,
-) -> tuple[Any, Any]:
-    """Build positive/negative ACE Step 1.5 conditioning pair."""
-    from comfy_diffusion.audio import encode_ace_step_15_audio
-
-    positive = encode_ace_step_15_audio(
-        clip,
-        tags=tags,
-        lyrics=lyrics,
-        seed=seed,
-        bpm=bpm,
-        duration=duration,
-        timesignature="4",
-        language="en",
-        keyscale="C major",
-        generate_audio_codes=True,
-        cfg_scale=cfg,
-    )
-    negative = _negative_conditioning_ace(clip, duration)
-    return positive, negative
 
 
 def main() -> int:
@@ -80,27 +45,7 @@ def main() -> int:
     parser.add_argument(
         "--models-dir",
         default=os.environ.get("PYCOMFY_MODELS_DIR"),
-        help="Models root (checkpoints/, text_encoders/, etc.). Default: PYCOMFY_MODELS_DIR.",
-    )
-    parser.add_argument(
-        "--unet",
-        default=os.environ.get("PYCOMFY_ACE_UNET", ""),
-        help="ACE diffusion model filename in diffusion_models/ (or unet/).",
-    )
-    parser.add_argument(
-        "--vae",
-        default=os.environ.get("PYCOMFY_ACE_VAE", ""),
-        help="ACE VAE filename in vae/.",
-    )
-    parser.add_argument(
-        "--text-encoder-1",
-        default=os.environ.get("PYCOMFY_ACE_TEXT_ENCODER_1", ""),
-        help="First ACE Step 1.5 text encoder filename in text_encoders/ (e.g. qwen_0.6b_ace15.safetensors).",
-    )
-    parser.add_argument(
-        "--text-encoder-2",
-        default=os.environ.get("PYCOMFY_ACE_TEXT_ENCODER_2", ""),
-        help="Second ACE Step 1.5 text encoder filename in text_encoders/ (e.g. qwen_4b_ace15.safetensors).",
+        help="Models root directory.  Default: PYCOMFY_MODELS_DIR env var.",
     )
     parser.add_argument(
         "--tags",
@@ -125,43 +70,42 @@ def main() -> int:
         help="BPM (default 120).",
     )
     parser.add_argument(
-        "--output",
-        default="ace_output.wav",
-        help="Output WAV path.",
-    )
-    parser.add_argument(
         "--steps",
         type=int,
-        default=30,
-        help="Sampling steps.",
+        default=60,
+        help="Sampling steps (default 60).",
     )
     parser.add_argument(
         "--cfg",
         type=float,
         default=2.0,
-        help="Classifier-free guidance scale.",
+        help="Classifier-free guidance scale (default 2.0).",
     )
     parser.add_argument(
         "--seed",
         type=int,
-        default=42,
-        help="Random seed.",
+        default=0,
+        help="Random seed for reproducibility (default 0).",
     )
     parser.add_argument(
         "--sampler",
         default="euler",
-        help="Sampler name (e.g. euler, dpm_2, ddim).",
+        help="Sampler name (default euler).",
     )
     parser.add_argument(
         "--scheduler",
         default="normal",
-        help="Scheduler name (e.g. normal, simple, karras).",
+        help="Scheduler name (default normal).",
     )
     parser.add_argument(
-        "--trim-end",
-        type=float,
-        default=5.0,
-        help="Seconds to trim from the end of the output (ACE often has trailing silence). Set 0 to disable (default 5.0).",
+        "--output",
+        default="output.wav",
+        help="Output WAV file path (default output.wav).",
+    )
+    parser.add_argument(
+        "--download-only",
+        action="store_true",
+        help="Download models then exit without running inference.",
     )
     args = parser.parse_args()
 
@@ -172,92 +116,40 @@ def main() -> int:
         )
         return 1
 
-    if not args.unet.strip():
-        print("error: --unet (or PYCOMFY_ACE_UNET) is required", file=sys.stderr)
-        return 1
-    if not args.vae.strip():
-        print("error: --vae (or PYCOMFY_ACE_VAE) is required", file=sys.stderr)
-        return 1
-    if not args.text_encoder_1.strip() or not args.text_encoder_2.strip():
-        print(
-            "error: --text-encoder-1 and --text-encoder-2 are required for ACE Step 1.5",
-            file=sys.stderr,
-        )
-        return 1
+    from comfy_diffusion.downloader import download_models
+    from comfy_diffusion.pipelines.audio.ace_step.v1_5.split import manifest, run
 
-    from comfy_diffusion import check_runtime
-    from comfy_diffusion.audio import empty_ace_step_15_latent_audio
-    from comfy_diffusion.models import ModelManager
-    from comfy_diffusion.sampling import sample
+    print("Checking / downloading models …")
+    download_models(manifest(), models_dir=args.models_dir)
+    print("Models ready.")
 
-    runtime = check_runtime()
-    if runtime.get("error"):
-        print("error: runtime check failed:", runtime["error"], file=sys.stderr)
-        return 1
+    if args.download_only:
+        print("--download-only: exiting without inference.")
+        return 0
 
-    mm = ModelManager(args.models_dir)
-
-    # 1) Load ACE 1.5 split components (UNet + VAE + DualCLIP text encoders)
-    model = mm.load_unet(args.unet.strip())
-    vae = mm.load_vae(args.vae.strip())
-    clip = mm.load_clip(
-        args.text_encoder_1.strip(),
-        args.text_encoder_2.strip(),
-        clip_type="ace",
-    )
-    if vae is None:
-        print("error: no VAE (required for ACE 1.5 decode).", file=sys.stderr)
-        return 1
-
-    # 3) ACE Step 1.5 conditioning (positive + negative)
-    positive, negative = _ace_step_15_conditioning(
-        clip=clip,
+    result = run(
+        models_dir=args.models_dir,
         tags=args.tags,
         lyrics=args.lyrics,
-        seed=args.seed,
-        bpm=args.bpm,
         duration=args.duration,
-        cfg=args.cfg,
-    )
-
-    # 4) Empty ACE Step 1.5 latent
-    latent = empty_ace_step_15_latent_audio(seconds=args.duration, batch_size=1)
-
-    # 5) Sample
-    denoised = sample(
-        model,
-        positive,
-        negative,
-        latent,
+        bpm=args.bpm,
         steps=args.steps,
         cfg=args.cfg,
+        seed=args.seed,
         sampler_name=args.sampler,
         scheduler=args.scheduler,
-        seed=args.seed,
-        denoise=1.0,
     )
 
-    # 6) Decode latent to audio (ACE uses MusicDCAE, 44100 Hz)
-    samples_tensor = denoised["samples"]
-    waveform = vae.decode(samples_tensor)
+    audio = result["audio"]
+    waveform = audio["waveform"]
+    sample_rate = audio["sample_rate"]
+
     if hasattr(waveform, "cpu"):
         waveform = waveform.cpu()
-    sample_rate = 44100
-    if waveform.dim() == 3:
-        waveform = waveform[0]
 
-    # Trim trailing silence (ACE often generates ~5 s at the end). Never trim so much that we leave < 1 s.
-    if args.trim_end > 0:
-        total_samples = waveform.shape[-1]
-        min_keep_samples = int(sample_rate * 1.0)
-        max_trim = max(0, total_samples - min_keep_samples)
-        trim_samples = min(int(sample_rate * args.trim_end), max_trim)
-        if trim_samples > 0:
-            waveform = waveform[..., :-trim_samples].contiguous()
-
-    # 7) Save WAV (torchaudio preferred per project convention)
     out_path = Path(args.output)
     out_path.parent.mkdir(parents=True, exist_ok=True)
+
     try:
         import torchaudio
         torchaudio.save(str(out_path), waveform, sample_rate)
