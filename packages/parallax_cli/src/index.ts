@@ -30,7 +30,7 @@ const VIDEO_SCRIPTS: Partial<Record<string, string>> = {
 
 // Script paths for each implemented audio model.
 const AUDIO_SCRIPTS: Partial<Record<string, string>> = {
-  ace_step: "examples/audio/ace/t2a_pipeline.py",
+  ace_step: "examples/audio/ace/t2a.py",
 };
 
 function modelsFooter(key: string): string {
@@ -220,6 +220,13 @@ create
   .requiredOption("--prompt <text>", "Text prompt describing the audio to generate")
   .option("--length <seconds>", "Duration in seconds", "30")
   .option("--steps <n>", "Number of sampling steps", "60")
+  .option("--cfg <value>", "CFG guidance scale", "2")
+  .option("--bpm <n>", "Beats per minute", "120")
+  .option("--lyrics <text>", "Lyrics text (ace_step)", "")
+  .option("--unet <filename>", "UNet model filename (overrides PYCOMFY_ACE_UNET)")
+  .option("--vae <filename>", "VAE model filename (overrides PYCOMFY_ACE_VAE)")
+  .option("--text-encoder-1 <filename>", "Text encoder 1 filename (overrides PYCOMFY_ACE_TEXT_ENCODER_1)")
+  .option("--text-encoder-2 <filename>", "Text encoder 2 filename (overrides PYCOMFY_ACE_TEXT_ENCODER_2)")
   .option("--seed <n>", "Random seed for reproducibility")
   .option("--output <path>", "Output file path", "output.wav")
   .option("--models-dir <path>", "Models directory (overrides PYCOMFY_MODELS_DIR)")
@@ -238,15 +245,27 @@ create
       process.exit(1);
     }
 
+    const unet = opts.unet ?? process.env.PYCOMFY_ACE_UNET;
+    const vae = opts.vae ?? process.env.PYCOMFY_ACE_VAE;
+    const textEncoder1 = opts.textEncoder1 ?? process.env.PYCOMFY_ACE_TEXT_ENCODER_1;
+    const textEncoder2 = opts.textEncoder2 ?? process.env.PYCOMFY_ACE_TEXT_ENCODER_2;
+
     const args: string[] = [
       "--models-dir", modelsDir,
       "--tags", opts.prompt,
       "--duration", opts.length,
       "--steps", opts.steps,
+      "--cfg", opts.cfg,
+      "--bpm", opts.bpm,
+      "--lyrics", opts.lyrics,
       "--output", opts.output,
     ];
 
     if (opts.seed !== undefined) args.push("--seed", opts.seed);
+    if (unet) args.push("--unet", unet);
+    if (vae) args.push("--vae", vae);
+    if (textEncoder1) args.push("--text-encoder-1", textEncoder1);
+    if (textEncoder2) args.push("--text-encoder-2", textEncoder2);
 
     await spawnPipeline(script, args);
   });

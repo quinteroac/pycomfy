@@ -2168,12 +2168,12 @@ describe("parallax CLI — --input flag on create video (US-005-it39)", () => {
   });
 });
 
-// Helper: create a temporary PARALLAX_REPO_ROOT with a fake ace_step t2a_pipeline.py script.
+// Helper: create a temporary PARALLAX_REPO_ROOT with a fake ace_step t2a.py script.
 async function makeFakeAceStepRoot(scriptBody: string): Promise<string> {
   const tmpRoot = await mkdtemp(join(tmpdir(), "ace_step_test_"));
   const scriptDir = join(tmpRoot, "examples", "audio", "ace");
   await mkdir(scriptDir, { recursive: true });
-  await writeFile(join(scriptDir, "t2a_pipeline.py"), scriptBody);
+  await writeFile(join(scriptDir, "t2a.py"), scriptBody);
   return tmpRoot;
 }
 
@@ -2340,5 +2340,234 @@ describe("parallax CLI — ace_step audio generation (US-001)", () => {
   it("US-001-AC07: --help exits 0 (basic smoke test for typecheck gate)", async () => {
     const { exitCode } = await runCLI(["create", "audio", "--help"]);
     expect(exitCode).toBe(0);
+  });
+});
+
+describe("parallax CLI — ace_step model component flags (US-002)", () => {
+  // AC01: --unet is forwarded; fallback from PYCOMFY_ACE_UNET
+  it("US-002-AC01: --unet flag is forwarded to the subprocess", async () => {
+    const tmpRoot = await makeFakeAceStepRoot(
+      'import sys; print(" ".join(sys.argv[1:])); sys.exit(0)\n',
+    );
+    try {
+      const { stdout, exitCode } = await runCLIWithEnv(
+        ["create", "audio", "--model", "ace_step", "--prompt", "ambient", "--models-dir", "/tmp", "--unet", "my_unet.safetensors"],
+        { PARALLAX_REPO_ROOT: tmpRoot },
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain("--unet");
+      expect(stdout).toContain("my_unet.safetensors");
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("US-002-AC01: PYCOMFY_ACE_UNET env var is used when --unet is not given", async () => {
+    const tmpRoot = await makeFakeAceStepRoot(
+      'import sys; print(" ".join(sys.argv[1:])); sys.exit(0)\n',
+    );
+    try {
+      const { stdout, exitCode } = await runCLIWithEnv(
+        ["create", "audio", "--model", "ace_step", "--prompt", "ambient", "--models-dir", "/tmp"],
+        { PARALLAX_REPO_ROOT: tmpRoot, PYCOMFY_ACE_UNET: "env_unet.safetensors" },
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain("--unet");
+      expect(stdout).toContain("env_unet.safetensors");
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("US-002-AC01: --unet flag takes precedence over PYCOMFY_ACE_UNET", async () => {
+    const tmpRoot = await makeFakeAceStepRoot(
+      'import sys; print(" ".join(sys.argv[1:])); sys.exit(0)\n',
+    );
+    try {
+      const { stdout, exitCode } = await runCLIWithEnv(
+        ["create", "audio", "--model", "ace_step", "--prompt", "ambient", "--models-dir", "/tmp", "--unet", "flag_unet.safetensors"],
+        { PARALLAX_REPO_ROOT: tmpRoot, PYCOMFY_ACE_UNET: "env_unet.safetensors" },
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain("flag_unet.safetensors");
+      expect(stdout).not.toContain("env_unet.safetensors");
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  // AC02: --vae is forwarded; fallback from PYCOMFY_ACE_VAE
+  it("US-002-AC02: --vae flag is forwarded to the subprocess", async () => {
+    const tmpRoot = await makeFakeAceStepRoot(
+      'import sys; print(" ".join(sys.argv[1:])); sys.exit(0)\n',
+    );
+    try {
+      const { stdout, exitCode } = await runCLIWithEnv(
+        ["create", "audio", "--model", "ace_step", "--prompt", "ambient", "--models-dir", "/tmp", "--vae", "my_vae.safetensors"],
+        { PARALLAX_REPO_ROOT: tmpRoot },
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain("--vae");
+      expect(stdout).toContain("my_vae.safetensors");
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("US-002-AC02: PYCOMFY_ACE_VAE env var is used when --vae is not given", async () => {
+    const tmpRoot = await makeFakeAceStepRoot(
+      'import sys; print(" ".join(sys.argv[1:])); sys.exit(0)\n',
+    );
+    try {
+      const { stdout, exitCode } = await runCLIWithEnv(
+        ["create", "audio", "--model", "ace_step", "--prompt", "ambient", "--models-dir", "/tmp"],
+        { PARALLAX_REPO_ROOT: tmpRoot, PYCOMFY_ACE_VAE: "env_vae.safetensors" },
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain("--vae");
+      expect(stdout).toContain("env_vae.safetensors");
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  // AC03: --text-encoder-1 is forwarded; fallback from PYCOMFY_ACE_TEXT_ENCODER_1
+  it("US-002-AC03: --text-encoder-1 flag is forwarded to the subprocess", async () => {
+    const tmpRoot = await makeFakeAceStepRoot(
+      'import sys; print(" ".join(sys.argv[1:])); sys.exit(0)\n',
+    );
+    try {
+      const { stdout, exitCode } = await runCLIWithEnv(
+        ["create", "audio", "--model", "ace_step", "--prompt", "ambient", "--models-dir", "/tmp", "--text-encoder-1", "enc1.safetensors"],
+        { PARALLAX_REPO_ROOT: tmpRoot },
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain("--text-encoder-1");
+      expect(stdout).toContain("enc1.safetensors");
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("US-002-AC03: PYCOMFY_ACE_TEXT_ENCODER_1 env var is used when --text-encoder-1 is not given", async () => {
+    const tmpRoot = await makeFakeAceStepRoot(
+      'import sys; print(" ".join(sys.argv[1:])); sys.exit(0)\n',
+    );
+    try {
+      const { stdout, exitCode } = await runCLIWithEnv(
+        ["create", "audio", "--model", "ace_step", "--prompt", "ambient", "--models-dir", "/tmp"],
+        { PARALLAX_REPO_ROOT: tmpRoot, PYCOMFY_ACE_TEXT_ENCODER_1: "env_enc1.safetensors" },
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain("--text-encoder-1");
+      expect(stdout).toContain("env_enc1.safetensors");
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  // AC04: --text-encoder-2 is forwarded; fallback from PYCOMFY_ACE_TEXT_ENCODER_2
+  it("US-002-AC04: --text-encoder-2 flag is forwarded to the subprocess", async () => {
+    const tmpRoot = await makeFakeAceStepRoot(
+      'import sys; print(" ".join(sys.argv[1:])); sys.exit(0)\n',
+    );
+    try {
+      const { stdout, exitCode } = await runCLIWithEnv(
+        ["create", "audio", "--model", "ace_step", "--prompt", "ambient", "--models-dir", "/tmp", "--text-encoder-2", "enc2.safetensors"],
+        { PARALLAX_REPO_ROOT: tmpRoot },
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain("--text-encoder-2");
+      expect(stdout).toContain("enc2.safetensors");
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("US-002-AC04: PYCOMFY_ACE_TEXT_ENCODER_2 env var is used when --text-encoder-2 is not given", async () => {
+    const tmpRoot = await makeFakeAceStepRoot(
+      'import sys; print(" ".join(sys.argv[1:])); sys.exit(0)\n',
+    );
+    try {
+      const { stdout, exitCode } = await runCLIWithEnv(
+        ["create", "audio", "--model", "ace_step", "--prompt", "ambient", "--models-dir", "/tmp"],
+        { PARALLAX_REPO_ROOT: tmpRoot, PYCOMFY_ACE_TEXT_ENCODER_2: "env_enc2.safetensors" },
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain("--text-encoder-2");
+      expect(stdout).toContain("env_enc2.safetensors");
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  // AC05: when neither flag nor env var is provided, the component is not appended (no CLI error)
+  it("US-002-AC05: no model component flags appended when neither flag nor env var is set", async () => {
+    const tmpRoot = await makeFakeAceStepRoot(
+      'import sys; print(" ".join(sys.argv[1:])); sys.exit(0)\n',
+    );
+    try {
+      const { stdout, exitCode } = await runCLIWithEnv(
+        ["create", "audio", "--model", "ace_step", "--prompt", "ambient", "--models-dir", "/tmp"],
+        {
+          PARALLAX_REPO_ROOT: tmpRoot,
+          PYCOMFY_ACE_UNET: undefined,
+          PYCOMFY_ACE_VAE: undefined,
+          PYCOMFY_ACE_TEXT_ENCODER_1: undefined,
+          PYCOMFY_ACE_TEXT_ENCODER_2: undefined,
+        },
+      );
+      // CLI reaches subprocess without error — subprocess handles missing components
+      expect(exitCode).toBe(0);
+      expect(stdout).not.toContain("--unet");
+      expect(stdout).not.toContain("--vae");
+      expect(stdout).not.toContain("--text-encoder-1");
+      expect(stdout).not.toContain("--text-encoder-2");
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("US-002-AC05: all four component flags forwarded together", async () => {
+    const tmpRoot = await makeFakeAceStepRoot(
+      'import sys; print(" ".join(sys.argv[1:])); sys.exit(0)\n',
+    );
+    try {
+      const { stdout, exitCode } = await runCLIWithEnv(
+        [
+          "create", "audio", "--model", "ace_step", "--prompt", "ambient",
+          "--models-dir", "/tmp",
+          "--unet", "unet.safetensors",
+          "--vae", "vae.safetensors",
+          "--text-encoder-1", "enc1.safetensors",
+          "--text-encoder-2", "enc2.safetensors",
+        ],
+        { PARALLAX_REPO_ROOT: tmpRoot },
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain("--unet");
+      expect(stdout).toContain("unet.safetensors");
+      expect(stdout).toContain("--vae");
+      expect(stdout).toContain("vae.safetensors");
+      expect(stdout).toContain("--text-encoder-1");
+      expect(stdout).toContain("enc1.safetensors");
+      expect(stdout).toContain("--text-encoder-2");
+      expect(stdout).toContain("enc2.safetensors");
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  // AC06: typecheck / lint passes — verified by help flag smoke test
+  it("US-002-AC06: create audio --help shows new model component flags", async () => {
+    const { stdout, exitCode } = await runCLI(["create", "audio", "--help"]);
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("--unet");
+    expect(stdout).toContain("--vae");
+    expect(stdout).toContain("--text-encoder-1");
+    expect(stdout).toContain("--text-encoder-2");
+    expect(stdout).toContain("--cfg");
+    expect(stdout).toContain("--bpm");
+    expect(stdout).toContain("--lyrics");
   });
 });

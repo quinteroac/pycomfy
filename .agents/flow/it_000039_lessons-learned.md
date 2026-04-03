@@ -249,3 +249,20 @@ A `makeFakeWan22I2vRoot()` helper and a full `describe("parallax CLI — wan22 i
 **Useful Context for Future Agents:**
 - The `parallax_cli` test pattern for subprocess tests creates a temporary `PARALLAX_REPO_ROOT` directory with a fake Python script, then verifies the CLI argument forwarding by having the fake script print `sys.argv`. This pattern is used consistently for all media types and should be followed for any new audio/video/image model additions.
 - When adding a new model to `create audio`, add it to `MODELS["create audio"]` in `index.ts`, add a script path to `AUDIO_SCRIPTS`, and update the corresponding US-007 test if applicable.
+
+## US-002 — model component flag resolution
+
+**Summary:** Added `--unet`, `--vae`, `--text-encoder-1`, `--text-encoder-2` optional flags to `create audio`. Each resolves from CLI flag first, then env var (`PYCOMFY_ACE_UNET`, `PYCOMFY_ACE_VAE`, `PYCOMFY_ACE_TEXT_ENCODER_1`, `PYCOMFY_ACE_TEXT_ENCODER_2`). Also added `--cfg`, `--bpm`, `--lyrics` flags. Changed dispatch target from `t2a_pipeline.py` to `t2a.py` (which accepts all component flags). Updated `makeFakeAceStepRoot` helper accordingly.
+
+**Key Decisions:**
+- Component flags are forwarded conditionally: `if (unet) args.push("--unet", unet)` — if neither flag nor env var is set, the arg is omitted and the subprocess handles the missing-component error (US-002-AC05).
+- Switched `AUDIO_SCRIPTS.ace_step` from `t2a_pipeline.py` to `t2a.py` since `t2a.py` is the low-level script that accepts `--unet`, `--vae`, `--text-encoder-1`, `--text-encoder-2`.
+- Commander converts `--text-encoder-1` to `opts.textEncoder1` via camelCase transformation — this is the standard behavior.
+
+**Pitfalls Encountered:**
+- The existing test helper `makeFakeAceStepRoot` created `t2a_pipeline.py`. Changing the dispatch to `t2a.py` required updating the helper too, or all existing US-001 tests would fail. Always update test helpers when changing dispatch targets.
+
+**Useful Context for Future Agents:**
+- `AUDIO_SCRIPTS.ace_step` now points to `examples/audio/ace/t2a.py` (not `t2a_pipeline.py`).
+- The `t2a.py` script is the split-components variant accepting `--unet`, `--vae`, `--text-encoder-1`, `--text-encoder-2`. The pipeline variant `t2a_pipeline.py` auto-downloads everything and does not accept component flags.
+- All four component env vars follow the pattern `PYCOMFY_ACE_<COMPONENT>`.
