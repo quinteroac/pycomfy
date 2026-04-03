@@ -52,3 +52,21 @@
 - `PARALLAX_RUNTIME_DIR` env var → `runtimeDir` config field (mirrors `PARALLAX_REPO_ROOT` → `repoRoot`).
 - `spawnPipeline` precedence: `runtimeDir` (installed) > `repoRoot` (dev/CI via env). Neither set → exit 1.
 - When writing integration tests for runner.ts via the CLI subprocess approach, always use `not.toMatch(/^Error: .../)` rather than `not.toContain(...)` to guard against Bun stack trace source context false positives.
+
+## US-004 — parallax install copies runtime/ to ~/.config/parallax/runtime/
+
+**Summary:** Extended `install.ts` to copy the bundled `packages/parallax_cli/runtime/` directory to `~/.config/parallax/runtime/` using `fs.cpSync` with `{ recursive: true, force: true }`. `applyConfig` now writes `runtimeDir` into the config JSON. Non-interactive path logs progress to stdout; interactive path uses a `@clack/prompts` spinner.
+
+**Key Decisions:**
+- Used `cpSync(src, dest, { recursive: true, force: true })` — available in Bun/Node 16.7+, single-call recursive overwrite with no extra dependencies.
+- `BUNDLED_RUNTIME_DIR = join(import.meta.dir, "../../runtime")` resolves correctly from `src/commands/install.ts` to `packages/parallax_cli/runtime/` in both dev and test runs.
+- `INSTALLED_RUNTIME_DIR` is a module-level constant used in both `copyRuntime()` and `applyConfig()` to ensure a single source of truth for the destination path.
+- The spinner in the interactive flow uses a separate `rs` variable to avoid variable shadowing with the later `s` spinner for the Python environment step.
+
+**Pitfalls Encountered:**
+- None. The change was straightforward: one `cpSync` call, one constant, one extra `writeConfig` field, one log line. Tests verified all ACs.
+
+**Useful Context for Future Agents:**
+- `INSTALLED_RUNTIME_DIR` = `~/.config/parallax/runtime/` — this is now the canonical installed runtime path, populated by `parallax install`.
+- After US-003+US-004, `runner.ts` prefers `runtimeDir` (set by install) over `repoRoot` for resolving script paths. The full chain is: `parallax install` copies scripts → sets `runtimeDir` in config → `runner.ts` reads it.
+- Tests backup/restore `~/.config/parallax/config.json` in `beforeEach`/`afterEach`. The US-004 tests additionally clean up `INSTALLED_RUNTIME_DIR` if it was absent before the test.

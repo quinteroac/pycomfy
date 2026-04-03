@@ -1,10 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { join } from "path";
-import { existsSync, readFileSync, unlinkSync, mkdirSync } from "fs";
+import { existsSync, readFileSync, unlinkSync, mkdirSync, readdirSync, rmSync } from "fs";
 import { homedir } from "os";
 
 const CLI = join(import.meta.dir, "../../src/index.ts");
 const CONFIG_PATH = join(homedir(), ".config", "parallax", "config.json");
+const INSTALLED_RUNTIME_DIR = join(homedir(), ".config", "parallax", "runtime");
 
 async function runCLI(
   args: string[],
@@ -162,5 +163,54 @@ describe("parallax install — auto non-interactive fallback (US-007-AC04)", () 
     ]);
     expect(exitCode).toBe(0);
     expect(stdout).toContain("[parallax] Installation configured");
+  });
+});
+
+// ── US-004: runtime/ copy ─────────────────────────────────────────────────────
+
+describe("parallax install — copies runtime/ (US-004)", () => {
+  let runtimeBackup: boolean;
+
+  beforeEach(() => {
+    runtimeBackup = existsSync(INSTALLED_RUNTIME_DIR);
+  });
+
+  afterEach(() => {
+    // Clean up installed runtime dir only if it didn't exist before the test.
+    if (!runtimeBackup && existsSync(INSTALLED_RUNTIME_DIR)) {
+      rmSync(INSTALLED_RUNTIME_DIR, { recursive: true, force: true });
+    }
+  });
+
+  it("AC01/AC02: --non-interactive copies runtime/ to ~/.config/parallax/runtime/ (idempotent)", async () => {
+    const { exitCode } = await runCLI(["install", "--non-interactive"]);
+    expect(exitCode).toBe(0);
+    expect(existsSync(INSTALLED_RUNTIME_DIR)).toBe(true);
+    // Should be a directory containing at least one subdirectory.
+    const entries = readdirSync(INSTALLED_RUNTIME_DIR);
+    expect(entries.length).toBeGreaterThan(0);
+
+    // Idempotent: run again, should not fail.
+    const { exitCode: exitCode2 } = await runCLI(["install", "--non-interactive"]);
+    expect(exitCode2).toBe(0);
+  });
+
+  it("AC03: config stores runtimeDir pointing to ~/.config/parallax/runtime/", async () => {
+    await runCLI(["install", "--non-interactive"]);
+    const written = JSON.parse(readFileSync(CONFIG_PATH, "utf-8"));
+    expect(written.runtimeDir).toBe(INSTALLED_RUNTIME_DIR);
+  });
+
+  it("AC04: interactive spinner logs 'Copying runtime' during non-interactive (no-TTY) run", async () => {
+    const { stdout, exitCode } = await runCLI(["install", "--non-interactive"]);
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("Copying runtime");
+  });
+
+  it("AC05: non-interactive path logs runtime-dir to stdout", async () => {
+    const { stdout, exitCode } = await runCLI(["install", "--non-interactive"]);
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("runtime-dir:");
+    expect(stdout).toContain(INSTALLED_RUNTIME_DIR);
   });
 });

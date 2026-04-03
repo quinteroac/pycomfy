@@ -2,15 +2,22 @@
 // Interactive TTY flow uses @clack/prompts; non-interactive mode (--non-interactive or no TTY) uses flag values / defaults.
 
 import { Command } from "commander";
-import { existsSync } from "fs";
+import { cpSync, existsSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
 import { configExists, readConfig, writeConfig } from "../config";
+
+const BUNDLED_RUNTIME_DIR = join(import.meta.dir, "../../runtime");
+const INSTALLED_RUNTIME_DIR = join(homedir(), ".config", "parallax", "runtime");
 
 const DEFAULT_INSTALL_DIR = join(homedir(), ".parallax");
 const DEFAULT_MODELS_DIR = join(homedir(), "parallax-models");
 const DEFAULT_VARIANT = "cpu";
 const DEFAULT_UV_PATH = join(homedir(), ".local", "bin", "uv");
+
+function copyRuntime(): void {
+  cpSync(BUNDLED_RUNTIME_DIR, INSTALLED_RUNTIME_DIR, { recursive: true, force: true });
+}
 
 interface InstallOpts {
   nonInteractive?: boolean;
@@ -41,12 +48,16 @@ export function registerInstall(program: Command): void {
 async function runNonInteractive(opts: InstallOpts): Promise<void> {
   const { installDir, modelsDir, variant } = opts;
 
+  console.log("[parallax] Copying runtime scripts…");
+  copyRuntime();
+
   applyConfig(installDir, modelsDir, variant);
 
   console.log("[parallax] Installation configured:");
   console.log(`  install-dir: ${installDir}`);
   console.log(`  models-dir:  ${modelsDir}`);
   console.log(`  variant:     ${variant}`);
+  console.log(`  runtime-dir: ${INSTALLED_RUNTIME_DIR}`);
   console.log("[parallax] Configuration saved to ~/.config/parallax/config.json");
 }
 
@@ -96,6 +107,12 @@ async function runInteractive(opts: InstallOpts): Promise<void> {
     cancel("Installation cancelled.");
     process.exit(0);
   }
+
+  // Copy bundled runtime scripts to ~/.config/parallax/runtime/.
+  const rs = spinner();
+  rs.start("Copying runtime scripts…");
+  copyRuntime();
+  rs.stop("Runtime scripts copied.");
 
   // Detect or install uv.
   const uvPath = await detectOrInstallUv(spinner);
@@ -172,6 +189,7 @@ function applyConfig(installDir: string, modelsDir: string, variant: string, uvP
     repoRoot: installDir,
     modelsDir,
     variant,
+    runtimeDir: INSTALLED_RUNTIME_DIR,
     installedAt: new Date().toISOString(),
     ...(uvPath !== undefined && { uvPath }),
   });
