@@ -90,3 +90,20 @@
 - `makeFakeLtx2Root` is now a reusable test helper alongside `makeFakeSdxlRoot` and `makeFakeZImageRoot`. Add `makeFake<Model>Root` helpers for each new video model as it is implemented.
 - The `PYCOMFY_MODELS_DIR` env var resolution for `create video` now follows the same pattern as `create image` — `opts.modelsDir ?? process.env.PYCOMFY_MODELS_DIR`.
 - `VIDEO_SCRIPTS` is the single source of truth for which video models are live vs. stubbed. Add new entries there to enable dispatch without touching the action logic.
+
+## US-002 — ltx23 video generation via CLI
+
+**Summary:** Wired `parallax create video --model ltx23` to spawn `uv run python examples/video/ltx/ltx23/t2v.py`. Added `ltx23` to `VIDEO_SCRIPTS` and updated the args-building logic so `--steps` is skipped for ltx23 (distilled, no step count) while `--cfg` is forwarded as a bare `--cfg` flag (unlike ltx2 which remaps to `--cfg-pass1`).
+
+**Key Decisions:**
+- `VIDEO_SCRIPTS["ltx23"] = "examples/video/ltx/ltx23/t2v.py"` — one-liner addition, no new helpers.
+- Args building uses `if (opts.model !== "ltx23") { args.push("--steps", ...) }` to skip `--steps` for the distilled model and `if (opts.model === "ltx2") { ... } else { args.push("--cfg", ...) }` for CFG routing. This is forward-compatible: future models automatically get `--steps` and `--cfg` by default.
+- Added `makeFakeLtx23Root` test helper (mirrors `makeFakeLtx2Root`) and a new `describe` block with 9 tests covering all 5 ACs.
+
+**Pitfalls Encountered:**
+- None. The existing args-building logic was clean enough that only targeted additions were needed.
+
+**Useful Context for Future Agents:**
+- The `create video` action builds args in two phases: (1) common flags (`--models-dir`, `--prompt`, `--width`, `--height`, `--length`, `--output`); (2) model-specific flags (`--steps` conditional on model, `--cfg`/`--cfg-pass1` per model). Any new distilled model should add another `!== "<model>"` guard to the `--steps` skip, or refactor into a per-model config object.
+- `examples/video/ltx/ltx23/t2v.py` already existed and accepts `--cfg`, `--prompt`, `--width`, `--height`, `--length`, `--seed`, `--output`, `--models-dir` — no Python changes were needed.
+- The `--steps` AC test using a fake Python script that exits 2 if it receives `--steps` is the canonical pattern for "flag must NOT be forwarded" assertions in this test suite.

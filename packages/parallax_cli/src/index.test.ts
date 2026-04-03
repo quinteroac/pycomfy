@@ -719,6 +719,15 @@ describe("parallax CLI — models-dir resolution (US-004)", () => {
   });
 });
 
+// Helper: create a temporary PARALLAX_REPO_ROOT with a fake ltx23 t2v.py script.
+async function makeFakeLtx23Root(scriptBody: string): Promise<string> {
+  const tmpRoot = await mkdtemp(join(tmpdir(), "ltx23_test_"));
+  const scriptDir = join(tmpRoot, "examples", "video", "ltx", "ltx23");
+  await mkdir(scriptDir, { recursive: true });
+  await writeFile(join(scriptDir, "t2v.py"), scriptBody);
+  return tmpRoot;
+}
+
 // Helper: create a temporary PARALLAX_REPO_ROOT with a fake ltx2 t2v.py script.
 async function makeFakeLtx2Root(scriptBody: string): Promise<string> {
   const tmpRoot = await mkdtemp(join(tmpdir(), "ltx2_test_"));
@@ -886,6 +895,153 @@ describe("parallax CLI — ltx2 video generation (US-001)", () => {
     try {
       const { exitCode } = await runCLIWithEnv(
         ["create", "video", "--model", "ltx2", "--prompt", "test", "--models-dir", "/tmp"],
+        { PARALLAX_REPO_ROOT: tmpRoot },
+      );
+      expect(exitCode).toBe(3);
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("parallax CLI — ltx23 video generation (US-002-it39)", () => {
+  // AC01: running the command spawns uv run python examples/video/ltx/ltx23/t2v.py
+  it("US-002-AC01: missing PYCOMFY_MODELS_DIR and --models-dir exits 1 with clear error", async () => {
+    const { stderr, exitCode } = await runCLIWithEnv(
+      ["create", "video", "--model", "ltx23", "--prompt", "test"],
+      { PYCOMFY_MODELS_DIR: undefined, PARALLAX_REPO_ROOT: undefined },
+    );
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain("Error: --models-dir or PYCOMFY_MODELS_DIR is required");
+  });
+
+  it("US-002-AC01: with --models-dir set, CLI reaches subprocess spawn (PARALLAX_REPO_ROOT check)", async () => {
+    const { stderr, exitCode } = await runCLIWithEnv(
+      ["create", "video", "--model", "ltx23", "--prompt", "test", "--models-dir", "/tmp"],
+      { PARALLAX_REPO_ROOT: undefined },
+    );
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain("Error: PARALLAX_REPO_ROOT is required");
+  });
+
+  it("US-002-AC01: subprocess is spawned and its exit code propagated (exit 0 from fake script)", async () => {
+    const tmpRoot = await makeFakeLtx23Root("import sys; sys.exit(0)\n");
+    try {
+      const { exitCode } = await runCLIWithEnv(
+        ["create", "video", "--model", "ltx23", "--prompt", "test", "--models-dir", "/tmp"],
+        { PARALLAX_REPO_ROOT: tmpRoot },
+      );
+      expect(exitCode).toBe(0);
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  // AC02: --prompt, --width, --height, --length, --cfg, --seed, --output are forwarded
+  it("US-002-AC02: --prompt, --width, --height, --length, --cfg, --seed, --output are forwarded to subprocess", async () => {
+    const tmpRoot = await makeFakeLtx23Root(
+      'import sys; print(" ".join(sys.argv[1:])); sys.exit(0)\n',
+    );
+    try {
+      const { stdout, exitCode } = await runCLIWithEnv(
+        [
+          "create", "video", "--model", "ltx23", "--prompt", "a jazz video",
+          "--models-dir", "/tmp",
+          "--width", "768", "--height", "512", "--length", "97",
+          "--cfg", "1.0", "--seed", "7", "--output", "out.mp4",
+        ],
+        { PARALLAX_REPO_ROOT: tmpRoot },
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain("--prompt");
+      expect(stdout).toContain("a jazz video");
+      expect(stdout).toContain("--width");
+      expect(stdout).toContain("768");
+      expect(stdout).toContain("--height");
+      expect(stdout).toContain("512");
+      expect(stdout).toContain("--length");
+      expect(stdout).toContain("97");
+      expect(stdout).toContain("--cfg");
+      expect(stdout).toContain("1.0");
+      expect(stdout).toContain("--seed");
+      expect(stdout).toContain("7");
+      expect(stdout).toContain("--output");
+      expect(stdout).toContain("out.mp4");
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  // AC03: --steps is NOT forwarded (ltx23 t2v is distilled)
+  it("US-002-AC03: --steps is NOT forwarded to ltx23 subprocess", async () => {
+    const tmpRoot = await makeFakeLtx23Root(
+      'import sys\nif "--steps" in sys.argv[1:]:\n    sys.exit(2)\nsys.exit(0)\n',
+    );
+    try {
+      const { exitCode } = await runCLIWithEnv(
+        ["create", "video", "--model", "ltx23", "--prompt", "test", "--models-dir", "/tmp", "--steps", "20"],
+        { PARALLAX_REPO_ROOT: tmpRoot },
+      );
+      // Would be 2 if --steps were forwarded; 0 confirms it was dropped.
+      expect(exitCode).toBe(0);
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("US-002-AC03: --steps is absent even when not explicitly passed (default not forwarded)", async () => {
+    const tmpRoot = await makeFakeLtx23Root(
+      'import sys\nif "--steps" in sys.argv[1:]:\n    sys.exit(2)\nsys.exit(0)\n',
+    );
+    try {
+      const { exitCode } = await runCLIWithEnv(
+        ["create", "video", "--model", "ltx23", "--prompt", "test", "--models-dir", "/tmp"],
+        { PARALLAX_REPO_ROOT: tmpRoot },
+      );
+      expect(exitCode).toBe(0);
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  // AC04: --models-dir is forwarded
+  it("US-002-AC04: --models-dir is forwarded to the ltx23 subprocess", async () => {
+    const tmpRoot = await makeFakeLtx23Root(
+      'import sys; print(" ".join(sys.argv[1:])); sys.exit(0)\n',
+    );
+    try {
+      const { stdout, exitCode } = await runCLIWithEnv(
+        ["create", "video", "--model", "ltx23", "--prompt", "test", "--models-dir", "/my/models"],
+        { PARALLAX_REPO_ROOT: tmpRoot },
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain("--models-dir");
+      expect(stdout).toContain("/my/models");
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("US-002-AC04: --models-dir option is listed in create video --help", async () => {
+    const { stdout, exitCode } = await runCLI(["create", "video", "--help"]);
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("--models-dir");
+  });
+
+  // AC05: CLI exits with the subprocess exit code
+  it("US-002-AC05: CLI exits with non-zero when subprocess fails (bad PARALLAX_REPO_ROOT path)", async () => {
+    const { exitCode } = await runCLIWithEnv(
+      ["create", "video", "--model", "ltx23", "--prompt", "test", "--models-dir", "/tmp"],
+      { PARALLAX_REPO_ROOT: "/nonexistent-parallax-root-12345" },
+    );
+    expect(exitCode).not.toBe(0);
+  });
+
+  it("US-002-AC05: CLI propagates subprocess exit code 3 verbatim", async () => {
+    const tmpRoot = await makeFakeLtx23Root("import sys; sys.exit(3)\n");
+    try {
+      const { exitCode } = await runCLIWithEnv(
+        ["create", "video", "--model", "ltx23", "--prompt", "test", "--models-dir", "/tmp"],
         { PARALLAX_REPO_ROOT: tmpRoot },
       );
       expect(exitCode).toBe(3);

@@ -21,7 +21,8 @@ const IMAGE_SCRIPTS: Partial<Record<string, string>> = {
 
 // Script paths for each implemented video model.
 const VIDEO_SCRIPTS: Partial<Record<string, string>> = {
-  ltx2: "examples/video/ltx/ltx2/t2v.py",
+  ltx2:  "examples/video/ltx/ltx2/t2v.py",
+  ltx23: "examples/video/ltx/ltx23/t2v.py",
 };
 
 function modelsFooter(key: string): string {
@@ -166,13 +167,19 @@ create
       "--width", opts.width,
       "--height", opts.height,
       "--length", opts.length,
-      "--steps", opts.steps,
       "--output", opts.output,
     ];
+
+    // ltx23 is distilled — no --steps; all other models receive --steps
+    if (opts.model !== "ltx23") {
+      args.push("--steps", opts.steps);
+    }
 
     // ltx2 t2v uses --cfg-pass1 instead of a bare --cfg flag
     if (opts.model === "ltx2") {
       args.push("--cfg-pass1", opts.cfg);
+    } else {
+      args.push("--cfg", opts.cfg);
     }
 
     if (opts.seed !== undefined) args.push("--seed", opts.seed);
