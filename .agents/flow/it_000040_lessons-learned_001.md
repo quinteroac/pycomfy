@@ -122,3 +122,20 @@
 - `registerInstall` follows the same pattern as `registerCreate` and `registerEdit` — a single exported function that takes `program: Command`.
 - The config backup/restore pattern in tests (save before, restore/delete after) is established in `config.test.ts` and reused here to avoid corrupting a developer's real config.
 - The 11 pre-existing `ace_step model component flags (US-002)` failures are unrelated to this story and remain.
+
+## US-008 — Clean entry point (`index.ts`)
+
+**Summary:** Extracted the `formatRequiredFlagError` helper from `index.ts` into a new `src/utils.ts` module. Rewrote `index.ts` to 19 non-blank lines containing only imports, program setup, and the three `register*` calls.
+
+**Key Decisions:**
+- Created `src/utils.ts` as the home for `formatRequiredFlagError` — a lightweight utilities module for shared helpers that don't belong to a specific command.
+- The test asserts `lines.length < 20` on non-blank lines to guard the "under 20 lines" constraint permanently.
+- The test also asserts no `function ` keyword at the start of a line in `index.ts`, catching any future regression that adds inline function definitions.
+
+**Pitfalls Encountered:**
+- None. The file was already well-structured after previous iterations; the only change needed was extracting one helper function.
+
+**Useful Context for Future Agents:**
+- `src/utils.ts` is now the correct place for any shared, non-command-specific helper functions in the CLI package.
+- The `formatRequiredFlagError` function in `utils.ts` is the only customization applied to commander's error output — do not duplicate it in command files.
+- The 11 pre-existing `ace_step model component flags` test failures remain unrelated to this story.

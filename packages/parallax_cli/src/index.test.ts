@@ -2964,3 +2964,31 @@ describe("parallax CLI — refactored command handlers (US-006)", () => {
     expect(stdout).toContain("6");
   });
 });
+
+describe("parallax CLI — clean entry point (US-008)", () => {
+  it("US-008-AC01/AC02: index.ts is under 20 lines and has no inline logic", async () => {
+    const { readFileSync } = await import("fs");
+    const { join } = await import("path");
+    const src = readFileSync(join(import.meta.dir, "index.ts"), "utf-8");
+    const lines = src.split("\n").filter((l) => l.trim().length > 0);
+    // Under 20 non-blank lines
+    expect(lines.length).toBeLessThan(20);
+    // Only the three register calls are present
+    expect(src).toContain("registerInstall");
+    expect(src).toContain("registerCreate");
+    expect(src).toContain("registerEdit");
+    // No model data or spawnPipeline
+    expect(src).not.toContain("spawnPipeline");
+    expect(src).not.toContain("MODELS");
+    // No inline function definitions (no 'function ')
+    expect(src).not.toMatch(/^function /m);
+  });
+
+  it("US-008-AC03: parallax --help lists install, create, edit commands", async () => {
+    const { stdout, exitCode } = await runCLI(["--help"]);
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("install");
+    expect(stdout).toContain("create");
+    expect(stdout).toContain("edit");
+  });
+});
