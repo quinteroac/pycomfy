@@ -10,9 +10,9 @@ export const MODELS: Record<string, string[]> = {
 };
 
 export const IMAGE_SCRIPTS: Partial<Record<string, string>> = {
-  sdxl:    "examples/image/generation/sdxl/t2i.py",
-  anima:   "examples/image/generation/anima/t2i.py",
-  z_image: "examples/image/generation/z_image/turbo.py",
+  sdxl:    "runtime/image/generation/sdxl/t2i.py",
+  anima:   "runtime/image/generation/anima/t2i.py",
+  z_image: "runtime/image/generation/z_image/turbo.py",
 };
 
 export interface ModelConfig {
@@ -23,14 +23,14 @@ export interface ModelConfig {
 }
 
 export const VIDEO_MODEL_CONFIG: Record<string, ModelConfig> = {
-  ltx2:  { t2v: "examples/video/ltx/ltx2/t2v.py",  i2v: "examples/video/ltx/ltx2/i2v.py",  cfgFlag: "--cfg-pass1" },
-  ltx23: { t2v: "examples/video/ltx/ltx23/t2v.py", i2v: "examples/video/ltx/ltx23/i2v.py", cfgFlag: "--cfg", omitSteps: true },
-  wan21: { t2v: "examples/video/wan/wan21/t2v.py",  i2v: "examples/video/wan/wan21/i2v.py",  cfgFlag: "--cfg" },
-  wan22: { t2v: "examples/video/wan/wan22/t2v.py",  i2v: "examples/video/wan/wan22/i2v.py",  cfgFlag: "--cfg" },
+  ltx2:  { t2v: "runtime/video/ltx/ltx2/t2v.py",  i2v: "runtime/video/ltx/ltx2/i2v.py",  cfgFlag: "--cfg-pass1" },
+  ltx23: { t2v: "runtime/video/ltx/ltx23/t2v.py", i2v: "runtime/video/ltx/ltx23/i2v.py", cfgFlag: "--cfg", omitSteps: true },
+  wan21: { t2v: "runtime/video/wan/wan21/t2v.py",  i2v: "runtime/video/wan/wan21/i2v.py",  cfgFlag: "--cfg" },
+  wan22: { t2v: "runtime/video/wan/wan22/t2v.py",  i2v: "runtime/video/wan/wan22/i2v.py",  cfgFlag: "--cfg" },
 };
 
 export const AUDIO_SCRIPTS: Partial<Record<string, string>> = {
-  ace_step: "examples/audio/ace/t2a.py",
+  ace_step: "runtime/audio/ace/t2a.py",
 };
 
 export function getModels(action: string, media: string): string[] {

@@ -21,9 +21,9 @@ describe("US-004-AC01: registry exports data constants", () => {
   });
 
   it("IMAGE_SCRIPTS maps known image models to script paths", () => {
-    expect(IMAGE_SCRIPTS["sdxl"]).toBe("examples/image/generation/sdxl/t2i.py");
-    expect(IMAGE_SCRIPTS["anima"]).toBe("examples/image/generation/anima/t2i.py");
-    expect(IMAGE_SCRIPTS["z_image"]).toBe("examples/image/generation/z_image/turbo.py");
+    expect(IMAGE_SCRIPTS["sdxl"]).toBe("runtime/image/generation/sdxl/t2i.py");
+    expect(IMAGE_SCRIPTS["anima"]).toBe("runtime/image/generation/anima/t2i.py");
+    expect(IMAGE_SCRIPTS["z_image"]).toBe("runtime/image/generation/z_image/turbo.py");
     expect(IMAGE_SCRIPTS["flux_klein"]).toBeUndefined();
   });
 
@@ -39,7 +39,7 @@ describe("US-004-AC01: registry exports data constants", () => {
   });
 
   it("AUDIO_SCRIPTS maps ace_step to a script path", () => {
-    expect(AUDIO_SCRIPTS["ace_step"]).toBe("examples/audio/ace/t2a.py");
+    expect(AUDIO_SCRIPTS["ace_step"]).toBe("runtime/audio/ace/t2a.py");
   });
 });
 
@@ -64,7 +64,7 @@ describe("US-004-AC02: getModels(action, media)", () => {
 
 describe("US-004-AC02: getScript(action, media, model)", () => {
   it("returns script path for a known image model", () => {
-    expect(getScript("create", "image", "sdxl")).toBe("examples/image/generation/sdxl/t2i.py");
+    expect(getScript("create", "image", "sdxl")).toBe("runtime/image/generation/sdxl/t2i.py");
   });
 
   it("returns undefined for an image model without a script (not yet implemented)", () => {
@@ -73,7 +73,7 @@ describe("US-004-AC02: getScript(action, media, model)", () => {
 
   it("returns t2v script path for a known video model", () => {
     const script = getScript("create", "video", "ltx2");
-    expect(script).toBe("examples/video/ltx/ltx2/t2v.py");
+    expect(script).toBe("runtime/video/ltx/ltx2/t2v.py");
   });
 
   it("returns undefined for an unknown video model", () => {
@@ -81,7 +81,7 @@ describe("US-004-AC02: getScript(action, media, model)", () => {
   });
 
   it("returns script path for a known audio model", () => {
-    expect(getScript("create", "audio", "ace_step")).toBe("examples/audio/ace/t2a.py");
+    expect(getScript("create", "audio", "ace_step")).toBe("runtime/audio/ace/t2a.py");
   });
 
   it("returns undefined for an unknown audio model", () => {
