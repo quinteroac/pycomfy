@@ -2848,3 +2848,119 @@ describe("parallax CLI — models-dir and repo-root resolution for create audio 
     expect(exitCode).toBe(0);
   });
 });
+
+describe("parallax CLI — refactored command handlers (US-006)", () => {
+  // AC01: registerCreate and registerEdit are exported
+  it("US-006-AC01: create --help exits 0 (registerCreate is wired)", async () => {
+    const { exitCode } = await runCLI(["create", "--help"]);
+    expect(exitCode).toBe(0);
+  });
+
+  it("US-006-AC01: edit --help exits 0 (registerEdit is wired)", async () => {
+    const { exitCode } = await runCLI(["edit", "--help"]);
+    expect(exitCode).toBe(0);
+  });
+
+  it("US-006-AC01: edit image --help shows image-specific flags", async () => {
+    const { stdout, exitCode } = await runCLI(["edit", "image", "--help"]);
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("--model");
+    expect(stdout).toContain("--prompt");
+    expect(stdout).toContain("--input");
+    expect(stdout).toContain("--steps");
+    expect(stdout).toContain("--cfg");
+    expect(stdout).toContain("--seed");
+    expect(stdout).toContain("--output");
+    expect(stdout).toContain("--models-dir");
+  });
+
+  it("US-006-AC01: edit video --help shows video-specific flags", async () => {
+    const { stdout, exitCode } = await runCLI(["edit", "video", "--help"]);
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("--model");
+    expect(stdout).toContain("--prompt");
+    expect(stdout).toContain("--input");
+    expect(stdout).toContain("--steps");
+    expect(stdout).toContain("--cfg");
+    expect(stdout).toContain("--seed");
+    expect(stdout).toContain("--output");
+    expect(stdout).toContain("--models-dir");
+  });
+
+  // AC02: --models-dir resolution is handled once per handler
+  it("US-006-AC02: create image missing --models-dir errors with canonical message", async () => {
+    const { stderr, exitCode } = await runCLIWithEnv(
+      ["create", "image", "--model", "sdxl", "--prompt", "test"],
+      { PYCOMFY_MODELS_DIR: undefined, PARALLAX_REPO_ROOT: "/tmp" },
+    );
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain("Error: --models-dir or PYCOMFY_MODELS_DIR is required");
+  });
+
+  it("US-006-AC02: create video missing --models-dir errors with canonical message", async () => {
+    const { stderr, exitCode } = await runCLIWithEnv(
+      ["create", "video", "--model", "ltx2", "--prompt", "test"],
+      { PYCOMFY_MODELS_DIR: undefined, PARALLAX_REPO_ROOT: "/tmp" },
+    );
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain("Error: --models-dir or PYCOMFY_MODELS_DIR is required");
+  });
+
+  it("US-006-AC02: create audio missing --models-dir errors with canonical message", async () => {
+    const { stderr, exitCode } = await runCLIWithEnv(
+      ["create", "audio", "--model", "ace_step", "--prompt", "test"],
+      { PYCOMFY_MODELS_DIR: undefined, PARALLAX_REPO_ROOT: "/tmp" },
+    );
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain("Error: --models-dir or PYCOMFY_MODELS_DIR is required");
+  });
+
+  // AC03: all existing commands preserve flags and behavior
+  it("US-006-AC03: create image --help lists all original flags", async () => {
+    const { stdout, exitCode } = await runCLI(["create", "image", "--help"]);
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("--negative-prompt");
+    expect(stdout).toContain("--width");
+    expect(stdout).toContain("--height");
+    expect(stdout).toContain("--steps");
+    expect(stdout).toContain("--cfg");
+    expect(stdout).toContain("--models-dir");
+  });
+
+  it("US-006-AC03: create video --help lists all original flags", async () => {
+    const { stdout, exitCode } = await runCLI(["create", "video", "--help"]);
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("--input");
+    expect(stdout).toContain("--width");
+    expect(stdout).toContain("--height");
+    expect(stdout).toContain("--length");
+    expect(stdout).toContain("--steps");
+    expect(stdout).toContain("--cfg");
+    expect(stdout).toContain("--models-dir");
+  });
+
+  it("US-006-AC03: create audio --help lists all original flags", async () => {
+    const { stdout, exitCode } = await runCLI(["create", "audio", "--help"]);
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("--length");
+    expect(stdout).toContain("--steps");
+    expect(stdout).toContain("--cfg");
+    expect(stdout).toContain("--bpm");
+    expect(stdout).toContain("--lyrics");
+    expect(stdout).toContain("--models-dir");
+  });
+
+  it("US-006-AC03: edit image --help lists default steps=20 and cfg=7", async () => {
+    const { stdout, exitCode } = await runCLI(["edit", "image", "--help"]);
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("20");
+    expect(stdout).toContain("7");
+  });
+
+  it("US-006-AC03: edit video --help lists default steps=30 and cfg=6", async () => {
+    const { stdout, exitCode } = await runCLI(["edit", "video", "--help"]);
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("30");
+    expect(stdout).toContain("6");
+  });
+});

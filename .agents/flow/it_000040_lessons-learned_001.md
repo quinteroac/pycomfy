@@ -86,3 +86,21 @@
 - `src/commands/create.ts` exports `setupCreateCommand(program: Command): void` — the pattern for future `commands/edit.ts` is the same.
 - When adding a new media type or model, `buildArgs` in the appropriate model file is the only place that needs to handle the special cases; action handlers stay clean.
 - The 11 pre-existing `ace_step model component flags` test failures are unrelated to this story and remain.
+
+## US-006 — Refactored command handlers (`commands/create.ts`, `commands/edit.ts`)
+
+**Summary:** Renamed `setupCreateCommand` → `registerCreate` in `create.ts`. Created `commands/edit.ts` exporting `registerEdit(program)` by extracting the inline edit commands from `index.ts`. Added `resolveModelsDir(flag?)` helper to both command files that centralizes `flag > stored config > env` resolution via `readConfig().modelsDir`. Updated `index.ts` to import and call both `registerCreate` and `registerEdit`, removing all helper functions (`modelsFooter`, `validateModel`, `notImplemented`) and unused imports.
+
+**Key Decisions:**
+- `resolveModelsDir` uses `readConfig().modelsDir` as the fallback (which already merges env vars and stored config), so `flag > config > env` resolution works correctly without any special-casing.
+- Edit handlers call `notImplemented` before `resolveModelsDir` because the edit commands are still stubs. Once real scripts are wired, `resolveModelsDir` should be called between `validateModel` and `notImplemented` / the real action. `resolveModelsDir` remains in `edit.ts` as forward scaffolding.
+- `--models-dir` was added to edit commands for future use, but doesn't gate the `notImplemented` stub path.
+
+**Pitfalls Encountered:**
+- Calling `resolveModelsDir` before `notImplemented` in edit handlers broke pre-existing US-007 stub tests, which run edit commands without `--models-dir`. Fix: always call `notImplemented` immediately after `validateModel` in stub handlers, since `notImplemented` never returns (it calls `process.exit(0)`).
+- A bad edit left `index.ts` with duplicate content (the function and program setup appeared twice), causing `TS2393 Duplicate function implementation`. Fix: rewrite the file with `cat > …` instead of using the edit tool when the replacement boundary is hard to isolate.
+
+**Useful Context for Future Agents:**
+- `registerCreate` and `registerEdit` are the canonical entry points for the create/edit command trees. Adding new create or edit media types should be done inside those files only.
+- `resolveModelsDir` is the single place to change if the precedence order for models-dir resolution ever needs updating.
+- The 11 `ace_step model component flags (US-002)` failures are pre-existing and unrelated to this story.
