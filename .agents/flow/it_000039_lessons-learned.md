@@ -154,3 +154,20 @@
 - The models-dir / repo-root resolution logic lives in the `create video` action handler (lines ~160–164 in `index.ts`) and in `spawnPipeline()` (~line 50–62). Both checks are shared across all `create image` and `create video` models.
 - If a new `create video` or `create audio` model is added that changes models-dir resolution behaviour, update the US-005 describe block in `index.test.ts` accordingly.
 - `makeFakeWan21Root()` helper (defined around line 1055 of `index.test.ts`) creates a minimal fake PARALLAX_REPO_ROOT suitable for subprocess forwarding tests.
+
+## US-001 — ltx2 i2v via CLI
+
+**Summary:** Added `--input <path>` as an optional option to `parallax create video`. When `--model ltx2` and `--input` are both supplied, the CLI routes to `examples/video/ltx/ltx2/i2v.py` (i2v mode) instead of `t2v.py`. `--input` is forwarded as `--image` to the subprocess (matching the Python script's argparser). `--cfg` is still forwarded as `--cfg-pass1` for ltx2 (unchanged from t2v behaviour). Added 13 new tests in a dedicated `describe` block; all 116 tests pass.
+
+**Key Decisions:**
+- Used inline conditional for script selection (`opts.model === "ltx2" && opts.input !== undefined ? i2v.py : VIDEO_SCRIPTS[opts.model]`) rather than adding a separate `VIDEO_I2V_SCRIPTS` map — simpler since only ltx2 currently has i2v.
+- `--input` (CLI) → `--image` (subprocess) rename is applied only for ltx2 i2v; the forwarding is gated on `opts.model === "ltx2" && opts.input !== undefined`.
+- Added a regression test asserting that ltx2 **without** `--input` still routes to `t2v.py` — prevents regressions if the routing logic is later refactored.
+
+**Pitfalls Encountered:**
+- Pre-existing tsc errors (Bun/DOM type incompatibility) exist when using system `tsc`; use `bun run typecheck` from `packages/parallax_cli/` to run the project-correct checker — it exits 0.
+
+**Useful Context for Future Agents:**
+- `examples/video/ltx/ltx2/i2v.py` accepts `--image` (not `--input`). The CLI-to-subprocess rename happens inside the `create video` action handler.
+- If other models (e.g., wan21, wan22) gain i2v support, a `VIDEO_I2V_SCRIPTS` map would be cleaner than further inline conditionals.
+- The `makeFakeLtx2I2vRoot()` helper (bottom of `index.test.ts`) creates only `i2v.py`; the existing `makeFakeLtx2Root()` creates only `t2v.py`. Use both for regression tests covering the routing split.

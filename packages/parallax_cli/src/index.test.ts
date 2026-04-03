@@ -1391,3 +1391,197 @@ describe("parallax CLI — wan22 video generation (US-004)", () => {
     }
   });
 });
+
+// Helper: create a temporary PARALLAX_REPO_ROOT with a fake ltx2 i2v.py script.
+async function makeFakeLtx2I2vRoot(scriptBody: string): Promise<string> {
+  const tmpRoot = await mkdtemp(join(tmpdir(), "ltx2_i2v_test_"));
+  const scriptDir = join(tmpRoot, "examples", "video", "ltx", "ltx2");
+  await mkdir(scriptDir, { recursive: true });
+  await writeFile(join(scriptDir, "i2v.py"), scriptBody);
+  return tmpRoot;
+}
+
+describe("parallax CLI — ltx2 i2v video generation (US-001-it39)", () => {
+  // AC01: missing models-dir exits early with clear error
+  it("US-001-AC01: missing PYCOMFY_MODELS_DIR with --input exits 1 with clear error", async () => {
+    const { stderr, exitCode } = await runCLIWithEnv(
+      ["create", "video", "--model", "ltx2", "--prompt", "test", "--input", "img.png"],
+      { PYCOMFY_MODELS_DIR: undefined, PARALLAX_REPO_ROOT: undefined },
+    );
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain("Error: --models-dir or PYCOMFY_MODELS_DIR is required");
+  });
+
+  it("US-001-AC01: with --input and --models-dir set, CLI reaches subprocess spawn (PARALLAX_REPO_ROOT check)", async () => {
+    const { stderr, exitCode } = await runCLIWithEnv(
+      ["create", "video", "--model", "ltx2", "--prompt", "test", "--input", "img.png", "--models-dir", "/tmp"],
+      { PARALLAX_REPO_ROOT: undefined },
+    );
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain("Error: PARALLAX_REPO_ROOT is required");
+  });
+
+  it("US-001-AC01: subprocess (i2v.py) is spawned and exit code propagated (exit 0 from fake script)", async () => {
+    const tmpRoot = await makeFakeLtx2I2vRoot("import sys; sys.exit(0)\n");
+    try {
+      const { exitCode } = await runCLIWithEnv(
+        ["create", "video", "--model", "ltx2", "--prompt", "test", "--input", "img.png", "--models-dir", "/tmp"],
+        { PARALLAX_REPO_ROOT: tmpRoot },
+      );
+      expect(exitCode).toBe(0);
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  // AC02: --input is forwarded as --image (not --input) to the subprocess
+  it("US-001-AC02: --input is forwarded as --image to the ltx2 i2v subprocess", async () => {
+    const tmpRoot = await makeFakeLtx2I2vRoot(
+      'import sys; print(" ".join(sys.argv[1:])); sys.exit(0)\n',
+    );
+    try {
+      const { stdout, exitCode } = await runCLIWithEnv(
+        ["create", "video", "--model", "ltx2", "--prompt", "test", "--input", "/path/to/img.png", "--models-dir", "/tmp"],
+        { PARALLAX_REPO_ROOT: tmpRoot },
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain("--image");
+      expect(stdout).toContain("/path/to/img.png");
+      // bare --input must not be forwarded
+      expect(stdout).not.toContain("--input");
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  // AC03: --prompt, --width, --height, --length, --steps, --seed, --output are forwarded
+  it("US-001-AC03: --prompt, --width, --height, --length, --steps, --seed, --output are forwarded", async () => {
+    const tmpRoot = await makeFakeLtx2I2vRoot(
+      'import sys; print(" ".join(sys.argv[1:])); sys.exit(0)\n',
+    );
+    try {
+      const { stdout, exitCode } = await runCLIWithEnv(
+        [
+          "create", "video", "--model", "ltx2", "--prompt", "a cat video",
+          "--input", "img.png", "--models-dir", "/tmp",
+          "--width", "1280", "--height", "720", "--length", "97",
+          "--steps", "20", "--seed", "42", "--output", "my_video.mp4",
+        ],
+        { PARALLAX_REPO_ROOT: tmpRoot },
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain("--prompt");
+      expect(stdout).toContain("a cat video");
+      expect(stdout).toContain("--width");
+      expect(stdout).toContain("1280");
+      expect(stdout).toContain("--height");
+      expect(stdout).toContain("720");
+      expect(stdout).toContain("--length");
+      expect(stdout).toContain("97");
+      expect(stdout).toContain("--steps");
+      expect(stdout).toContain("20");
+      expect(stdout).toContain("--seed");
+      expect(stdout).toContain("42");
+      expect(stdout).toContain("--output");
+      expect(stdout).toContain("my_video.mp4");
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  // AC04: --cfg is forwarded as --cfg-pass1, never bare --cfg
+  it("US-001-AC04: --cfg is forwarded as --cfg-pass1 to the ltx2 i2v subprocess", async () => {
+    const tmpRoot = await makeFakeLtx2I2vRoot(
+      'import sys; print(" ".join(sys.argv[1:])); sys.exit(0)\n',
+    );
+    try {
+      const { stdout, exitCode } = await runCLIWithEnv(
+        ["create", "video", "--model", "ltx2", "--prompt", "test", "--input", "img.png", "--models-dir", "/tmp", "--cfg", "4.0"],
+        { PARALLAX_REPO_ROOT: tmpRoot },
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain("--cfg-pass1");
+      expect(stdout).toContain("4.0");
+      expect(stdout).not.toContain("--cfg ");
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("US-001-AC04: bare --cfg is NOT in i2v subprocess argv (exact element check)", async () => {
+    const tmpRoot = await makeFakeLtx2I2vRoot(
+      'import sys\nif "--cfg" in sys.argv[1:]:\n    sys.exit(2)\nsys.exit(0)\n',
+    );
+    try {
+      const { exitCode } = await runCLIWithEnv(
+        ["create", "video", "--model", "ltx2", "--prompt", "test", "--input", "img.png", "--models-dir", "/tmp", "--cfg", "4.0"],
+        { PARALLAX_REPO_ROOT: tmpRoot },
+      );
+      // Would be 2 if bare --cfg were forwarded; 0 confirms it was converted to --cfg-pass1.
+      expect(exitCode).toBe(0);
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  // AC05: --models-dir is forwarded
+  it("US-001-AC05: --models-dir is forwarded to the ltx2 i2v subprocess", async () => {
+    const tmpRoot = await makeFakeLtx2I2vRoot(
+      'import sys; print(" ".join(sys.argv[1:])); sys.exit(0)\n',
+    );
+    try {
+      const { stdout, exitCode } = await runCLIWithEnv(
+        ["create", "video", "--model", "ltx2", "--prompt", "test", "--input", "img.png", "--models-dir", "/my/models"],
+        { PARALLAX_REPO_ROOT: tmpRoot },
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain("--models-dir");
+      expect(stdout).toContain("/my/models");
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  // AC06: exit code propagation
+  it("US-001-AC06: CLI exits with non-zero when i2v subprocess fails (bad PARALLAX_REPO_ROOT path)", async () => {
+    const { exitCode } = await runCLIWithEnv(
+      ["create", "video", "--model", "ltx2", "--prompt", "test", "--input", "img.png", "--models-dir", "/tmp"],
+      { PARALLAX_REPO_ROOT: "/nonexistent-parallax-root-12345" },
+    );
+    expect(exitCode).not.toBe(0);
+  });
+
+  it("US-001-AC06: CLI propagates i2v subprocess exit code 3 verbatim", async () => {
+    const tmpRoot = await makeFakeLtx2I2vRoot("import sys; sys.exit(3)\n");
+    try {
+      const { exitCode } = await runCLIWithEnv(
+        ["create", "video", "--model", "ltx2", "--prompt", "test", "--input", "img.png", "--models-dir", "/tmp"],
+        { PARALLAX_REPO_ROOT: tmpRoot },
+      );
+      expect(exitCode).toBe(3);
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  // Regression: t2v (no --input) still uses t2v.py for ltx2
+  it("US-001-regression: ltx2 without --input still uses t2v.py (t2v mode)", async () => {
+    const tmpRoot = await makeFakeLtx2Root("import sys; sys.exit(0)\n");
+    try {
+      const { exitCode } = await runCLIWithEnv(
+        ["create", "video", "--model", "ltx2", "--prompt", "test", "--models-dir", "/tmp"],
+        { PARALLAX_REPO_ROOT: tmpRoot },
+      );
+      expect(exitCode).toBe(0);
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  // AC07: --input is listed in create video --help
+  it("US-001-AC07: --input option is listed in create video --help", async () => {
+    const { stdout, exitCode } = await runCLI(["create", "video", "--help"]);
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("--input");
+  });
+});
