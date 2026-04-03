@@ -4,8 +4,8 @@ import { join } from "path";
 import { mkdtemp, writeFile, rm } from "fs/promises";
 import { tmpdir } from "os";
 
-const CLI = join(import.meta.dir, "index.ts");
-const RUNNER_SRC = readFileSync(join(import.meta.dir, "runner.ts"), "utf-8");
+const CLI = join(import.meta.dir, "../src/index.ts");
+const RUNNER_SRC = readFileSync(join(import.meta.dir, "../src/runner.ts"), "utf-8");
 
 // Helper: spawn CLI with explicit env overrides (undefined = unset)
 async function runCLIWithEnv(
@@ -59,7 +59,7 @@ describe("runner.ts — US-003-AC02 (no env read inside module)", () => {
 
 describe("runner.ts — US-003-AC01 (function signature accepts config)", () => {
   it("spawnPipeline is exported from runner.ts", async () => {
-    const mod = await import("./runner");
+    const mod = await import("../src/runner");
     expect(typeof mod.spawnPipeline).toBe("function");
   });
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { buildArgs } from "./video";
+import { buildArgs } from "../../src/models/video";
 
 // US-005-AC02: buildArgs handles video-specific special cases
 describe("US-005-AC02: video buildArgs", () => {

@@ -2,13 +2,15 @@
 // Interactive TTY flow uses @clack/prompts; non-interactive mode (--non-interactive or no TTY) uses flag values / defaults.
 
 import { Command } from "commander";
+import { existsSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
-import { readConfig, writeConfig } from "../config";
+import { configExists, readConfig, writeConfig } from "../config";
 
 const DEFAULT_INSTALL_DIR = join(homedir(), ".parallax");
-const DEFAULT_MODELS_DIR = join(homedir(), ".parallax", "models");
+const DEFAULT_MODELS_DIR = join(homedir(), "parallax-models");
 const DEFAULT_VARIANT = "cpu";
+const DEFAULT_UV_PATH = join(homedir(), ".local", "bin", "uv");
 
 interface InstallOpts {
   nonInteractive?: boolean;
@@ -49,9 +51,18 @@ async function runNonInteractive(opts: InstallOpts): Promise<void> {
 }
 
 async function runInteractive(opts: InstallOpts): Promise<void> {
-  const { intro, outro, text, select, isCancel, cancel } = await import("@clack/prompts");
+  const { intro, outro, text, select, confirm, spinner, isCancel, cancel } = await import("@clack/prompts");
 
   intro("Parallax — environment setup");
+
+  // Confirm before reinstalling if config already exists.
+  if (configExists()) {
+    const shouldReinstall = await confirm({ message: "Existing configuration found. Reinstall?" });
+    if (isCancel(shouldReinstall) || !shouldReinstall) {
+      cancel("Installation cancelled.");
+      process.exit(0);
+    }
+  }
 
   const installDirAnswer = await text({
     message: "Install directory",
@@ -86,16 +97,75 @@ async function runInteractive(opts: InstallOpts): Promise<void> {
     process.exit(0);
   }
 
+  // Detect or install uv.
+  const uvPath = await detectOrInstallUv(spinner);
+
+  // Set up Python environment with uv venv + uv sync.
+  const s = spinner();
+  s.start("Setting up Python environment…");
+  const venvPath = join(installDirAnswer as string, ".venv");
+  const venvProc = Bun.spawn([uvPath, "venv", venvPath], {
+    cwd: installDirAnswer as string,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const venvExit = await venvProc.exited;
+  if (venvExit !== 0) {
+    s.stop("Failed to create virtual environment.");
+    cancel("Setup failed. Check that uv is working and the install directory is valid.");
+    process.exit(1);
+  }
+
+  const syncProc = Bun.spawn([uvPath, "sync", "--extra", variantAnswer as string], {
+    cwd: installDirAnswer as string,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const syncExit = await syncProc.exited;
+  if (syncExit !== 0) {
+    s.stop("Failed to sync dependencies.");
+    cancel("uv sync failed. Check your pyproject.toml and network connectivity.");
+    process.exit(1);
+  }
+  s.stop("Python environment ready.");
+
   applyConfig(
     installDirAnswer as string,
     modelsDirAnswer as string,
     variantAnswer as string,
+    uvPath,
   );
 
-  outro("Configuration saved. Run `parallax create` to get started.");
+  outro("Listo. Ejecuta: parallax create image --help");
 }
 
-function applyConfig(installDir: string, modelsDir: string, variant: string): void {
+async function detectOrInstallUv(
+  spinnerFn: () => { start: (msg: string) => void; stop: (msg: string) => void },
+): Promise<string> {
+  // Check ~/.local/bin/uv first.
+  if (existsSync(DEFAULT_UV_PATH)) return DEFAULT_UV_PATH;
+
+  // Check if uv is available in PATH.
+  const inPath = Bun.which("uv");
+  if (inPath) return inPath;
+
+  // Download uv to ~/.local/bin.
+  const s = spinnerFn();
+  s.start("Downloading uv to ~/.local/bin…");
+  const installProc = Bun.spawn(["sh", "-c", "curl -LsSf https://astral.sh/uv/install.sh | sh"], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const installExit = await installProc.exited;
+  if (installExit !== 0 || !existsSync(DEFAULT_UV_PATH)) {
+    s.stop("Failed to download uv.");
+    throw new Error("Could not install uv automatically. Please install it manually: https://docs.astral.sh/uv/");
+  }
+  s.stop("uv installed to ~/.local/bin.");
+  return DEFAULT_UV_PATH;
+}
+
+function applyConfig(installDir: string, modelsDir: string, variant: string, uvPath?: string): void {
   const stored = readConfig();
   writeConfig({
     ...stored,
@@ -103,5 +173,7 @@ function applyConfig(installDir: string, modelsDir: string, variant: string): vo
     modelsDir,
     variant,
     installedAt: new Date().toISOString(),
+    ...(uvPath !== undefined && { uvPath }),
   });
 }
+

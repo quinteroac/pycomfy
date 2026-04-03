@@ -8,7 +8,7 @@ import {
   getScript,
   getModelConfig,
   type ModelConfig,
-} from "./registry";
+} from "../../src/models/registry";
 
 // US-004-AC01: MODELS, IMAGE_SCRIPTS, VIDEO_MODEL_CONFIG, AUDIO_SCRIPTS are exported
 describe("US-004-AC01: registry exports data constants", () => {

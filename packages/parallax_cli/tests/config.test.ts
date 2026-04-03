@@ -32,7 +32,7 @@ afterEach(() => {
 });
 
 // Import after env setup so module re-reads env each call
-import { readConfig, writeConfig, configExists } from "./config";
+import { readConfig, writeConfig, configExists } from "../src/config";
 
 // US-002-AC01: exports the three required functions
 describe("config exports", () => {

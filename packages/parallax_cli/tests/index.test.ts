@@ -3,7 +3,7 @@ import { join } from "path";
 import { mkdtemp, mkdir, writeFile, rm } from "fs/promises";
 import { tmpdir } from "os";
 
-const CLI = join(import.meta.dir, "index.ts");
+const CLI = join(import.meta.dir, "../src/index.ts");
 
 async function runCLI(args: string[]): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   const proc = Bun.spawn(["bun", "run", CLI, ...args], {
@@ -2969,7 +2969,7 @@ describe("parallax CLI — clean entry point (US-008)", () => {
   it("US-008-AC01/AC02: index.ts is under 20 lines and has no inline logic", async () => {
     const { readFileSync } = await import("fs");
     const { join } = await import("path");
-    const src = readFileSync(join(import.meta.dir, "index.ts"), "utf-8");
+    const src = readFileSync(join(import.meta.dir, "../src/index.ts"), "utf-8");
     const lines = src.split("\n").filter((l) => l.trim().length > 0);
     // Under 20 non-blank lines
     expect(lines.length).toBeLessThan(20);

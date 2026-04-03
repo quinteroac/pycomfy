@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { buildArgs } from "./image";
+import { buildArgs } from "../../src/models/image";
 
 // US-005-AC01: buildArgs handles standard image args
 describe("US-005-AC01: image buildArgs", () => {

@@ -3,7 +3,7 @@ import { join } from "path";
 import { existsSync, readFileSync, unlinkSync, mkdirSync } from "fs";
 import { homedir } from "os";
 
-const CLI = join(import.meta.dir, "../index.ts");
+const CLI = join(import.meta.dir, "../../src/index.ts");
 const CONFIG_PATH = join(homedir(), ".config", "parallax", "config.json");
 
 async function runCLI(

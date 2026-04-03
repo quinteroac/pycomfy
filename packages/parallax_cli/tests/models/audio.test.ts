@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { buildArgs } from "./audio";
+import { buildArgs } from "../../src/models/audio";
 
 // US-005-AC03: buildArgs handles audio flag remapping
 describe("US-005-AC03: audio buildArgs", () => {

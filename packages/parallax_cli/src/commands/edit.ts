@@ -2,7 +2,6 @@
 // Action handlers follow: validate → resolveModelsDir → buildArgs → spawnPipeline.
 
 import { Command } from "commander";
-import { readConfig } from "../config";
 import { getModels } from "../models/registry";
 
 function modelsFooter(action: string, media: string): string {
@@ -22,16 +21,6 @@ function validateModel(action: string, media: string, model: string): void {
 function notImplemented(action: string, media: string, model: string): never {
   console.log(`[parallax] ${action} ${media} --model ${model} — not yet implemented (coming soon)`);
   process.exit(0);
-}
-
-// Resolves --models-dir with priority: flag > stored config > env var.
-function resolveModelsDir(flag?: string): string {
-  const modelsDir = flag ?? readConfig().modelsDir;
-  if (!modelsDir) {
-    console.error("Error: --models-dir or PYCOMFY_MODELS_DIR is required");
-    process.exit(1);
-  }
-  return modelsDir;
 }
 
 export function registerEdit(program: Command): void {
