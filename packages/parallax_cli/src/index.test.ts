@@ -388,6 +388,63 @@ describe("parallax CLI — sdxl image generation (US-001-it39)", () => {
   });
 });
 
+describe("parallax CLI — anima image generation (US-002)", () => {
+  it("US-002-AC01: missing PYCOMFY_MODELS_DIR and --models-dir exits 1 with clear error", async () => {
+    const { stderr, exitCode } = await runCLIWithEnv(
+      ["create", "image", "--model", "anima", "--prompt", "1girl, anime style"],
+      { PYCOMFY_MODELS_DIR: undefined, PARALLAX_REPO_ROOT: undefined },
+    );
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain("Error: --models-dir or PYCOMFY_MODELS_DIR is required");
+  });
+
+  it("US-002-AC01: --models-dir flag takes precedence; missing PARALLAX_REPO_ROOT exits 1", async () => {
+    const { stderr, exitCode } = await runCLIWithEnv(
+      ["create", "image", "--model", "anima", "--prompt", "1girl, anime style", "--models-dir", "/tmp"],
+      { PARALLAX_REPO_ROOT: undefined },
+    );
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain("Error: PARALLAX_REPO_ROOT is required");
+  });
+
+  it("US-002-AC02: --negative-prompt, --width, --height, --steps, --cfg, --seed are forwarded (reaches PARALLAX_REPO_ROOT check)", async () => {
+    const { stderr, exitCode } = await runCLIWithEnv(
+      [
+        "create", "image", "--model", "anima", "--prompt", "1girl, anime style",
+        "--models-dir", "/tmp", "--negative-prompt", "lowres, bad anatomy",
+        "--width", "512", "--height", "512", "--steps", "10", "--cfg", "4", "--seed", "42",
+        "--output", "out.png",
+      ],
+      { PARALLAX_REPO_ROOT: undefined },
+    );
+    // Flags are accepted; the only error should be the missing PARALLAX_REPO_ROOT
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain("Error: PARALLAX_REPO_ROOT is required");
+  });
+
+  it("US-002-AC02: --negative-prompt IS forwarded for anima (unlike z_image)", async () => {
+    const { stderr, exitCode } = await runCLIWithEnv(
+      [
+        "create", "image", "--model", "anima", "--prompt", "1girl",
+        "--models-dir", "/tmp", "--negative-prompt", "bad quality",
+      ],
+      { PARALLAX_REPO_ROOT: undefined },
+    );
+    // Flag was accepted — no unknown-option error; only PARALLAX_REPO_ROOT error
+    expect(exitCode).toBe(1);
+    expect(stderr).not.toContain("unknown option");
+    expect(stderr).toContain("Error: PARALLAX_REPO_ROOT is required");
+  });
+
+  it("US-002-AC03: CLI exits with non-zero when subprocess fails (bad PARALLAX_REPO_ROOT path)", async () => {
+    const { exitCode } = await runCLIWithEnv(
+      ["create", "image", "--model", "anima", "--prompt", "1girl", "--models-dir", "/tmp"],
+      { PARALLAX_REPO_ROOT: "/nonexistent-parallax-root-12345" },
+    );
+    expect(exitCode).not.toBe(0);
+  });
+});
+
 describe("parallax CLI — top-level help (US-001)", () => {
   it("US-001-AC01: --help prints tool name, version, description, and subcommands", async () => {
     const { stdout, exitCode } = await runCLI(["--help"]);

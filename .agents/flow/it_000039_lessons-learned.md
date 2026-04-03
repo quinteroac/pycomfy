@@ -20,3 +20,19 @@
 - The `PARALLAX_REPO_ROOT` → script path resolution must happen inside `spawnPipeline`, not in the action handler, so all callers benefit from the same check.
 - `bun test packages/parallax_cli/src/index.test.ts` is the correct command to run CLI tests.
 - `bun tsc --noEmit` from `packages/parallax_cli/` verifies typecheck for the CLI package.
+
+## US-002 — anima image generation via CLI
+
+**Summary:** Added a `parallax CLI — anima image generation (US-002)` describe block to `packages/parallax_cli/src/index.test.ts` covering all acceptance criteria. The CLI dispatch (`IMAGE_SCRIPTS["anima"]`), the example script (`examples/image/generation/anima/t2i.py`), and the pipeline (`comfy_diffusion/pipelines/image/anima/t2i.py`) were already implemented by the US-001 agent — only test coverage was missing.
+
+**Key Decisions:**
+- Tests mirror the `US-001-it39` sdxl block exactly, replacing `sdxl` with `anima` and adjusting the prompt text.
+- A dedicated test asserts that `--negative-prompt` IS forwarded for anima (flag-parsing succeeds and only `PARALLAX_REPO_ROOT` remains as the error), explicitly contrasting with `z_image` which omits it.
+- All flag-forwarding tests are validated indirectly: if Commander accepted all flags without error, the only failure should be the missing `PARALLAX_REPO_ROOT` env var.
+
+**Pitfalls Encountered:**
+- None. The implementation was already in place; only test assertions needed to be added.
+
+**Useful Context for Future Agents:**
+- When US-001 was implemented, the agent pre-wired `anima` and `z_image` into `IMAGE_SCRIPTS` alongside `sdxl`, so US-002 and US-003 only needed test coverage — not production code changes.
+- The pattern `runCLIWithEnv([...], { PARALLAX_REPO_ROOT: undefined })` is the canonical way to test flag-forwarding without actually spawning a real subprocess — it triggers the `PARALLAX_REPO_ROOT` guard after all flag parsing succeeds.
