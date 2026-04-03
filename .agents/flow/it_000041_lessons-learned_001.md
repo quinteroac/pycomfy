@@ -33,3 +33,22 @@
 **Useful Context for Future Agents:**
 - After US-001+US-002, there are no remaining `examples/` references in any TypeScript source under `packages/`.
 - All 20 registry tests pass after the update.
+
+## US-003 — runner.ts resolves scripts from runtimeDir config key
+
+**Summary:** Added `runtimeDir?: string` to `ParallaxConfig` in `config.ts`, updated `runner.ts` to prefer `runtimeDir` over `repoRoot` when resolving script paths, and added `PARALLAX_RUNTIME_DIR` env var support to `readConfig`. The error message was updated to be more descriptive when neither directory is configured.
+
+**Key Decisions:**
+- `runner.ts` uses `const scriptBase = runtimeDir ?? repoRoot` — single-line fallback chain, no nesting.
+- Added `PARALLAX_RUNTIME_DIR` env var support to `readConfig` to enable integration testing without config file manipulation (consistent with `PARALLAX_REPO_ROOT` pattern).
+- Error message changed from `"Error: PARALLAX_REPO_ROOT is required"` to `"Error: no script directory configured — run \`parallax install\` to set runtimeDir, or set PARALLAX_REPO_ROOT"`.
+- `cwd` for `Bun.spawn` also uses `scriptBase`, so it works correctly in both dev (repoRoot) and installed (runtimeDir) modes.
+
+**Pitfalls Encountered:**
+- Bun includes source code context in error stack traces, so when `uv` is not in PATH, the stack trace output contains the source line with the error message string. Tests using `.not.toContain("no script directory configured")` were failing because the string appeared inside the stack trace's source listing. Fixed by using `.not.toMatch(/^Error: no script directory configured/)` to check the string doesn't appear at the **start** of stderr.
+- The old `runner.test.ts` created a fake repo at `"examples/image/generation/sdxl/t2i.py"` but that path was already stale after US-001/US-002; the test was rewritten to use `"runtime/image/generation/sdxl/t2i.py"`.
+
+**Useful Context for Future Agents:**
+- `PARALLAX_RUNTIME_DIR` env var → `runtimeDir` config field (mirrors `PARALLAX_REPO_ROOT` → `repoRoot`).
+- `spawnPipeline` precedence: `runtimeDir` (installed) > `repoRoot` (dev/CI via env). Neither set → exit 1.
+- When writing integration tests for runner.ts via the CLI subprocess approach, always use `not.toMatch(/^Error: .../)` rather than `not.toContain(...)` to guard against Bun stack trace source context false positives.
