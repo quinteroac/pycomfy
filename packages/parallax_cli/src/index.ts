@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import { join } from "path";
+import { existsSync } from "fs";
 import { Command } from "commander";
 
 // Known models per action+media — single source of truth for help text and validation
@@ -152,6 +153,11 @@ create
   .addHelpText("after", modelsFooter("create video"))
   .action(async (opts) => {
     validateModel("create video", opts.model);
+
+    if (opts.input !== undefined && !existsSync(opts.input)) {
+      console.error(`Error: input file not found: ${opts.input}`);
+      process.exit(1);
+    }
 
     // ltx2 / ltx23 / wan21 / wan22 route to i2v.py when --input is supplied; otherwise fall back to t2v
     const script =

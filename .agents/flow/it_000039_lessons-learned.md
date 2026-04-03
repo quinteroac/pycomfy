@@ -214,3 +214,20 @@ A `makeFakeWan22I2vRoot()` helper and a full `describe("parallax CLI — wan22 i
 **Pitfalls Encountered:** The test file has many `});` blocks that match the naive `old_str` used in `edit` — always use a multi-line or unique context window when appending to large test files. Using `cat >>` (heredoc append) is the safer approach for end-of-file additions.
 
 **Useful Context for Future Agents:** The i2v routing pattern in `create video` is a ternary chain: ltx2 → ltx23 → wan21 → wan22 → fallback to `VIDEO_SCRIPTS[model]`. Any new i2v model must be added to both the ternary chain AND the `--input` → `--image` forwarding condition, and the `--input` help description should be updated too. The `makeFakeWan22Root` helper (t2v) already existed; only `makeFakeWan22I2vRoot` was new.
+
+## US-005 — --input flag added to create video
+
+**Summary:** Implemented AC04: file existence check for `--input` on `parallax create video`. The `--input` option, T2V/I2V routing, and `--input`→`--image` forwarding were already implemented by US-001–US-004. The only missing piece was validating that the file at `opts.input` actually exists before spawning the subprocess. Added `import { existsSync } from "fs"` and a guard in the action handler. Added 5 new tests in a dedicated `US-005-it39` describe block; all 152 tests pass.
+
+**Key Decisions:**
+- File existence check placed immediately after `validateModel()` (before models-dir resolution and subprocess spawn), ensuring the error fires early regardless of environment configuration.
+- Used `/etc/hostname` as a guaranteed-existing file in all existing i2v tests (US-001–US-004) that were broken by the new check — those tests had been using `"img.png"` (non-existent relative path) to test subprocess/env behavior, not file existence.
+- US-005 AC04 tests intentionally use `/nonexistent/missing_image.png` and `/definitely/not/here.jpg` as the input paths.
+
+**Pitfalls Encountered:**
+- Adding the file existence check broke all 32 existing i2v tests (US-001–US-004) because they passed `"img.png"` as `--input` — a non-existent file. Batch-replaced all occurrences with `/etc/hostname` using a Python script. Also replaced `"/path/to/img.png"` in forwarding tests with `/etc/hostname` (updating both the arg and assertion).
+
+**Useful Context for Future Agents:**
+- All i2v tests now use `/etc/hostname` as the `--input` value (a known-existing Linux file). If porting to Windows or macOS, update these to a platform-appropriate path.
+- The file existence check in `index.ts` uses `existsSync` from Node's `"fs"` module (not async). This is intentional — the check is a guard before process.exit(), synchronous is fine here.
+- The error message format is `Error: input file not found: <path>` (exact casing matters for any downstream tests).

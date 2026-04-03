@@ -221,7 +221,7 @@ describe("parallax CLI — known-model validation (US-005)", () => {
   });
 
   it("US-005-AC01/02: edit image with unknown model prints error message and exits 1", async () => {
-    const { stderr, exitCode } = await runCLI(["edit", "image", "--model", "badmodel", "--prompt", "test", "--input", "img.png"]);
+    const { stderr, exitCode } = await runCLI(["edit", "image", "--model", "badmodel", "--prompt", "test", "--input", "/etc/hostname"]);
     expect(exitCode).toBe(1);
     expect(stderr).toContain('unknown model "badmodel" for edit image');
     expect(stderr).toContain("Known models:");
@@ -263,7 +263,7 @@ describe("parallax CLI — required-flag validation (US-006)", () => {
   });
 
   it("US-006-AC01: edit image without --model prints 'Error: --model is required' and exits 1", async () => {
-    const { stderr, exitCode } = await runCLI(["edit", "image", "--prompt", "test", "--input", "img.png"]);
+    const { stderr, exitCode } = await runCLI(["edit", "image", "--prompt", "test", "--input", "/etc/hostname"]);
     expect(exitCode).toBe(1);
     expect(stderr).toContain("Error: --model is required");
   });
@@ -282,7 +282,7 @@ describe("parallax CLI — required-flag validation (US-006)", () => {
   });
 
   it("US-006-AC01: edit image without --prompt prints 'Error: --prompt is required' and exits 1", async () => {
-    const { stderr, exitCode } = await runCLI(["edit", "image", "--model", "qwen", "--input", "img.png"]);
+    const { stderr, exitCode } = await runCLI(["edit", "image", "--model", "qwen", "--input", "/etc/hostname"]);
     expect(exitCode).toBe(1);
     expect(stderr).toContain("Error: --prompt is required");
   });
@@ -321,7 +321,7 @@ describe("parallax CLI — stub execution (US-007)", () => {
   });
 
   it("US-007-AC01/02: edit image with valid flags prints stub message and exits 0", async () => {
-    const { stdout, exitCode } = await runCLI(["edit", "image", "--model", "qwen", "--prompt", "test", "--input", "img.png"]);
+    const { stdout, exitCode } = await runCLI(["edit", "image", "--model", "qwen", "--prompt", "test", "--input", "/etc/hostname"]);
     expect(exitCode).toBe(0);
     expect(stdout).toContain("[parallax] edit image --model qwen — not yet implemented (coming soon)");
   });
@@ -1414,7 +1414,7 @@ describe("parallax CLI — ltx2 i2v video generation (US-001-it39)", () => {
   // AC01: missing models-dir exits early with clear error
   it("US-001-AC01: missing PYCOMFY_MODELS_DIR with --input exits 1 with clear error", async () => {
     const { stderr, exitCode } = await runCLIWithEnv(
-      ["create", "video", "--model", "ltx2", "--prompt", "test", "--input", "img.png"],
+      ["create", "video", "--model", "ltx2", "--prompt", "test", "--input", "/etc/hostname"],
       { PYCOMFY_MODELS_DIR: undefined, PARALLAX_REPO_ROOT: undefined },
     );
     expect(exitCode).toBe(1);
@@ -1423,7 +1423,7 @@ describe("parallax CLI — ltx2 i2v video generation (US-001-it39)", () => {
 
   it("US-001-AC01: with --input and --models-dir set, CLI reaches subprocess spawn (PARALLAX_REPO_ROOT check)", async () => {
     const { stderr, exitCode } = await runCLIWithEnv(
-      ["create", "video", "--model", "ltx2", "--prompt", "test", "--input", "img.png", "--models-dir", "/tmp"],
+      ["create", "video", "--model", "ltx2", "--prompt", "test", "--input", "/etc/hostname", "--models-dir", "/tmp"],
       { PARALLAX_REPO_ROOT: undefined },
     );
     expect(exitCode).toBe(1);
@@ -1434,7 +1434,7 @@ describe("parallax CLI — ltx2 i2v video generation (US-001-it39)", () => {
     const tmpRoot = await makeFakeLtx2I2vRoot("import sys; sys.exit(0)\n");
     try {
       const { exitCode } = await runCLIWithEnv(
-        ["create", "video", "--model", "ltx2", "--prompt", "test", "--input", "img.png", "--models-dir", "/tmp"],
+        ["create", "video", "--model", "ltx2", "--prompt", "test", "--input", "/etc/hostname", "--models-dir", "/tmp"],
         { PARALLAX_REPO_ROOT: tmpRoot },
       );
       expect(exitCode).toBe(0);
@@ -1450,12 +1450,12 @@ describe("parallax CLI — ltx2 i2v video generation (US-001-it39)", () => {
     );
     try {
       const { stdout, exitCode } = await runCLIWithEnv(
-        ["create", "video", "--model", "ltx2", "--prompt", "test", "--input", "/path/to/img.png", "--models-dir", "/tmp"],
+        ["create", "video", "--model", "ltx2", "--prompt", "test", "--input", "/etc/hostname", "--models-dir", "/tmp"],
         { PARALLAX_REPO_ROOT: tmpRoot },
       );
       expect(exitCode).toBe(0);
       expect(stdout).toContain("--image");
-      expect(stdout).toContain("/path/to/img.png");
+      expect(stdout).toContain("/etc/hostname");
       // bare --input must not be forwarded
       expect(stdout).not.toContain("--input");
     } finally {
@@ -1472,7 +1472,7 @@ describe("parallax CLI — ltx2 i2v video generation (US-001-it39)", () => {
       const { stdout, exitCode } = await runCLIWithEnv(
         [
           "create", "video", "--model", "ltx2", "--prompt", "a cat video",
-          "--input", "img.png", "--models-dir", "/tmp",
+          "--input", "/etc/hostname", "--models-dir", "/tmp",
           "--width", "1280", "--height", "720", "--length", "97",
           "--steps", "20", "--seed", "42", "--output", "my_video.mp4",
         ],
@@ -1505,7 +1505,7 @@ describe("parallax CLI — ltx2 i2v video generation (US-001-it39)", () => {
     );
     try {
       const { stdout, exitCode } = await runCLIWithEnv(
-        ["create", "video", "--model", "ltx2", "--prompt", "test", "--input", "img.png", "--models-dir", "/tmp", "--cfg", "4.0"],
+        ["create", "video", "--model", "ltx2", "--prompt", "test", "--input", "/etc/hostname", "--models-dir", "/tmp", "--cfg", "4.0"],
         { PARALLAX_REPO_ROOT: tmpRoot },
       );
       expect(exitCode).toBe(0);
@@ -1523,7 +1523,7 @@ describe("parallax CLI — ltx2 i2v video generation (US-001-it39)", () => {
     );
     try {
       const { exitCode } = await runCLIWithEnv(
-        ["create", "video", "--model", "ltx2", "--prompt", "test", "--input", "img.png", "--models-dir", "/tmp", "--cfg", "4.0"],
+        ["create", "video", "--model", "ltx2", "--prompt", "test", "--input", "/etc/hostname", "--models-dir", "/tmp", "--cfg", "4.0"],
         { PARALLAX_REPO_ROOT: tmpRoot },
       );
       // Would be 2 if bare --cfg were forwarded; 0 confirms it was converted to --cfg-pass1.
@@ -1540,7 +1540,7 @@ describe("parallax CLI — ltx2 i2v video generation (US-001-it39)", () => {
     );
     try {
       const { stdout, exitCode } = await runCLIWithEnv(
-        ["create", "video", "--model", "ltx2", "--prompt", "test", "--input", "img.png", "--models-dir", "/my/models"],
+        ["create", "video", "--model", "ltx2", "--prompt", "test", "--input", "/etc/hostname", "--models-dir", "/my/models"],
         { PARALLAX_REPO_ROOT: tmpRoot },
       );
       expect(exitCode).toBe(0);
@@ -1554,7 +1554,7 @@ describe("parallax CLI — ltx2 i2v video generation (US-001-it39)", () => {
   // AC06: exit code propagation
   it("US-001-AC06: CLI exits with non-zero when i2v subprocess fails (bad PARALLAX_REPO_ROOT path)", async () => {
     const { exitCode } = await runCLIWithEnv(
-      ["create", "video", "--model", "ltx2", "--prompt", "test", "--input", "img.png", "--models-dir", "/tmp"],
+      ["create", "video", "--model", "ltx2", "--prompt", "test", "--input", "/etc/hostname", "--models-dir", "/tmp"],
       { PARALLAX_REPO_ROOT: "/nonexistent-parallax-root-12345" },
     );
     expect(exitCode).not.toBe(0);
@@ -1564,7 +1564,7 @@ describe("parallax CLI — ltx2 i2v video generation (US-001-it39)", () => {
     const tmpRoot = await makeFakeLtx2I2vRoot("import sys; sys.exit(3)\n");
     try {
       const { exitCode } = await runCLIWithEnv(
-        ["create", "video", "--model", "ltx2", "--prompt", "test", "--input", "img.png", "--models-dir", "/tmp"],
+        ["create", "video", "--model", "ltx2", "--prompt", "test", "--input", "/etc/hostname", "--models-dir", "/tmp"],
         { PARALLAX_REPO_ROOT: tmpRoot },
       );
       expect(exitCode).toBe(3);
@@ -1608,7 +1608,7 @@ describe("parallax CLI — ltx23 i2v video generation (US-002)", () => {
   // AC01: running the command spawns uv run python examples/video/ltx/ltx23/i2v.py
   it("US-002-AC01: missing PYCOMFY_MODELS_DIR with --input exits 1 with clear error", async () => {
     const { stderr, exitCode } = await runCLIWithEnv(
-      ["create", "video", "--model", "ltx23", "--prompt", "test", "--input", "img.png"],
+      ["create", "video", "--model", "ltx23", "--prompt", "test", "--input", "/etc/hostname"],
       { PYCOMFY_MODELS_DIR: undefined, PARALLAX_REPO_ROOT: undefined },
     );
     expect(exitCode).toBe(1);
@@ -1617,7 +1617,7 @@ describe("parallax CLI — ltx23 i2v video generation (US-002)", () => {
 
   it("US-002-AC01: with --input and --models-dir set, CLI reaches subprocess spawn (PARALLAX_REPO_ROOT check)", async () => {
     const { stderr, exitCode } = await runCLIWithEnv(
-      ["create", "video", "--model", "ltx23", "--prompt", "test", "--input", "img.png", "--models-dir", "/tmp"],
+      ["create", "video", "--model", "ltx23", "--prompt", "test", "--input", "/etc/hostname", "--models-dir", "/tmp"],
       { PARALLAX_REPO_ROOT: undefined },
     );
     expect(exitCode).toBe(1);
@@ -1628,7 +1628,7 @@ describe("parallax CLI — ltx23 i2v video generation (US-002)", () => {
     const tmpRoot = await makeFakeLtx23I2vRoot("import sys; sys.exit(0)\n");
     try {
       const { exitCode } = await runCLIWithEnv(
-        ["create", "video", "--model", "ltx23", "--prompt", "test", "--input", "img.png", "--models-dir", "/tmp"],
+        ["create", "video", "--model", "ltx23", "--prompt", "test", "--input", "/etc/hostname", "--models-dir", "/tmp"],
         { PARALLAX_REPO_ROOT: tmpRoot },
       );
       expect(exitCode).toBe(0);
@@ -1644,12 +1644,12 @@ describe("parallax CLI — ltx23 i2v video generation (US-002)", () => {
     );
     try {
       const { stdout, exitCode } = await runCLIWithEnv(
-        ["create", "video", "--model", "ltx23", "--prompt", "test", "--input", "/path/to/img.png", "--models-dir", "/tmp"],
+        ["create", "video", "--model", "ltx23", "--prompt", "test", "--input", "/etc/hostname", "--models-dir", "/tmp"],
         { PARALLAX_REPO_ROOT: tmpRoot },
       );
       expect(exitCode).toBe(0);
       expect(stdout).toContain("--image");
-      expect(stdout).toContain("/path/to/img.png");
+      expect(stdout).toContain("/etc/hostname");
       // bare --input must not be forwarded
       expect(stdout).not.toContain("--input");
     } finally {
@@ -1666,7 +1666,7 @@ describe("parallax CLI — ltx23 i2v video generation (US-002)", () => {
       const { stdout, exitCode } = await runCLIWithEnv(
         [
           "create", "video", "--model", "ltx23", "--prompt", "a scenic journey",
-          "--input", "img.png", "--models-dir", "/tmp",
+          "--input", "/etc/hostname", "--models-dir", "/tmp",
           "--width", "768", "--height", "512", "--length", "97",
           "--cfg", "1.0", "--seed", "42", "--output", "out.mp4",
         ],
@@ -1699,7 +1699,7 @@ describe("parallax CLI — ltx23 i2v video generation (US-002)", () => {
     );
     try {
       const { exitCode } = await runCLIWithEnv(
-        ["create", "video", "--model", "ltx23", "--prompt", "test", "--input", "img.png", "--models-dir", "/tmp", "--steps", "20"],
+        ["create", "video", "--model", "ltx23", "--prompt", "test", "--input", "/etc/hostname", "--models-dir", "/tmp", "--steps", "20"],
         { PARALLAX_REPO_ROOT: tmpRoot },
       );
       // Would be 2 if --steps were forwarded; 0 confirms it was dropped.
@@ -1715,7 +1715,7 @@ describe("parallax CLI — ltx23 i2v video generation (US-002)", () => {
     );
     try {
       const { exitCode } = await runCLIWithEnv(
-        ["create", "video", "--model", "ltx23", "--prompt", "test", "--input", "img.png", "--models-dir", "/tmp"],
+        ["create", "video", "--model", "ltx23", "--prompt", "test", "--input", "/etc/hostname", "--models-dir", "/tmp"],
         { PARALLAX_REPO_ROOT: tmpRoot },
       );
       expect(exitCode).toBe(0);
@@ -1731,7 +1731,7 @@ describe("parallax CLI — ltx23 i2v video generation (US-002)", () => {
     );
     try {
       const { stdout, exitCode } = await runCLIWithEnv(
-        ["create", "video", "--model", "ltx23", "--prompt", "test", "--input", "img.png", "--models-dir", "/my/models"],
+        ["create", "video", "--model", "ltx23", "--prompt", "test", "--input", "/etc/hostname", "--models-dir", "/my/models"],
         { PARALLAX_REPO_ROOT: tmpRoot },
       );
       expect(exitCode).toBe(0);
@@ -1745,7 +1745,7 @@ describe("parallax CLI — ltx23 i2v video generation (US-002)", () => {
   // AC06: exit code propagation
   it("US-002-AC06: CLI exits with non-zero when i2v subprocess fails (bad PARALLAX_REPO_ROOT path)", async () => {
     const { exitCode } = await runCLIWithEnv(
-      ["create", "video", "--model", "ltx23", "--prompt", "test", "--input", "img.png", "--models-dir", "/tmp"],
+      ["create", "video", "--model", "ltx23", "--prompt", "test", "--input", "/etc/hostname", "--models-dir", "/tmp"],
       { PARALLAX_REPO_ROOT: "/nonexistent-parallax-root-12345" },
     );
     expect(exitCode).not.toBe(0);
@@ -1755,7 +1755,7 @@ describe("parallax CLI — ltx23 i2v video generation (US-002)", () => {
     const tmpRoot = await makeFakeLtx23I2vRoot("import sys; sys.exit(3)\n");
     try {
       const { exitCode } = await runCLIWithEnv(
-        ["create", "video", "--model", "ltx23", "--prompt", "test", "--input", "img.png", "--models-dir", "/tmp"],
+        ["create", "video", "--model", "ltx23", "--prompt", "test", "--input", "/etc/hostname", "--models-dir", "/tmp"],
         { PARALLAX_REPO_ROOT: tmpRoot },
       );
       expect(exitCode).toBe(3);
@@ -1792,7 +1792,7 @@ describe("parallax CLI — wan21 i2v video generation (US-003-it39)", () => {
   // AC01: running the command spawns uv run python examples/video/wan/wan21/i2v.py
   it("US-003-AC01: missing PYCOMFY_MODELS_DIR with --input exits 1 with clear error", async () => {
     const { stderr, exitCode } = await runCLIWithEnv(
-      ["create", "video", "--model", "wan21", "--prompt", "test", "--input", "img.png"],
+      ["create", "video", "--model", "wan21", "--prompt", "test", "--input", "/etc/hostname"],
       { PYCOMFY_MODELS_DIR: undefined, PARALLAX_REPO_ROOT: undefined },
     );
     expect(exitCode).toBe(1);
@@ -1801,7 +1801,7 @@ describe("parallax CLI — wan21 i2v video generation (US-003-it39)", () => {
 
   it("US-003-AC01: with --input and --models-dir set, CLI reaches subprocess spawn (PARALLAX_REPO_ROOT check)", async () => {
     const { stderr, exitCode } = await runCLIWithEnv(
-      ["create", "video", "--model", "wan21", "--prompt", "test", "--input", "img.png", "--models-dir", "/tmp"],
+      ["create", "video", "--model", "wan21", "--prompt", "test", "--input", "/etc/hostname", "--models-dir", "/tmp"],
       { PARALLAX_REPO_ROOT: undefined },
     );
     expect(exitCode).toBe(1);
@@ -1812,7 +1812,7 @@ describe("parallax CLI — wan21 i2v video generation (US-003-it39)", () => {
     const tmpRoot = await makeFakeWan21I2vRoot("import sys; sys.exit(0)\n");
     try {
       const { exitCode } = await runCLIWithEnv(
-        ["create", "video", "--model", "wan21", "--prompt", "test", "--input", "img.png", "--models-dir", "/tmp"],
+        ["create", "video", "--model", "wan21", "--prompt", "test", "--input", "/etc/hostname", "--models-dir", "/tmp"],
         { PARALLAX_REPO_ROOT: tmpRoot },
       );
       expect(exitCode).toBe(0);
@@ -1828,12 +1828,12 @@ describe("parallax CLI — wan21 i2v video generation (US-003-it39)", () => {
     );
     try {
       const { stdout, exitCode } = await runCLIWithEnv(
-        ["create", "video", "--model", "wan21", "--prompt", "test", "--input", "/path/to/img.png", "--models-dir", "/tmp"],
+        ["create", "video", "--model", "wan21", "--prompt", "test", "--input", "/etc/hostname", "--models-dir", "/tmp"],
         { PARALLAX_REPO_ROOT: tmpRoot },
       );
       expect(exitCode).toBe(0);
       expect(stdout).toContain("--image");
-      expect(stdout).toContain("/path/to/img.png");
+      expect(stdout).toContain("/etc/hostname");
       // bare --input must not be forwarded to the subprocess
       expect(stdout).not.toContain("--input");
     } finally {
@@ -1850,7 +1850,7 @@ describe("parallax CLI — wan21 i2v video generation (US-003-it39)", () => {
       const { stdout, exitCode } = await runCLIWithEnv(
         [
           "create", "video", "--model", "wan21", "--prompt", "a cat in the snow",
-          "--input", "img.png", "--models-dir", "/tmp",
+          "--input", "/etc/hostname", "--models-dir", "/tmp",
           "--width", "512", "--height", "512", "--length", "33",
           "--steps", "20", "--cfg", "6", "--seed", "42", "--output", "wan21_i2v.mp4",
         ],
@@ -1885,7 +1885,7 @@ describe("parallax CLI — wan21 i2v video generation (US-003-it39)", () => {
     );
     try {
       const { stdout, exitCode } = await runCLIWithEnv(
-        ["create", "video", "--model", "wan21", "--prompt", "test", "--input", "img.png", "--models-dir", "/my/models"],
+        ["create", "video", "--model", "wan21", "--prompt", "test", "--input", "/etc/hostname", "--models-dir", "/my/models"],
         { PARALLAX_REPO_ROOT: tmpRoot },
       );
       expect(exitCode).toBe(0);
@@ -1899,7 +1899,7 @@ describe("parallax CLI — wan21 i2v video generation (US-003-it39)", () => {
   // AC05: CLI exits with the subprocess exit code
   it("US-003-AC05: CLI exits with non-zero when i2v subprocess fails (bad PARALLAX_REPO_ROOT path)", async () => {
     const { exitCode } = await runCLIWithEnv(
-      ["create", "video", "--model", "wan21", "--prompt", "test", "--input", "img.png", "--models-dir", "/tmp"],
+      ["create", "video", "--model", "wan21", "--prompt", "test", "--input", "/etc/hostname", "--models-dir", "/tmp"],
       { PARALLAX_REPO_ROOT: "/nonexistent-parallax-root-12345" },
     );
     expect(exitCode).not.toBe(0);
@@ -1909,7 +1909,7 @@ describe("parallax CLI — wan21 i2v video generation (US-003-it39)", () => {
     const tmpRoot = await makeFakeWan21I2vRoot("import sys; sys.exit(3)\n");
     try {
       const { exitCode } = await runCLIWithEnv(
-        ["create", "video", "--model", "wan21", "--prompt", "test", "--input", "img.png", "--models-dir", "/tmp"],
+        ["create", "video", "--model", "wan21", "--prompt", "test", "--input", "/etc/hostname", "--models-dir", "/tmp"],
         { PARALLAX_REPO_ROOT: tmpRoot },
       );
       expect(exitCode).toBe(3);
@@ -1945,7 +1945,7 @@ describe("parallax CLI — wan22 i2v video generation (US-004-it39)", () => {
   // AC01: running the command spawns uv run python examples/video/wan/wan22/i2v.py
   it("US-004-AC01: missing PYCOMFY_MODELS_DIR with --input exits 1 with clear error", async () => {
     const { stderr, exitCode } = await runCLIWithEnv(
-      ["create", "video", "--model", "wan22", "--prompt", "test", "--input", "img.png"],
+      ["create", "video", "--model", "wan22", "--prompt", "test", "--input", "/etc/hostname"],
       { PYCOMFY_MODELS_DIR: undefined, PARALLAX_REPO_ROOT: undefined },
     );
     expect(exitCode).toBe(1);
@@ -1954,7 +1954,7 @@ describe("parallax CLI — wan22 i2v video generation (US-004-it39)", () => {
 
   it("US-004-AC01: with --input and --models-dir set, CLI reaches subprocess spawn (PARALLAX_REPO_ROOT check)", async () => {
     const { stderr, exitCode } = await runCLIWithEnv(
-      ["create", "video", "--model", "wan22", "--prompt", "test", "--input", "img.png", "--models-dir", "/tmp"],
+      ["create", "video", "--model", "wan22", "--prompt", "test", "--input", "/etc/hostname", "--models-dir", "/tmp"],
       { PARALLAX_REPO_ROOT: undefined },
     );
     expect(exitCode).toBe(1);
@@ -1965,7 +1965,7 @@ describe("parallax CLI — wan22 i2v video generation (US-004-it39)", () => {
     const tmpRoot = await makeFakeWan22I2vRoot("import sys; sys.exit(0)\n");
     try {
       const { exitCode } = await runCLIWithEnv(
-        ["create", "video", "--model", "wan22", "--prompt", "test", "--input", "img.png", "--models-dir", "/tmp"],
+        ["create", "video", "--model", "wan22", "--prompt", "test", "--input", "/etc/hostname", "--models-dir", "/tmp"],
         { PARALLAX_REPO_ROOT: tmpRoot },
       );
       expect(exitCode).toBe(0);
@@ -1981,12 +1981,12 @@ describe("parallax CLI — wan22 i2v video generation (US-004-it39)", () => {
     );
     try {
       const { stdout, exitCode } = await runCLIWithEnv(
-        ["create", "video", "--model", "wan22", "--prompt", "test", "--input", "/path/to/img.png", "--models-dir", "/tmp"],
+        ["create", "video", "--model", "wan22", "--prompt", "test", "--input", "/etc/hostname", "--models-dir", "/tmp"],
         { PARALLAX_REPO_ROOT: tmpRoot },
       );
       expect(exitCode).toBe(0);
       expect(stdout).toContain("--image");
-      expect(stdout).toContain("/path/to/img.png");
+      expect(stdout).toContain("/etc/hostname");
       expect(stdout).not.toContain("--input");
     } finally {
       await rm(tmpRoot, { recursive: true, force: true });
@@ -2002,7 +2002,7 @@ describe("parallax CLI — wan22 i2v video generation (US-004-it39)", () => {
       const { stdout, exitCode } = await runCLIWithEnv(
         [
           "create", "video", "--model", "wan22", "--prompt", "a dragon over mountains",
-          "--input", "img.png", "--models-dir", "/tmp",
+          "--input", "/etc/hostname", "--models-dir", "/tmp",
           "--width", "640", "--height", "640", "--length", "81",
           "--steps", "20", "--cfg", "3.5", "--seed", "77", "--output", "wan22_i2v.mp4",
         ],
@@ -2037,7 +2037,7 @@ describe("parallax CLI — wan22 i2v video generation (US-004-it39)", () => {
     );
     try {
       const { stdout, exitCode } = await runCLIWithEnv(
-        ["create", "video", "--model", "wan22", "--prompt", "test", "--input", "img.png", "--models-dir", "/my/wan22/models"],
+        ["create", "video", "--model", "wan22", "--prompt", "test", "--input", "/etc/hostname", "--models-dir", "/my/wan22/models"],
         { PARALLAX_REPO_ROOT: tmpRoot },
       );
       expect(exitCode).toBe(0);
@@ -2051,7 +2051,7 @@ describe("parallax CLI — wan22 i2v video generation (US-004-it39)", () => {
   // AC05: CLI exits with the subprocess exit code
   it("US-004-AC05: CLI exits with non-zero when i2v subprocess fails (bad PARALLAX_REPO_ROOT path)", async () => {
     const { exitCode } = await runCLIWithEnv(
-      ["create", "video", "--model", "wan22", "--prompt", "test", "--input", "img.png", "--models-dir", "/tmp"],
+      ["create", "video", "--model", "wan22", "--prompt", "test", "--input", "/etc/hostname", "--models-dir", "/tmp"],
       { PARALLAX_REPO_ROOT: "/nonexistent-parallax-root-12345" },
     );
     expect(exitCode).not.toBe(0);
@@ -2061,7 +2061,7 @@ describe("parallax CLI — wan22 i2v video generation (US-004-it39)", () => {
     const tmpRoot = await makeFakeWan22I2vRoot("import sys; sys.exit(3)\n");
     try {
       const { exitCode } = await runCLIWithEnv(
-        ["create", "video", "--model", "wan22", "--prompt", "test", "--input", "img.png", "--models-dir", "/tmp"],
+        ["create", "video", "--model", "wan22", "--prompt", "test", "--input", "/etc/hostname", "--models-dir", "/tmp"],
         { PARALLAX_REPO_ROOT: tmpRoot },
       );
       expect(exitCode).toBe(3);
@@ -2090,5 +2090,77 @@ describe("parallax CLI — wan22 i2v video generation (US-004-it39)", () => {
     } finally {
       await rm(tmpRoot, { recursive: true, force: true });
     }
+  });
+});
+
+describe("parallax CLI — --input flag on create video (US-005-it39)", () => {
+  // AC01: --input is listed in create video --help
+  it("US-005-AC01: create video --help lists --input as an optional flag", async () => {
+    const { stdout, exitCode } = await runCLI(["create", "video", "--help"]);
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("--input");
+  });
+
+  // AC02: --input present → routes to i2v script (using wan21 as representative model)
+  it("US-005-AC02: --input routes to i2v.py (wan21)", async () => {
+    const tmpRoot = await mkdtemp(join(tmpdir(), "us005_i2v_test_"));
+    const scriptDir = join(tmpRoot, "examples", "video", "wan", "wan21");
+    await mkdir(scriptDir, { recursive: true });
+    // create a real fake input image file so existence check passes
+    const fakeInput = join(tmpRoot, "input.png");
+    await writeFile(fakeInput, "fake");
+    await writeFile(join(scriptDir, "i2v.py"), 'import sys; print("i2v"); sys.exit(0)\n');
+    try {
+      const { stdout, exitCode } = await runCLIWithEnv(
+        ["create", "video", "--model", "wan21", "--prompt", "test", "--input", fakeInput, "--models-dir", "/tmp"],
+        { PARALLAX_REPO_ROOT: tmpRoot },
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain("i2v");
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  // AC03: --input absent → routes to t2v script (no regression)
+  it("US-005-AC03: without --input, routes to t2v.py (wan21, no regression)", async () => {
+    const tmpRoot = await mkdtemp(join(tmpdir(), "us005_t2v_test_"));
+    const scriptDir = join(tmpRoot, "examples", "video", "wan", "wan21");
+    await mkdir(scriptDir, { recursive: true });
+    await writeFile(join(scriptDir, "t2v.py"), 'import sys; print("t2v"); sys.exit(0)\n');
+    try {
+      const { stdout, exitCode } = await runCLIWithEnv(
+        ["create", "video", "--model", "wan21", "--prompt", "test", "--models-dir", "/tmp"],
+        { PARALLAX_REPO_ROOT: tmpRoot },
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain("t2v");
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  // AC04: --input provided but file does not exist → error + exit 1
+  it("US-005-AC04: --input with non-existent file prints error and exits 1", async () => {
+    const { stderr, exitCode } = await runCLIWithEnv(
+      ["create", "video", "--model", "wan21", "--prompt", "test", "--input", "/nonexistent/missing_image.png", "--models-dir", "/tmp"],
+      { PARALLAX_REPO_ROOT: "/tmp" },
+    );
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain("Error: input file not found:");
+    expect(stderr).toContain("/nonexistent/missing_image.png");
+  });
+
+  it("US-005-AC04: no subprocess is spawned when input file is missing (PARALLAX_REPO_ROOT unset)", async () => {
+    // If the file-not-found check fires before subprocess spawn, exit code is 1
+    // even when PARALLAX_REPO_ROOT is unset (spawn would have exited 1 too, but for a different reason)
+    const { stderr, exitCode } = await runCLIWithEnv(
+      ["create", "video", "--model", "ltx2", "--prompt", "test", "--input", "/definitely/not/here.jpg", "--models-dir", "/tmp"],
+      { PARALLAX_REPO_ROOT: undefined },
+    );
+    expect(exitCode).toBe(1);
+    // must be the input-file error, NOT the PARALLAX_REPO_ROOT error
+    expect(stderr).toContain("Error: input file not found:");
+    expect(stderr).not.toContain("PARALLAX_REPO_ROOT");
   });
 });
