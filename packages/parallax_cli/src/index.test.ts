@@ -1177,6 +1177,95 @@ describe("parallax CLI — wan21 video generation (US-003)", () => {
   });
 });
 
+describe("parallax CLI — models-dir and repo-root resolution for create video (US-005)", () => {
+  // AC01: --models-dir flag takes precedence over PYCOMFY_MODELS_DIR
+  it("US-005-AC01: --models-dir flag overrides PYCOMFY_MODELS_DIR for create video", async () => {
+    const tmpRoot = await makeFakeWan21Root(
+      'import sys; print(" ".join(sys.argv[1:])); sys.exit(0)\n',
+    );
+    try {
+      const { stdout, exitCode } = await runCLIWithEnv(
+        ["create", "video", "--model", "wan21", "--prompt", "test", "--models-dir", "/flag/models"],
+        { PARALLAX_REPO_ROOT: tmpRoot, PYCOMFY_MODELS_DIR: "/env/models" },
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain("--models-dir");
+      expect(stdout).toContain("/flag/models");
+      expect(stdout).not.toContain("/env/models");
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  // AC02: If neither --models-dir nor PYCOMFY_MODELS_DIR is set, CLI prints error
+  it("US-005-AC02: missing both --models-dir and PYCOMFY_MODELS_DIR exits 1 with clear error", async () => {
+    const { stderr, exitCode } = await runCLIWithEnv(
+      ["create", "video", "--model", "wan21", "--prompt", "test"],
+      { PYCOMFY_MODELS_DIR: undefined, PARALLAX_REPO_ROOT: undefined },
+    );
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain("Error: --models-dir or PYCOMFY_MODELS_DIR is required");
+  });
+
+  // AC03: If PARALLAX_REPO_ROOT is not set, CLI prints error (models-dir already resolved)
+  it("US-005-AC03: missing PARALLAX_REPO_ROOT exits 1 with clear error", async () => {
+    const { stderr, exitCode } = await runCLIWithEnv(
+      ["create", "video", "--model", "wan21", "--prompt", "test", "--models-dir", "/tmp"],
+      { PARALLAX_REPO_ROOT: undefined },
+    );
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain("Error: PARALLAX_REPO_ROOT is required");
+  });
+
+  it("US-005-AC03: PYCOMFY_MODELS_DIR set but PARALLAX_REPO_ROOT missing still exits 1", async () => {
+    const { stderr, exitCode } = await runCLIWithEnv(
+      ["create", "video", "--model", "wan21", "--prompt", "test"],
+      { PYCOMFY_MODELS_DIR: "/env/models", PARALLAX_REPO_ROOT: undefined },
+    );
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain("Error: PARALLAX_REPO_ROOT is required");
+  });
+
+  // AC04: The resolved models path is passed as --models-dir <path> to subprocess
+  it("US-005-AC04: PYCOMFY_MODELS_DIR env var is passed as --models-dir to subprocess", async () => {
+    const tmpRoot = await makeFakeWan21Root(
+      'import sys; print(" ".join(sys.argv[1:])); sys.exit(0)\n',
+    );
+    try {
+      const { stdout, exitCode } = await runCLIWithEnv(
+        ["create", "video", "--model", "wan21", "--prompt", "test"],
+        { PARALLAX_REPO_ROOT: tmpRoot, PYCOMFY_MODELS_DIR: "/env/video/models" },
+      );
+      expect(exitCode).toBe(0);
+      const parts = stdout.split(" ");
+      const idx = parts.indexOf("--models-dir");
+      expect(idx).toBeGreaterThanOrEqual(0);
+      expect(parts[idx + 1]?.trim()).toBe("/env/video/models");
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("US-005-AC04: --models-dir flag value is passed as --models-dir to subprocess", async () => {
+    const tmpRoot = await makeFakeWan21Root(
+      'import sys; print(" ".join(sys.argv[1:])); sys.exit(0)\n',
+    );
+    try {
+      const { stdout, exitCode } = await runCLIWithEnv(
+        ["create", "video", "--model", "wan21", "--prompt", "test", "--models-dir", "/flag/video/models"],
+        { PARALLAX_REPO_ROOT: tmpRoot, PYCOMFY_MODELS_DIR: undefined },
+      );
+      expect(exitCode).toBe(0);
+      const parts = stdout.split(" ");
+      const idx = parts.indexOf("--models-dir");
+      expect(idx).toBeGreaterThanOrEqual(0);
+      expect(parts[idx + 1]?.trim()).toBe("/flag/video/models");
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+});
+
 // Helper: create a temporary PARALLAX_REPO_ROOT with a fake wan22 t2v.py script.
 async function makeFakeWan22Root(scriptBody: string): Promise<string> {
   const tmpRoot = await mkdtemp(join(tmpdir(), "wan22_test_"));

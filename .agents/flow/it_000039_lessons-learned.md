@@ -141,3 +141,16 @@
 **Useful Context for Future Agents:**
 - After this story, all four `create video` models (`ltx2`, `ltx23`, `wan21`, `wan22`) are wired. Any future "create video" stub test must use a newly added model or a different command (e.g., `create audio`, `edit video`).
 - The US-007 stub test for `edit video --model wan22` will need to be updated if/when `wan22` i2v or another `edit video` command is implemented.
+
+## US-005 — models-dir and repo-root resolution
+
+**Summary:** Added a dedicated `describe` block for US-005 covering `create video` models-dir and repo-root resolution. The production code in `index.ts` already implemented all required behaviour — `--models-dir` overrides `PYCOMFY_MODELS_DIR`, both-missing exits 1 with a clear error, missing `PARALLAX_REPO_ROOT` exits 1 with a clear error, and the resolved path is forwarded as `--models-dir <path>` to the subprocess. The story required only tests, not new production code.
+
+**Key Decisions:** Used `wan21` as the representative video model for the US-005 test suite because it has no special-casing (no `--cfg-pass1`, no distilled `--steps` suppression), keeping the tests focused on resolution logic without noise from per-model arg transforms.
+
+**Pitfalls Encountered:** None — production code was already complete. The acceptance criteria text was truncated (AC02/AC03 cut off mid-sentence), but the expected error messages were unambiguous from the existing test patterns.
+
+**Useful Context for Future Agents:**
+- The models-dir / repo-root resolution logic lives in the `create video` action handler (lines ~160–164 in `index.ts`) and in `spawnPipeline()` (~line 50–62). Both checks are shared across all `create image` and `create video` models.
+- If a new `create video` or `create audio` model is added that changes models-dir resolution behaviour, update the US-005 describe block in `index.test.ts` accordingly.
+- `makeFakeWan21Root()` helper (defined around line 1055 of `index.test.ts`) creates a minimal fake PARALLAX_REPO_ROOT suitable for subprocess forwarding tests.
