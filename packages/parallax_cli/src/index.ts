@@ -140,7 +140,7 @@ create
   .description("Generate a video from a text prompt")
   .requiredOption("--model <name>", `Model to use (choices: ${MODELS["create video"].join(", ")})`)
   .requiredOption("--prompt <text>", "Text prompt describing the video to generate")
-  .option("--input <path>", "Input image path for image-to-video (ltx2 i2v)")
+  .option("--input <path>", "Input image path for image-to-video (ltx2, ltx23)")
   .option("--width <pixels>", "Video width in pixels", "832")
   .option("--height <pixels>", "Video height in pixels", "480")
   .option("--length <frames>", "Number of frames to generate", "81")
@@ -153,10 +153,11 @@ create
   .action(async (opts) => {
     validateModel("create video", opts.model);
 
-    // ltx2 routes to i2v.py when --input is supplied; otherwise falls back to t2v
-    const script = (opts.model === "ltx2" && opts.input !== undefined)
-      ? "examples/video/ltx/ltx2/i2v.py"
-      : VIDEO_SCRIPTS[opts.model];
+    // ltx2 / ltx23 route to i2v.py when --input is supplied; otherwise fall back to t2v
+    const script =
+      (opts.model === "ltx2"  && opts.input !== undefined) ? "examples/video/ltx/ltx2/i2v.py" :
+      (opts.model === "ltx23" && opts.input !== undefined) ? "examples/video/ltx/ltx23/i2v.py" :
+      VIDEO_SCRIPTS[opts.model];
 
     if (!script) {
       notImplemented("create", "video", opts.model);
@@ -177,8 +178,8 @@ create
       "--output", opts.output,
     ];
 
-    // ltx2 i2v: --input is forwarded as --image (i2v.py expects --image, not --input)
-    if (opts.model === "ltx2" && opts.input !== undefined) {
+    // ltx2/ltx23 i2v: --input is forwarded as --image (i2v.py expects --image, not --input)
+    if ((opts.model === "ltx2" || opts.model === "ltx23") && opts.input !== undefined) {
       args.push("--image", opts.input);
     }
 

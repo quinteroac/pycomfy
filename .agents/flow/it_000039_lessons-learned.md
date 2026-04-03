@@ -171,3 +171,13 @@
 - `examples/video/ltx/ltx2/i2v.py` accepts `--image` (not `--input`). The CLI-to-subprocess rename happens inside the `create video` action handler.
 - If other models (e.g., wan21, wan22) gain i2v support, a `VIDEO_I2V_SCRIPTS` map would be cleaner than further inline conditionals.
 - The `makeFakeLtx2I2vRoot()` helper (bottom of `index.test.ts`) creates only `i2v.py`; the existing `makeFakeLtx2Root()` creates only `t2v.py`. Use both for regression tests covering the routing split.
+
+## US-002 — ltx23 i2v via CLI
+
+**Summary:** Added `parallax create video --model ltx23 --input <path>` routing to `examples/video/ltx/ltx23/i2v.py`. Changes were minimal: two lines in the script-routing block and one condition in the `--image` forwarding block of `index.ts`, plus the new test describe block with 11 tests.
+
+**Key Decisions:** The routing logic was extended symmetrically alongside the existing `ltx2` i2v routing. `--steps` suppression was already handled by the `opts.model !== "ltx23"` guard and applied automatically to i2v as well. `--cfg` uses the standard `--cfg` flag (not `--cfg-pass1` like ltx2) because ltx23 i2v is distilled differently. A regression test was added to confirm that ltx23 without `--input` still resolves to `t2v.py`.
+
+**Pitfalls Encountered:** None — the existing CLI architecture made this a clean extension. The `makeFakeLtx23Root` helper (for t2v) already existed; a separate `makeFakeLtx23I2vRoot` helper was needed for i2v since the scripts live at different paths (`i2v.py` vs `t2v.py`).
+
+**Useful Context for Future Agents:** The `VIDEO_SCRIPTS` map holds the default (t2v) script per model. i2v routing is handled inline in the action handler with an explicit guard on `opts.input !== undefined`. Any new model supporting i2v should follow the same pattern: add a ternary for `opts.model === "<model>" && opts.input !== undefined` before falling back to `VIDEO_SCRIPTS`. All tests are in `packages/parallax_cli/src/index.test.ts` and run with `bun test`.
