@@ -70,3 +70,19 @@
 - `INSTALLED_RUNTIME_DIR` = `~/.config/parallax/runtime/` — this is now the canonical installed runtime path, populated by `parallax install`.
 - After US-003+US-004, `runner.ts` prefers `runtimeDir` (set by install) over `repoRoot` for resolving script paths. The full chain is: `parallax install` copies scripts → sets `runtimeDir` in config → `runner.ts` reads it.
 - Tests backup/restore `~/.config/parallax/config.json` in `beforeEach`/`afterEach`. The US-004 tests additionally clean up `INSTALLED_RUNTIME_DIR` if it was absent before the test.
+
+## US-005 — Build scripts include runtime/ in dist/
+
+**Summary:** Updated `packages/parallax_cli/package.json` build scripts (`build:linux`, `build:mac`, `build:win`) to copy `runtime/` into `dist/runtime/` after compiling each binary. Added `rm -rf dist/runtime` before the copy to ensure idempotent rebuilds. Verified `dist/` coverage in root `.gitignore`. Added `tests/build.test.ts` with 6 tests covering all ACs.
+
+**Key Decisions:**
+- Used `rm -rf dist/runtime && cp -r runtime dist/runtime` inline in each build script — avoids the "copy inside existing dir" pitfall of a plain `cp -r runtime dist/runtime` on repeated builds.
+- Root `.gitignore` already contains `dist/` which covers `packages/parallax_cli/dist/runtime/` — no new `.gitignore` entry needed.
+- Tests read `package.json` directly to verify script contents, avoiding the cost of actually running cross-compilation builds in CI.
+
+**Pitfalls Encountered:**
+- `cp -r runtime dist/runtime` is NOT idempotent: if `dist/runtime` already exists it copies `runtime` inside it, producing `dist/runtime/runtime/`. The fix is to `rm -rf dist/runtime` first.
+
+**Useful Context for Future Agents:**
+- Each of the three platform build scripts now independently copies `runtime/` to `dist/runtime/`. The `build` meta-script (linux + mac) will run the copy twice, which is harmless.
+- `dist/` in the root `.gitignore` covers the entire `packages/parallax_cli/dist/` tree including `dist/runtime/`.
