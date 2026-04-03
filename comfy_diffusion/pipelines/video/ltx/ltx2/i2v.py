@@ -204,7 +204,7 @@ def run(
     from comfy_diffusion.lora import apply_lora
     from comfy_diffusion.models import ModelManager
     from comfy_diffusion.runtime import check_runtime
-    from comfy_diffusion.sampling import basic_scheduler, cfg_guider, get_sampler, random_noise, sample_custom
+    from comfy_diffusion.sampling import cfg_guider, get_sampler, ltxv_scheduler, random_noise, sample_custom
     from comfy_diffusion.vae import vae_decode_batch_tiled
     from comfy_diffusion.video import ltxv_img_to_video_inplace
 
@@ -232,8 +232,11 @@ def run(
     audio_vae_path = Path(audio_vae_filename) if audio_vae_filename else vae_path
 
     # Load models.
-    model = mm.load_unet(unet_path)
-    vae = mm.load_vae(vae_path)
+    # The LTX-Video 2 checkpoint bundles UNet + VAE in a single file, so use
+    # load_checkpoint_from_path (mirrors CheckpointLoaderSimple) to extract both.
+    ckpt = mm.load_checkpoint_from_path(unet_path)
+    model = ckpt.model
+    vae = ckpt.vae if vae_filename is None else mm.load_vae(vae_path)
     audio_vae = mm.load_ltxv_audio_vae(audio_vae_path)
     clip = mm.load_ltxav_text_encoder(te_path, unet_path)
     upscale_model = mm.load_latent_upscale_model(upscaler_path)
@@ -261,7 +264,7 @@ def run(
     audio_latent = ltxv_empty_latent_audio(audio_vae, frames_number=length, frame_rate=fps)
     av_latent = ltxv_concat_av_latent(video_latent, audio_latent)
 
-    sigmas = basic_scheduler(model, "lcm", steps)
+    sigmas = ltxv_scheduler(steps, 2.05, 0.95, latent=av_latent)
     guider = cfg_guider(model, positive, negative, cfg)
     noise = random_noise(seed)
     sampler_obj = get_sampler("euler_ancestral")

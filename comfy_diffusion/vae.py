@@ -56,12 +56,20 @@ class _ListTensor:
 
 
 def _inference_mode_context() -> Any:
-    """Return torch.inference_mode() when torch is available, else a no-op context."""
+    """Return torch.no_grad() when torch is available, else a no-op context.
+
+    Uses no_grad rather than inference_mode to avoid creating inference tensors,
+    which break ComfyUI's model patcher when it tries to register parameters
+    during device moves (e.g. freeing GPU memory between pipeline stages).
+    """
     try:
         import torch
     except ModuleNotFoundError:
         return nullcontext()
-    return torch.inference_mode()
+    no_grad = getattr(torch, "no_grad", None)
+    if callable(no_grad):
+        return no_grad()
+    return nullcontext()
 
 
 def _clip_to_uint8(value: float) -> int:
@@ -251,9 +259,39 @@ def vae_decode_batch_tiled(
 
         try:
             if sample_dims == 5:
-                # (B, T, C, H, W) video latent — flatten batch×time, then decode frame-by-frame.
-                samples = samples.reshape(-1, samples.shape[-3], samples.shape[-2], samples.shape[-1])
-                sample_dims = 4
+                # Video latents can be either (B, C, T, H, W) or (B, T, C, H, W).
+                # Normalize to (B, C, T, H, W) and decode in a single 3D tiled pass
+                # so temporal upscaling is preserved by the video VAE.
+                if hasattr(samples, "permute"):
+                    _batch, dim1, dim2, _height, _width = samples.shape
+                    if dim1 >= dim2:
+                        # Already (B, C, T, H, W)
+                        pass
+                    else:
+                        # (B, T, C, H, W) -> (B, C, T, H, W)
+                        samples = samples.permute(0, 2, 1, 3, 4)
+
+                images = vae.decode_tiled(samples, tile_x=tile_size, tile_y=tile_size, overlap=overlap)
+                image_dims = len(images.shape)
+                if image_dims == 5:
+                    # (B, T, H, W, C) — extract frames in order.
+                    if hasattr(images, "detach"):
+                        images = images.detach().cpu()
+                    for batch_index in range(images.shape[0]):
+                        for t in range(images.shape[1]):
+                            result.append(_tensor_like_to_pil(images[batch_index][t]))
+                elif image_dims == 4:
+                    # Some implementations may collapse temporal dimension for T=1.
+                    if hasattr(images, "detach"):
+                        images = images.detach().cpu()
+                    for index in range(images.shape[0]):
+                        result.append(_tensor_like_to_pil(images[index]))
+                else:
+                    raise ValueError("unsupported decoded image shape")
+
+                if not result:
+                    raise ValueError("decoded image tensor is empty")
+                return result
 
             # 4D latents: (B, C, H, W). Decode one item at a time, adding a
             # temporal dim so video VAEs can call decode_tiled_3d internally.

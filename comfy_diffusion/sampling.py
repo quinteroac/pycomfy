@@ -9,12 +9,18 @@ from typing import Any
 
 
 def _inference_mode_context() -> Any:
-    """Return torch.inference_mode() when torch is available, else a no-op context."""
+    """Return torch.no_grad() when torch is available, else a no-op context.
+
+    Uses no_grad rather than inference_mode: both disable gradient tracking, but
+    inference_mode marks tensors as "inference tensors" which prevents ComfyUI's
+    model patcher from wrapping them in torch.nn.Parameter during device moves
+    (required for multi-pass pipelines where the model is patched between passes).
+    """
     try:
         import torch
     except ModuleNotFoundError:
         return nullcontext()
-    return torch.inference_mode()
+    return torch.no_grad()
 
 
 def _get_common_ksampler() -> Any:

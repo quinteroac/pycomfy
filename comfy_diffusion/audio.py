@@ -91,12 +91,17 @@ def _unwrap_node_output(output: Any) -> Any:
 
 
 def _inference_mode_context() -> Any:
-    """Return torch.inference_mode() when torch is available, else a no-op context."""
+    """Return torch.no_grad() when torch is available, else a no-op context.
+
+    Uses no_grad rather than inference_mode to avoid creating inference tensors,
+    which break ComfyUI's model patcher when it tries to register parameters
+    during device moves (e.g. freeing GPU memory between pipeline stages).
+    """
     try:
         import torch
     except ModuleNotFoundError:
         return nullcontext()
-    return torch.inference_mode()
+    return torch.no_grad()
 
 
 def ltxv_audio_vae_encode(vae: _LtxvAudioVaeEncoder, audio: Any) -> dict[str, Any]:

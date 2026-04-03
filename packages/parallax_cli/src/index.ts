@@ -20,12 +20,19 @@ const IMAGE_SCRIPTS: Partial<Record<string, string>> = {
   z_image: "examples/image/generation/z_image/turbo.py",
 };
 
-// Script paths for each implemented video model.
-const VIDEO_SCRIPTS: Partial<Record<string, string>> = {
-  ltx2:  "examples/video/ltx/ltx2/t2v.py",
-  ltx23: "examples/video/ltx/ltx23/t2v.py",
-  wan21: "examples/video/wan/wan21/t2v.py",
-  wan22: "examples/video/wan/wan22/t2v.py",
+// Per-model video config: script paths and flag-forwarding rules.
+interface VideoModelConfig {
+  t2v: string;
+  i2v?: string;       // i2v.py path; defined for models that support image-to-video
+  cfgFlag: string;    // "--cfg" or "--cfg-pass1" depending on model interface
+  omitSteps?: true;   // set for distilled models that accept no --steps argument
+}
+
+const VIDEO_MODEL_CONFIG: Record<string, VideoModelConfig> = {
+  ltx2:  { t2v: "examples/video/ltx/ltx2/t2v.py",  i2v: "examples/video/ltx/ltx2/i2v.py",  cfgFlag: "--cfg-pass1" },
+  ltx23: { t2v: "examples/video/ltx/ltx23/t2v.py", i2v: "examples/video/ltx/ltx23/i2v.py", cfgFlag: "--cfg", omitSteps: true },
+  wan21: { t2v: "examples/video/wan/wan21/t2v.py",  i2v: "examples/video/wan/wan21/i2v.py",  cfgFlag: "--cfg" },
+  wan22: { t2v: "examples/video/wan/wan22/t2v.py",  i2v: "examples/video/wan/wan22/i2v.py",  cfgFlag: "--cfg" },
 };
 
 // Script paths for each implemented audio model.
@@ -130,7 +137,8 @@ create
       "--output", opts.output,
     ];
 
-    // z_image turbo has no --negative-prompt or --cfg parameters
+    // z_image turbo.py accepts neither --negative-prompt nor --cfg; omit both to
+    // avoid "unrecognized arguments" errors from the Python script.
     if (opts.model !== "z_image") {
       if (opts.negativePrompt) args.push("--negative-prompt", opts.negativePrompt);
       args.push("--cfg", opts.cfg);
@@ -164,13 +172,11 @@ create
       process.exit(1);
     }
 
-    // ltx2 / ltx23 / wan21 / wan22 route to i2v.py when --input is supplied; otherwise fall back to t2v
-    const script =
-      (opts.model === "ltx2"  && opts.input !== undefined) ? "examples/video/ltx/ltx2/i2v.py" :
-      (opts.model === "ltx23" && opts.input !== undefined) ? "examples/video/ltx/ltx23/i2v.py" :
-      (opts.model === "wan21" && opts.input !== undefined) ? "examples/video/wan/wan21/i2v.py" :
-      (opts.model === "wan22" && opts.input !== undefined) ? "examples/video/wan/wan22/i2v.py" :
-      VIDEO_SCRIPTS[opts.model];
+    const modelConfig = VIDEO_MODEL_CONFIG[opts.model];
+    const useI2v = opts.input !== undefined && modelConfig?.i2v !== undefined;
+    const script = modelConfig
+      ? (useI2v ? modelConfig.i2v! : modelConfig.t2v)
+      : undefined;
 
     if (!script) {
       notImplemented("create", "video", opts.model);
@@ -191,22 +197,14 @@ create
       "--output", opts.output,
     ];
 
-    // ltx2/ltx23/wan21/wan22 i2v: --input is forwarded as --image (i2v.py expects --image, not --input)
-    if ((opts.model === "ltx2" || opts.model === "ltx23" || opts.model === "wan21" || opts.model === "wan22") && opts.input !== undefined) {
-      args.push("--image", opts.input);
-    }
+    // i2v.py expects --image (not --input) for the source frame
+    if (useI2v) args.push("--image", opts.input!);
 
-    // ltx23 is distilled — no --steps; all other models receive --steps
-    if (opts.model !== "ltx23") {
-      args.push("--steps", opts.steps);
-    }
+    // Distilled models omit --steps; all others receive it
+    if (!modelConfig?.omitSteps) args.push("--steps", opts.steps);
 
-    // ltx2 uses --cfg-pass1 instead of a bare --cfg flag
-    if (opts.model === "ltx2") {
-      args.push("--cfg-pass1", opts.cfg);
-    } else {
-      args.push("--cfg", opts.cfg);
-    }
+    // Per-model cfg flag name (e.g. --cfg-pass1 for ltx2)
+    args.push(modelConfig?.cfgFlag ?? "--cfg", opts.cfg);
 
     if (opts.seed !== undefined) args.push("--seed", opts.seed);
 
@@ -223,10 +221,6 @@ create
   .option("--cfg <value>", "CFG guidance scale", "2")
   .option("--bpm <n>", "Beats per minute", "120")
   .option("--lyrics <text>", "Lyrics text (ace_step)", "")
-  .option("--unet <filename>", "UNet model filename (overrides PYCOMFY_ACE_UNET)")
-  .option("--vae <filename>", "VAE model filename (overrides PYCOMFY_ACE_VAE)")
-  .option("--text-encoder-1 <filename>", "Text encoder 1 filename (overrides PYCOMFY_ACE_TEXT_ENCODER_1)")
-  .option("--text-encoder-2 <filename>", "Text encoder 2 filename (overrides PYCOMFY_ACE_TEXT_ENCODER_2)")
   .option("--seed <n>", "Random seed for reproducibility")
   .option("--output <path>", "Output file path", "output.wav")
   .option("--models-dir <path>", "Models directory (overrides PYCOMFY_MODELS_DIR)")
@@ -245,15 +239,10 @@ create
       process.exit(1);
     }
 
-    const unet = opts.unet ?? process.env.PYCOMFY_ACE_UNET;
-    const vae = opts.vae ?? process.env.PYCOMFY_ACE_VAE;
-    const textEncoder1 = opts.textEncoder1 ?? process.env.PYCOMFY_ACE_TEXT_ENCODER_1;
-    const textEncoder2 = opts.textEncoder2 ?? process.env.PYCOMFY_ACE_TEXT_ENCODER_2;
-
     const args: string[] = [
       "--models-dir", modelsDir,
-      "--tags", opts.prompt,
-      "--duration", opts.length,
+      "--tags", opts.prompt,         // CLI --prompt → script --tags
+      "--duration", opts.length,     // CLI --length → script --duration
       "--steps", opts.steps,
       "--cfg", opts.cfg,
       "--bpm", opts.bpm,
@@ -262,10 +251,6 @@ create
     ];
 
     if (opts.seed !== undefined) args.push("--seed", opts.seed);
-    if (unet) args.push("--unet", unet);
-    if (vae) args.push("--vae", vae);
-    if (textEncoder1) args.push("--text-encoder-1", textEncoder1);
-    if (textEncoder2) args.push("--text-encoder-2", textEncoder2);
 
     await spawnPipeline(script, args);
   });

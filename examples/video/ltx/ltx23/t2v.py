@@ -151,15 +151,10 @@ def main() -> int:
         fps=args.fps,
         cfg=args.cfg,
         seed=args.seed,
-        distilled_lora_strength=args.distilled_lora_strength,
-        te_lora_strength=args.te_lora_strength,
         unet_filename=args.unet_filename,
         vae_filename=args.vae_filename,
         audio_vae_filename=args.audio_vae_filename,
         text_encoder_filename=args.text_encoder_filename,
-        distilled_lora_filename=args.distilled_lora_filename,
-        te_lora_filename=args.te_lora_filename,
-        upscaler_filename=args.upscaler_filename,
     )
 
     frames = result["frames"]

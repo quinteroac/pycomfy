@@ -448,6 +448,59 @@ describe("parallax CLI — anima image generation (US-002)", () => {
     );
     expect(exitCode).not.toBe(0);
   });
+
+  it("RT-001: correct script path — anima dispatches to examples/image/generation/anima/t2i.py", async () => {
+    // Fake anima t2i.py is placed at the exact path IMAGE_SCRIPTS maps to.
+    // If the CLI uses the wrong path, Bun.spawn will fail to find the script and exit non-zero.
+    const tmpRoot = await makeFakeAnimaRoot("import sys; sys.exit(0)\n");
+    try {
+      const { exitCode } = await runCLIWithEnv(
+        ["create", "image", "--model", "anima", "--prompt", "1girl", "--models-dir", "/tmp"],
+        { PARALLAX_REPO_ROOT: tmpRoot },
+      );
+      expect(exitCode).toBe(0);
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("RT-001: anima subprocess receives all generation flags verbatim", async () => {
+    const tmpRoot = await makeFakeAnimaRoot(
+      'import sys; print(" ".join(sys.argv[1:])); sys.exit(0)\n',
+    );
+    try {
+      const { stdout, exitCode } = await runCLIWithEnv(
+        [
+          "create", "image", "--model", "anima", "--prompt", "1girl, anime style",
+          "--models-dir", "/tmp/models",
+          "--negative-prompt", "lowres", "--width", "768", "--height", "512",
+          "--steps", "15", "--cfg", "5", "--seed", "7", "--output", "out.png",
+        ],
+        { PARALLAX_REPO_ROOT: tmpRoot },
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain("--models-dir");
+      expect(stdout).toContain("/tmp/models");
+      expect(stdout).toContain("--prompt");
+      expect(stdout).toContain("1girl, anime style");
+      expect(stdout).toContain("--negative-prompt");
+      expect(stdout).toContain("lowres");
+      expect(stdout).toContain("--width");
+      expect(stdout).toContain("768");
+      expect(stdout).toContain("--height");
+      expect(stdout).toContain("512");
+      expect(stdout).toContain("--steps");
+      expect(stdout).toContain("15");
+      expect(stdout).toContain("--cfg");
+      expect(stdout).toContain("5");
+      expect(stdout).toContain("--seed");
+      expect(stdout).toContain("7");
+      expect(stdout).toContain("--output");
+      expect(stdout).toContain("out.png");
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("parallax CLI — top-level help (US-001)", () => {
@@ -474,6 +527,15 @@ describe("parallax CLI — top-level help (US-001)", () => {
 async function makeFakeSdxlRoot(scriptBody: string): Promise<string> {
   const tmpRoot = await mkdtemp(join(tmpdir(), "sdxl_test_"));
   const scriptDir = join(tmpRoot, "examples", "image", "generation", "sdxl");
+  await mkdir(scriptDir, { recursive: true });
+  await writeFile(join(scriptDir, "t2i.py"), scriptBody);
+  return tmpRoot;
+}
+
+// Helper: create a temporary PARALLAX_REPO_ROOT with a fake anima t2i.py script.
+async function makeFakeAnimaRoot(scriptBody: string): Promise<string> {
+  const tmpRoot = await mkdtemp(join(tmpdir(), "anima_test_"));
+  const scriptDir = join(tmpRoot, "examples", "image", "generation", "anima");
   await mkdir(scriptDir, { recursive: true });
   await writeFile(join(scriptDir, "t2i.py"), scriptBody);
   return tmpRoot;

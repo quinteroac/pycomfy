@@ -206,6 +206,10 @@ def test_run_has_lora_and_upscaler_override_params() -> None:
 
 def _build_mock_mm() -> MagicMock:
     mm = MagicMock()
+    ckpt = MagicMock(name="checkpoint")
+    ckpt.model = MagicMock(name="model")
+    ckpt.vae = MagicMock(name="vae")
+    mm.load_checkpoint_from_path.return_value = ckpt
     mm.load_unet.return_value = MagicMock(name="model")
     mm.load_vae.return_value = MagicMock(name="vae")
     mm.load_ltxv_audio_vae.return_value = MagicMock(name="audio_vae")
@@ -224,7 +228,7 @@ _EMPTY_LATENT_PATCH = "comfy_diffusion.latent.ltxv_empty_latent_video"
 _UPSAMPLE_PATCH = "comfy_diffusion.latent.ltxv_latent_upsample"
 _SAMPLE_CUSTOM_PATCH = "comfy_diffusion.sampling.sample_custom"
 _CFG_GUIDER_PATCH = "comfy_diffusion.sampling.cfg_guider"
-_BASIC_SCHEDULER_PATCH = "comfy_diffusion.sampling.basic_scheduler"
+_LTXV_SCHEDULER_PATCH = "comfy_diffusion.sampling.ltxv_scheduler"
 _GET_SAMPLER_PATCH = "comfy_diffusion.sampling.get_sampler"
 _RANDOM_NOISE_PATCH = "comfy_diffusion.sampling.random_noise"
 _VAE_DECODE_PATCH = "comfy_diffusion.vae.vae_decode_batch_tiled"
@@ -308,7 +312,7 @@ def _run_with_mocks(
         )),
         patch(_CFG_GUIDER_PATCH, return_value=MagicMock()),
         patch(_RANDOM_NOISE_PATCH, return_value=MagicMock()),
-        patch(_BASIC_SCHEDULER_PATCH, return_value=MagicMock()),
+        patch(_LTXV_SCHEDULER_PATCH, return_value=MagicMock()),
         patch(_GET_SAMPLER_PATCH, return_value=MagicMock()),
         patch(_SAMPLE_CUSTOM_PATCH, side_effect=lambda n, g, s, sig, lat: (
             _track("sample_custom", (MagicMock(), MagicMock()))
@@ -379,7 +383,7 @@ def test_preprocessed_image_passed_to_img_to_video_inplace(tmp_path: Path) -> No
         patch(_CONCAT_AV_PATCH, return_value=MagicMock()),
         patch(_CFG_GUIDER_PATCH, return_value=MagicMock()),
         patch(_RANDOM_NOISE_PATCH, return_value=MagicMock()),
-        patch(_BASIC_SCHEDULER_PATCH, return_value=MagicMock()),
+        patch(_LTXV_SCHEDULER_PATCH, return_value=MagicMock()),
         patch(_GET_SAMPLER_PATCH, return_value=MagicMock()),
         patch(_SAMPLE_CUSTOM_PATCH, return_value=(MagicMock(), MagicMock())),
         patch(_SEPARATE_AV_PATCH, return_value=(MagicMock(), MagicMock())),
@@ -425,7 +429,7 @@ def test_apply_lora_is_called(tmp_path: Path) -> None:
         patch(_CONCAT_AV_PATCH, return_value=MagicMock()),
         patch(_CFG_GUIDER_PATCH, return_value=MagicMock()),
         patch(_RANDOM_NOISE_PATCH, return_value=MagicMock()),
-        patch(_BASIC_SCHEDULER_PATCH, return_value=MagicMock()),
+        patch(_LTXV_SCHEDULER_PATCH, return_value=MagicMock()),
         patch(_GET_SAMPLER_PATCH, return_value=MagicMock()),
         patch(_SAMPLE_CUSTOM_PATCH, return_value=(MagicMock(), MagicMock())),
         patch(_SEPARATE_AV_PATCH, return_value=(MagicMock(), MagicMock())),
@@ -463,7 +467,7 @@ def test_apply_lora_uses_lora_dest_path(tmp_path: Path) -> None:
         patch(_CONCAT_AV_PATCH, return_value=MagicMock()),
         patch(_CFG_GUIDER_PATCH, return_value=MagicMock()),
         patch(_RANDOM_NOISE_PATCH, return_value=MagicMock()),
-        patch(_BASIC_SCHEDULER_PATCH, return_value=MagicMock()),
+        patch(_LTXV_SCHEDULER_PATCH, return_value=MagicMock()),
         patch(_GET_SAMPLER_PATCH, return_value=MagicMock()),
         patch(_SAMPLE_CUSTOM_PATCH, return_value=(MagicMock(), MagicMock())),
         patch(_SEPARATE_AV_PATCH, return_value=(MagicMock(), MagicMock())),
@@ -519,7 +523,7 @@ def test_run_accepts_pil_image(tmp_path: Path) -> None:
         patch(_CONCAT_AV_PATCH, return_value=MagicMock()),
         patch(_CFG_GUIDER_PATCH, return_value=MagicMock()),
         patch(_RANDOM_NOISE_PATCH, return_value=MagicMock()),
-        patch(_BASIC_SCHEDULER_PATCH, return_value=MagicMock()),
+        patch(_LTXV_SCHEDULER_PATCH, return_value=MagicMock()),
         patch(_GET_SAMPLER_PATCH, return_value=MagicMock()),
         patch(_SAMPLE_CUSTOM_PATCH, return_value=(MagicMock(), MagicMock())),
         patch(_SEPARATE_AV_PATCH, return_value=(MagicMock(), MagicMock())),
@@ -618,7 +622,7 @@ def test_run_uses_load_ltxav_text_encoder(tmp_path: Path) -> None:
         patch(_CONCAT_AV_PATCH, return_value=MagicMock()),
         patch(_CFG_GUIDER_PATCH, return_value=MagicMock()),
         patch(_RANDOM_NOISE_PATCH, return_value=MagicMock()),
-        patch(_BASIC_SCHEDULER_PATCH, return_value=MagicMock()),
+        patch(_LTXV_SCHEDULER_PATCH, return_value=MagicMock()),
         patch(_GET_SAMPLER_PATCH, return_value=MagicMock()),
         patch(_SAMPLE_CUSTOM_PATCH, return_value=(MagicMock(), MagicMock())),
         patch(_SEPARATE_AV_PATCH, return_value=(MagicMock(), MagicMock())),
@@ -652,7 +656,7 @@ def test_run_uses_load_latent_upscale_model(tmp_path: Path) -> None:
         patch(_CONCAT_AV_PATCH, return_value=MagicMock()),
         patch(_CFG_GUIDER_PATCH, return_value=MagicMock()),
         patch(_RANDOM_NOISE_PATCH, return_value=MagicMock()),
-        patch(_BASIC_SCHEDULER_PATCH, return_value=MagicMock()),
+        patch(_LTXV_SCHEDULER_PATCH, return_value=MagicMock()),
         patch(_GET_SAMPLER_PATCH, return_value=MagicMock()),
         patch(_SAMPLE_CUSTOM_PATCH, return_value=(MagicMock(), MagicMock())),
         patch(_SEPARATE_AV_PATCH, return_value=(MagicMock(), MagicMock())),
@@ -703,7 +707,7 @@ def test_run_uses_load_ltxv_audio_vae(tmp_path: Path) -> None:
         patch(_CONCAT_AV_PATCH, return_value=MagicMock()),
         patch(_CFG_GUIDER_PATCH, return_value=MagicMock()),
         patch(_RANDOM_NOISE_PATCH, return_value=MagicMock()),
-        patch(_BASIC_SCHEDULER_PATCH, return_value=MagicMock()),
+        patch(_LTXV_SCHEDULER_PATCH, return_value=MagicMock()),
         patch(_GET_SAMPLER_PATCH, return_value=MagicMock()),
         patch(_SAMPLE_CUSTOM_PATCH, return_value=(MagicMock(), MagicMock())),
         patch(_SEPARATE_AV_PATCH, return_value=(MagicMock(), MagicMock())),
