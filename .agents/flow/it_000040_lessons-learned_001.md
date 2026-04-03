@@ -104,3 +104,21 @@
 - `registerCreate` and `registerEdit` are the canonical entry points for the create/edit command trees. Adding new create or edit media types should be done inside those files only.
 - `resolveModelsDir` is the single place to change if the precedence order for models-dir resolution ever needs updating.
 - The 11 `ace_step model component flags (US-002)` failures are pre-existing and unrelated to this story.
+
+## US-007 — Interactive installer (`commands/install.ts`)
+
+**Summary:** Created `packages/parallax_cli/src/commands/install.ts` exporting `registerInstall(program)`. The command supports interactive TTY flow via `@clack/prompts` (lazy-imported) and non-interactive mode via `--non-interactive` flag or auto-fallback when `!process.stdout.isTTY`. Added `variant?: string` field to `ParallaxConfig` in `config.ts`. Registered `registerInstall` in `index.ts`. 11 new tests in `src/commands/install.test.ts` — all pass.
+
+**Key Decisions:**
+- `@clack/prompts` is dynamically imported (`await import("@clack/prompts")`) inside the interactive branch only — this avoids loading the interactive library in non-interactive and piped contexts.
+- Non-interactive defaults: `--install-dir ~/.parallax`, `--models-dir ~/.parallax/models`, `--variant cpu`.
+- The auto-fallback to non-interactive (AC04) is implemented as `opts.nonInteractive === true || !process.stdout.isTTY`. In test subprocesses spawned with `stdout: "pipe"`, stdout is not a TTY, so this path is exercised by all subprocess-based tests automatically.
+- `variant` was added to `ParallaxConfig` interface since the install command persists it. The addition is backward-compatible (optional field).
+
+**Pitfalls Encountered:**
+- None significant. The `@clack/prompts` dependency was already added in US-001 so no new `bun install` was needed.
+
+**Useful Context for Future Agents:**
+- `registerInstall` follows the same pattern as `registerCreate` and `registerEdit` — a single exported function that takes `program: Command`.
+- The config backup/restore pattern in tests (save before, restore/delete after) is established in `config.test.ts` and reused here to avoid corrupting a developer's real config.
+- The 11 pre-existing `ace_step model component flags (US-002)` failures are unrelated to this story and remain.

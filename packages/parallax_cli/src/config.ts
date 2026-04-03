@@ -6,6 +6,7 @@ export interface ParallaxConfig {
   repoRoot?: string;
   modelsDir?: string;
   uvPath?: string;
+  variant?: string;
   installedAt?: string;
 }
 

@@ -2,6 +2,7 @@
 import { Command } from "commander";
 import { registerCreate } from "./commands/create";
 import { registerEdit } from "./commands/edit";
+import { registerInstall } from "./commands/install";
 
 const program = new Command();
 
@@ -29,6 +30,10 @@ registerCreate(program);
 // ── edit ──────────────────────────────────────────────────────────────────────
 
 registerEdit(program);
+
+// ── install ───────────────────────────────────────────────────────────────────
+
+registerInstall(program);
 
 if (process.argv.length <= 2) {
   program.help();
