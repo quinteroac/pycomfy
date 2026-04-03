@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [000038] - 2026-04-03
+
+### Added
+- Define the full command/subcommand tree: `parallax create|edit image|video|audio`
+- Declare all flags (`--model`, `--prompt`, `--input`, `--output`, and media-specific params) with types, defaults, and descriptions
+- Validate required flags and known model values, exiting with code `1` and a clear error message on failure
+- Ship as an installable global binary (`bun link` / `bun install -g`)
+- Provide complete `--help` at every command level
+
 ## [000037] - 2026-04-02
 
 ### Added
