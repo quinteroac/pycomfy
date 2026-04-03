@@ -55,3 +55,20 @@
 - The fake-script pattern (create a Python script in a temp dir, point `PARALLAX_REPO_ROOT` at it) is the canonical way to test exact argument forwarding in this CLI test suite. Reuse `makeFakeZImageRoot` or an equivalent helper for other pipeline models.
 - All temp dirs are cleaned up via `rm(tmpRoot, { recursive: true, force: true })` in a `finally` block — this pattern should be followed for any future subprocess tests.
 - The test file now requires `fs/promises` and `os` imports — they are at the top of the file alongside the existing `bun:test` and `path` imports.
+
+## US-004 — models-dir resolution
+
+**Summary:** Added a dedicated `describe("parallax CLI — models-dir resolution (US-004)")` test block with 5 tests covering all acceptance criteria. No production code changes were needed — the implementation was already complete in `src/index.ts` (the US-001 agent pre-wired `--models-dir` and `PYCOMFY_MODELS_DIR` resolution).
+
+**Key Decisions:**
+- Added a `makeFakeSdxlRoot(scriptBody)` helper (mirroring `makeFakeZImageRoot`) so tests can use `sdxl` (the canonical, fully-implemented model) for subprocess argument inspection.
+- AC04 tests verify the exact argument by splitting stdout on spaces and checking that the token after `--models-dir` matches the expected path.
+- AC02 test asserts both that `--flag/models` is present AND that `/env/models` is absent, making the precedence rule explicit.
+
+**Pitfalls Encountered:**
+- None. The implementation was complete; only explicit test coverage under a US-004 describe block was missing.
+
+**Useful Context for Future Agents:**
+- When the user story says "AC03: If neither is set, the CLI prints…", the acceptance criteria text was truncated in the PRD. The implemented error message is `"Error: --models-dir or PYCOMFY_MODELS_DIR is required"` — use this exact string for future tests or error-message changes.
+- `makeFakeSdxlRoot` is now a reusable helper in the test file alongside `makeFakeZImageRoot`. Use it whenever tests need to verify subprocess argument forwarding for SDXL.
+- The `PYCOMFY_MODELS_DIR` env var is only checked on `create image`; other commands (`create video`, `create audio`, `edit image`, `edit video`) do not yet dispatch to a Python subprocess and therefore don't validate it.

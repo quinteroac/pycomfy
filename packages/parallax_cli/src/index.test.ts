@@ -467,6 +467,15 @@ describe("parallax CLI — top-level help (US-001)", () => {
   });
 });
 
+// Helper: create a temporary PARALLAX_REPO_ROOT with a fake sdxl t2i.py script.
+async function makeFakeSdxlRoot(scriptBody: string): Promise<string> {
+  const tmpRoot = await mkdtemp(join(tmpdir(), "sdxl_test_"));
+  const scriptDir = join(tmpRoot, "examples", "image", "generation", "sdxl");
+  await mkdir(scriptDir, { recursive: true });
+  await writeFile(join(scriptDir, "t2i.py"), scriptBody);
+  return tmpRoot;
+}
+
 // Helper: create a temporary PARALLAX_REPO_ROOT with a fake z_image turbo.py script.
 async function makeFakeZImageRoot(scriptBody: string): Promise<string> {
   const tmpRoot = await mkdtemp(join(tmpdir(), "z_image_test_"));
@@ -616,6 +625,94 @@ describe("parallax CLI — z_image image generation (US-003-it39)", () => {
         { PARALLAX_REPO_ROOT: tmpRoot },
       );
       expect(exitCode).toBe(3);
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("parallax CLI — models-dir resolution (US-004)", () => {
+  // AC01: CLI reads PYCOMFY_MODELS_DIR from the environment when --models-dir is not supplied.
+  it("US-004-AC01: PYCOMFY_MODELS_DIR env var is used when --models-dir is not given", async () => {
+    const tmpRoot = await makeFakeSdxlRoot(
+      'import sys; print(" ".join(sys.argv[1:])); sys.exit(0)\n',
+    );
+    try {
+      const { stdout, exitCode } = await runCLIWithEnv(
+        ["create", "image", "--model", "sdxl", "--prompt", "a cat"],
+        { PARALLAX_REPO_ROOT: tmpRoot, PYCOMFY_MODELS_DIR: "/env/models" },
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain("--models-dir");
+      expect(stdout).toContain("/env/models");
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  // AC02: --models-dir flag takes precedence over PYCOMFY_MODELS_DIR.
+  it("US-004-AC02: --models-dir flag overrides PYCOMFY_MODELS_DIR env var", async () => {
+    const tmpRoot = await makeFakeSdxlRoot(
+      'import sys; print(" ".join(sys.argv[1:])); sys.exit(0)\n',
+    );
+    try {
+      const { stdout, exitCode } = await runCLIWithEnv(
+        ["create", "image", "--model", "sdxl", "--prompt", "a cat", "--models-dir", "/flag/models"],
+        { PARALLAX_REPO_ROOT: tmpRoot, PYCOMFY_MODELS_DIR: "/env/models" },
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain("--models-dir");
+      expect(stdout).toContain("/flag/models");
+      expect(stdout).not.toContain("/env/models");
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  // AC03: If neither --models-dir nor PYCOMFY_MODELS_DIR is set, CLI prints a clear error.
+  it("US-004-AC03: missing both --models-dir and PYCOMFY_MODELS_DIR exits 1 with clear error", async () => {
+    const { stderr, exitCode } = await runCLIWithEnv(
+      ["create", "image", "--model", "sdxl", "--prompt", "a cat"],
+      { PYCOMFY_MODELS_DIR: undefined, PARALLAX_REPO_ROOT: undefined },
+    );
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain("Error: --models-dir or PYCOMFY_MODELS_DIR is required");
+  });
+
+  // AC04: The resolved path is forwarded to the subprocess as --models-dir <path>.
+  it("US-004-AC04: resolved models-dir from env is passed as --models-dir to subprocess", async () => {
+    const tmpRoot = await makeFakeSdxlRoot(
+      'import sys; print(" ".join(sys.argv[1:])); sys.exit(0)\n',
+    );
+    try {
+      const { stdout, exitCode } = await runCLIWithEnv(
+        ["create", "image", "--model", "sdxl", "--prompt", "a cat"],
+        { PARALLAX_REPO_ROOT: tmpRoot, PYCOMFY_MODELS_DIR: "/resolved/models" },
+      );
+      expect(exitCode).toBe(0);
+      // The subprocess argv must contain "--models-dir /resolved/models"
+      const idx = stdout.split(" ").indexOf("--models-dir");
+      expect(idx).toBeGreaterThanOrEqual(0);
+      expect(stdout.split(" ")[idx + 1]?.trim()).toBe("/resolved/models");
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("US-004-AC04: resolved models-dir from flag is passed as --models-dir to subprocess", async () => {
+    const tmpRoot = await makeFakeSdxlRoot(
+      'import sys; print(" ".join(sys.argv[1:])); sys.exit(0)\n',
+    );
+    try {
+      const { stdout, exitCode } = await runCLIWithEnv(
+        ["create", "image", "--model", "sdxl", "--prompt", "a cat", "--models-dir", "/flag/models"],
+        { PARALLAX_REPO_ROOT: tmpRoot, PYCOMFY_MODELS_DIR: undefined },
+      );
+      expect(exitCode).toBe(0);
+      const parts = stdout.split(" ");
+      const idx = parts.indexOf("--models-dir");
+      expect(idx).toBeGreaterThanOrEqual(0);
+      expect(parts[idx + 1]?.trim()).toBe("/flag/models");
     } finally {
       await rm(tmpRoot, { recursive: true, force: true });
     }
