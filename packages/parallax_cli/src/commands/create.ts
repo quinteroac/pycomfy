@@ -112,6 +112,10 @@ export function registerCreate(program: Command): void {
     .option("--seed <n>", "Random seed for reproducibility")
     .option("--output <path>", "Output file path", "output.wav")
     .option("--models-dir <path>", "Models directory (overrides PYCOMFY_MODELS_DIR)")
+    .option("--unet <path>", "UNet model component path (overrides PYCOMFY_ACE_UNET)")
+    .option("--vae <path>", "VAE model component path (overrides PYCOMFY_ACE_VAE)")
+    .option("--text-encoder-1 <path>", "Text encoder 1 path (overrides PYCOMFY_ACE_TEXT_ENCODER_1)")
+    .option("--text-encoder-2 <path>", "Text encoder 2 path (overrides PYCOMFY_ACE_TEXT_ENCODER_2)")
     .addHelpText("after", modelsFooter("create", "audio"))
     .action(async (opts) => {
       validateModel("create", "audio", opts.model);

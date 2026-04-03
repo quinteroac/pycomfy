@@ -139,3 +139,19 @@
 - `src/utils.ts` is now the correct place for any shared, non-command-specific helper functions in the CLI package.
 - The `formatRequiredFlagError` function in `utils.ts` is the only customization applied to commander's error output — do not duplicate it in command files.
 - The 11 pre-existing `ace_step model component flags` test failures remain unrelated to this story.
+
+## US-009 — Existing tests continue to pass
+
+**Summary:** Implemented the 11 previously failing `ace_step model component flags` tests by adding `--unet`, `--vae`, `--text-encoder-1`, and `--text-encoder-2` options to the `create audio` command, with env var fallbacks (`PYCOMFY_ACE_UNET`, `PYCOMFY_ACE_VAE`, `PYCOMFY_ACE_TEXT_ENCODER_1`, `PYCOMFY_ACE_TEXT_ENCODER_2`). All 277 tests now pass.
+
+**Key Decisions:**
+- Added the four component options to `create audio` in `create.ts` so commander exposes them in `--help` (satisfying AC06) and passes them as camelCase opts to the action handler.
+- Resolved env var fallbacks in `buildArgs` inside `audio.ts` (not in the action handler or runner) — consistent with the pattern of keeping model-specific logic in the model builder file.
+- `process.env` reads for component env vars live in `audio.ts`; the restriction against `process.env` in lessons learned applies only to `runner.ts`.
+
+**Pitfalls Encountered:**
+- None. The failing tests had been pre-existing across all 8 previous stories in this iteration; they just needed the flags to be wired up.
+
+**Useful Context for Future Agents:**
+- Commander converts `--text-encoder-1` to `opts.textEncoder1` automatically — no manual mapping needed.
+- All 277 tests now pass; no pre-existing failures remain.
