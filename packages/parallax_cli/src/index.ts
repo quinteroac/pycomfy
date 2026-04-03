@@ -28,6 +28,11 @@ const VIDEO_SCRIPTS: Partial<Record<string, string>> = {
   wan22: "examples/video/wan/wan22/t2v.py",
 };
 
+// Script paths for each implemented audio model.
+const AUDIO_SCRIPTS: Partial<Record<string, string>> = {
+  ace_step: "examples/audio/ace/t2a_pipeline.py",
+};
+
 function modelsFooter(key: string): string {
   return `\nAvailable models: ${MODELS[key].join(", ")}`;
 }
@@ -217,8 +222,34 @@ create
   .option("--steps <n>", "Number of sampling steps", "60")
   .option("--seed <n>", "Random seed for reproducibility")
   .option("--output <path>", "Output file path", "output.wav")
+  .option("--models-dir <path>", "Models directory (overrides PYCOMFY_MODELS_DIR)")
   .addHelpText("after", modelsFooter("create audio"))
-  .action((opts) => { validateModel("create audio", opts.model); notImplemented("create", "audio", opts.model); });
+  .action(async (opts) => {
+    validateModel("create audio", opts.model);
+
+    const script = AUDIO_SCRIPTS[opts.model];
+    if (!script) {
+      notImplemented("create", "audio", opts.model);
+    }
+
+    const modelsDir = opts.modelsDir ?? process.env.PYCOMFY_MODELS_DIR;
+    if (!modelsDir) {
+      console.error("Error: --models-dir or PYCOMFY_MODELS_DIR is required");
+      process.exit(1);
+    }
+
+    const args: string[] = [
+      "--models-dir", modelsDir,
+      "--tags", opts.prompt,
+      "--duration", opts.length,
+      "--steps", opts.steps,
+      "--output", opts.output,
+    ];
+
+    if (opts.seed !== undefined) args.push("--seed", opts.seed);
+
+    await spawnPipeline(script, args);
+  });
 
 // ── edit ──────────────────────────────────────────────────────────────────────
 

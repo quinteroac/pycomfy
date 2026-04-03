@@ -231,3 +231,21 @@ A `makeFakeWan22I2vRoot()` helper and a full `describe("parallax CLI — wan22 i
 - All i2v tests now use `/etc/hostname` as the `--input` value (a known-existing Linux file). If porting to Windows or macOS, update these to a platform-appropriate path.
 - The file existence check in `index.ts` uses `existsSync` from Node's `"fs"` module (not async). This is intentional — the check is a guard before process.exit(), synchronous is fine here.
 - The error message format is `Error: input file not found: <path>` (exact casing matters for any downstream tests).
+
+## US-001 — ace_step audio generation via CLI
+
+**Summary:** Implemented `parallax create audio --model ace_step` in `packages/parallax_cli/src/index.ts`. The command spawns `examples/audio/ace/t2a_pipeline.py` via `uv run python`, mapping CLI flags (`--prompt` → `--tags`, `--length` → `--duration`) and forwarding `--steps`, `--seed`, `--output`, `--models-dir` verbatim.
+
+**Key Decisions:**
+- Created `examples/audio/ace/t2a_pipeline.py` using the high-level `manifest()` + `run()` API from `comfy_diffusion.pipelines.audio.ace_step.v1_5.split`, which handles model downloads automatically. The existing `examples/audio/ace/t2a.py` required manual model file paths and was not suitable for CLI use.
+- Added `AUDIO_SCRIPTS` constant in `index.ts` following the same pattern as `IMAGE_SCRIPTS` and `VIDEO_SCRIPTS`.
+- Added `--models-dir` option to `create audio` (it was missing from the stub); required to match the validation pattern used by `create image` and `create video`.
+- The stale US-007 test that expected `notImplemented` output for `ace_step` was updated to reflect the new behavior (missing models-dir now exits 1 with an error message).
+
+**Pitfalls Encountered:**
+- The existing stub for `create audio` in `index.ts` was missing the `--models-dir` option entirely. This had to be added alongside the implementation.
+- The existing `t2a.py` example uses low-level API calls with individual model file arguments, which is not compatible with the simpler CLI contract. A new `t2a_pipeline.py` was needed.
+
+**Useful Context for Future Agents:**
+- The `parallax_cli` test pattern for subprocess tests creates a temporary `PARALLAX_REPO_ROOT` directory with a fake Python script, then verifies the CLI argument forwarding by having the fake script print `sys.argv`. This pattern is used consistently for all media types and should be followed for any new audio/video/image model additions.
+- When adding a new model to `create audio`, add it to `MODELS["create audio"]` in `index.ts`, add a script path to `AUDIO_SCRIPTS`, and update the corresponding US-007 test if applicable.

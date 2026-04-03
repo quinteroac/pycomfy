@@ -314,10 +314,13 @@ describe("parallax CLI — stub execution (US-007)", () => {
     expect(stdout).toContain("[parallax] edit video --model wan22 — not yet implemented (coming soon)");
   });
 
-  it("US-007-AC01/02: create audio with valid flags prints stub message and exits 0", async () => {
-    const { stdout, exitCode } = await runCLI(["create", "audio", "--model", "ace_step", "--prompt", "test"]);
-    expect(exitCode).toBe(0);
-    expect(stdout).toContain("[parallax] create audio --model ace_step — not yet implemented (coming soon)");
+  it("US-007-AC01/02: create audio without models-dir exits 1 (ace_step is now implemented)", async () => {
+    const { stderr, exitCode } = await runCLIWithEnv(
+      ["create", "audio", "--model", "ace_step", "--prompt", "test"],
+      { PYCOMFY_MODELS_DIR: undefined, PARALLAX_REPO_ROOT: undefined },
+    );
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain("Error: --models-dir or PYCOMFY_MODELS_DIR is required");
   });
 
   it("US-007-AC01/02: edit image with valid flags prints stub message and exits 0", async () => {
@@ -2162,5 +2165,180 @@ describe("parallax CLI — --input flag on create video (US-005-it39)", () => {
     // must be the input-file error, NOT the PARALLAX_REPO_ROOT error
     expect(stderr).toContain("Error: input file not found:");
     expect(stderr).not.toContain("PARALLAX_REPO_ROOT");
+  });
+});
+
+// Helper: create a temporary PARALLAX_REPO_ROOT with a fake ace_step t2a_pipeline.py script.
+async function makeFakeAceStepRoot(scriptBody: string): Promise<string> {
+  const tmpRoot = await mkdtemp(join(tmpdir(), "ace_step_test_"));
+  const scriptDir = join(tmpRoot, "examples", "audio", "ace");
+  await mkdir(scriptDir, { recursive: true });
+  await writeFile(join(scriptDir, "t2a_pipeline.py"), scriptBody);
+  return tmpRoot;
+}
+
+describe("parallax CLI — ace_step audio generation (US-001)", () => {
+  // AC01: Running with valid models-dir and --prompt spawns subprocess
+  it("US-001-AC01: missing PYCOMFY_MODELS_DIR and --models-dir exits 1 with clear error", async () => {
+    const { stderr, exitCode } = await runCLIWithEnv(
+      ["create", "audio", "--model", "ace_step", "--prompt", "electronic ambient"],
+      { PYCOMFY_MODELS_DIR: undefined, PARALLAX_REPO_ROOT: undefined },
+    );
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain("Error: --models-dir or PYCOMFY_MODELS_DIR is required");
+  });
+
+  it("US-001-AC01: with --models-dir set, CLI reaches subprocess spawn (PARALLAX_REPO_ROOT check)", async () => {
+    const { stderr, exitCode } = await runCLIWithEnv(
+      ["create", "audio", "--model", "ace_step", "--prompt", "electronic ambient", "--models-dir", "/tmp"],
+      { PARALLAX_REPO_ROOT: undefined },
+    );
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain("Error: PARALLAX_REPO_ROOT is required");
+  });
+
+  it("US-001-AC01: subprocess is spawned and its exit code propagated (exit 0 from fake script)", async () => {
+    const tmpRoot = await makeFakeAceStepRoot("import sys; sys.exit(0)\n");
+    try {
+      const { exitCode } = await runCLIWithEnv(
+        ["create", "audio", "--model", "ace_step", "--prompt", "electronic ambient", "--models-dir", "/tmp"],
+        { PARALLAX_REPO_ROOT: tmpRoot },
+      );
+      expect(exitCode).toBe(0);
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  // AC02: --prompt is forwarded as --tags <value>
+  it("US-001-AC02: --prompt is forwarded as --tags to the subprocess", async () => {
+    const tmpRoot = await makeFakeAceStepRoot(
+      'import sys; print(" ".join(sys.argv[1:])); sys.exit(0)\n',
+    );
+    try {
+      const { stdout, exitCode } = await runCLIWithEnv(
+        ["create", "audio", "--model", "ace_step", "--prompt", "electronic ambient", "--models-dir", "/tmp"],
+        { PARALLAX_REPO_ROOT: tmpRoot },
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain("--tags");
+      expect(stdout).toContain("electronic ambient");
+      expect(stdout).not.toContain("--prompt");
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  // AC03: --length is forwarded as --duration <value>
+  it("US-001-AC03: --length is forwarded as --duration to the subprocess", async () => {
+    const tmpRoot = await makeFakeAceStepRoot(
+      'import sys; print(" ".join(sys.argv[1:])); sys.exit(0)\n',
+    );
+    try {
+      const { stdout, exitCode } = await runCLIWithEnv(
+        [
+          "create", "audio", "--model", "ace_step",
+          "--prompt", "jazz", "--models-dir", "/tmp", "--length", "60",
+        ],
+        { PARALLAX_REPO_ROOT: tmpRoot },
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain("--duration");
+      expect(stdout).toContain("60");
+      expect(stdout).not.toContain("--length");
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  // AC04: --steps, --seed, --output are forwarded verbatim
+  it("US-001-AC04: --steps, --seed, --output are forwarded verbatim to the subprocess", async () => {
+    const tmpRoot = await makeFakeAceStepRoot(
+      'import sys; print(" ".join(sys.argv[1:])); sys.exit(0)\n',
+    );
+    try {
+      const { stdout, exitCode } = await runCLIWithEnv(
+        [
+          "create", "audio", "--model", "ace_step", "--prompt", "ambient",
+          "--models-dir", "/tmp",
+          "--steps", "30", "--seed", "99", "--output", "my_audio.wav",
+        ],
+        { PARALLAX_REPO_ROOT: tmpRoot },
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain("--steps");
+      expect(stdout).toContain("30");
+      expect(stdout).toContain("--seed");
+      expect(stdout).toContain("99");
+      expect(stdout).toContain("--output");
+      expect(stdout).toContain("my_audio.wav");
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  // AC05: --models-dir is forwarded to the subprocess
+  it("US-001-AC05: --models-dir is forwarded to the subprocess", async () => {
+    const tmpRoot = await makeFakeAceStepRoot(
+      'import sys; print(" ".join(sys.argv[1:])); sys.exit(0)\n',
+    );
+    try {
+      const { stdout, exitCode } = await runCLIWithEnv(
+        ["create", "audio", "--model", "ace_step", "--prompt", "ambient", "--models-dir", "/my/models"],
+        { PARALLAX_REPO_ROOT: tmpRoot },
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain("--models-dir");
+      expect(stdout).toContain("/my/models");
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("US-001-AC05: --models-dir option is listed in create audio --help", async () => {
+    const { stdout, exitCode } = await runCLI(["create", "audio", "--help"]);
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("--models-dir");
+  });
+
+  // AC06: CLI exits with subprocess exit code
+  it("US-001-AC06: CLI exits with non-zero when subprocess fails (bad PARALLAX_REPO_ROOT path)", async () => {
+    const { exitCode } = await runCLIWithEnv(
+      ["create", "audio", "--model", "ace_step", "--prompt", "ambient", "--models-dir", "/tmp"],
+      { PARALLAX_REPO_ROOT: "/nonexistent-parallax-root-12345" },
+    );
+    expect(exitCode).not.toBe(0);
+  });
+
+  it("US-001-AC06: CLI propagates subprocess exit code 3 verbatim", async () => {
+    const tmpRoot = await makeFakeAceStepRoot("import sys; sys.exit(3)\n");
+    try {
+      const { exitCode } = await runCLIWithEnv(
+        ["create", "audio", "--model", "ace_step", "--prompt", "ambient", "--models-dir", "/tmp"],
+        { PARALLAX_REPO_ROOT: tmpRoot },
+      );
+      expect(exitCode).toBe(3);
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("US-001-AC06: CLI propagates subprocess exit code 0 (success)", async () => {
+    const tmpRoot = await makeFakeAceStepRoot("import sys; sys.exit(0)\n");
+    try {
+      const { exitCode } = await runCLIWithEnv(
+        ["create", "audio", "--model", "ace_step", "--prompt", "ambient", "--models-dir", "/tmp"],
+        { PARALLAX_REPO_ROOT: tmpRoot },
+      );
+      expect(exitCode).toBe(0);
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  // AC07: typecheck passes — verified by running bun tsc --noEmit in CI
+  it("US-001-AC07: --help exits 0 (basic smoke test for typecheck gate)", async () => {
+    const { exitCode } = await runCLI(["create", "audio", "--help"]);
+    expect(exitCode).toBe(0);
   });
 });
