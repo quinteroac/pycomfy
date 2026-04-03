@@ -199,3 +199,18 @@
 - `examples/video/wan/wan21/i2v.py` accepts `--image` (not `--input`) — the CLI-to-subprocess rename is applied inside the `create video` action handler for all three i2v-capable models (ltx2, ltx23, wan21).
 - The routing ternary in `index.ts` now has 3 i2v guards. If more models gain i2v, consider refactoring to a `VIDEO_I2V_SCRIPTS` map as noted in the US-001 lessons.
 - The `makeFakeWan21Root` helper only creates `t2v.py`; `makeFakeWan21I2vRoot` only creates `i2v.py`. Use both in regression tests to validate the routing split.
+
+## US-004 — wan22 i2v via CLI
+
+**Summary:** Added WAN 2.2 image-to-video routing in the `parallax create video` CLI command. When `--model wan22` is combined with `--input <path>`, the CLI now routes to `examples/video/wan/wan22/i2v.py` and forwards `--input` as `--image`, consistent with the pattern already established for ltx2, ltx23, and wan21.
+
+**Key Decisions:** Three surgical edits to `packages/parallax_cli/src/index.ts`:
+1. Updated `--input` option description to include "wan22"
+2. Added `(opts.model === "wan22" && opts.input !== undefined) ? "examples/video/wan/wan22/i2v.py" :` to the script routing ternary
+3. Added `opts.model === "wan22"` to the `--input` → `--image` forwarding condition
+
+A `makeFakeWan22I2vRoot()` helper and a full `describe("parallax CLI — wan22 i2v video generation (US-004-it39)")` block were appended to the test file, mirroring the wan21 i2v test pattern exactly.
+
+**Pitfalls Encountered:** The test file has many `});` blocks that match the naive `old_str` used in `edit` — always use a multi-line or unique context window when appending to large test files. Using `cat >>` (heredoc append) is the safer approach for end-of-file additions.
+
+**Useful Context for Future Agents:** The i2v routing pattern in `create video` is a ternary chain: ltx2 → ltx23 → wan21 → wan22 → fallback to `VIDEO_SCRIPTS[model]`. Any new i2v model must be added to both the ternary chain AND the `--input` → `--image` forwarding condition, and the `--input` help description should be updated too. The `makeFakeWan22Root` helper (t2v) already existed; only `makeFakeWan22I2vRoot` was new.
