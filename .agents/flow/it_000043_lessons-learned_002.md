@@ -71,3 +71,21 @@
 - The `edit image` CLI command is spawned as `["edit", "image", ...]` — the subcommand structure is `edit image` with flags following.
 - Boolean flags like `--no-lora` must be pushed without a value argument: `args.push("--no-lora")` — not `args.push("--no-lora", "true")`.
 - All 4 MCP tools (`create_image`, `create_video`, `create_audio`, `edit_image`) follow the identical `registerTool → args array → Bun.spawn → exitCode check → return` pattern. Future tools should continue this pattern.
+
+## US-005 — Upscale Image via MCP Tool
+
+**Summary:** Added `upscale_image` MCP tool to `packages/parallax_mcp/src/index.ts`. The tool registers a fully-typed input schema matching all 16 `parallax upscale image` options (`model`, `prompt`, `input`, `checkpoint`, `esrganCheckpoint`, `latentUpscaleCheckpoint`, `negativePrompt`, `width`, `height`, `steps`, `cfg`, `seed`, `output`, `outputBase`, `modelsDir`), spawns the CLI subprocess via `Bun.spawn`, and returns the resolved output path on success or stderr on failure. Also added the missing `--input` flag to the CLI `upscale image` command and `UpscaleImageOpts` interface. 29 tests cover all acceptance criteria.
+
+**Key Decisions:**
+- Followed the exact same pattern as `create_image`, `create_video`, `create_audio`, and `edit_image`: `server.registerTool()` with a zod shape, `Bun.spawn` with `cwd: CLI_DIR`, and `resolve(input.output ?? "output.png")` for the default output path.
+- AC01 listed `input` as required — this was missing from the CLI `upscale image` command (`upscale.ts` and `UpscaleImageOpts`). Added `--input <path>` as a `requiredOption` to the CLI and added `input: string` to the interface and `buildUpscaleImageArgs()`.
+- Subcommand structure is `["upscale", "image", ...]` — matching the `upscale → image` commander hierarchy.
+
+**Pitfalls Encountered:**
+- The CLI `upscale image` command did not have `--input` option even though upscaling inherently requires an input image. The AC correctly identified this gap. Adding it to the CLI was necessary for end-to-end correctness.
+- There is a pre-existing typecheck error in `packages/parallax_cli/src/models/image.ts:133` (`opts.steps` possibly undefined in `buildEditImageArgs`). This error existed before this story and is unrelated to the changes made.
+
+**Useful Context for Future Agents:**
+- The `upscale image` CLI command now requires `--input <path>` as a required option alongside `--model` and `--prompt`.
+- All 5 MCP tools (`create_image`, `create_video`, `create_audio`, `edit_image`, `upscale_image`) follow the identical `registerTool → args array → Bun.spawn → exitCode check → return` pattern.
+- The pre-existing typecheck error in `parallax_cli` (`opts.steps` in `buildEditImageArgs`) should be addressed in a dedicated cleanup iteration — it's in the `EditImageOpts` flux branch at line ~135.

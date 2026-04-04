@@ -236,5 +236,68 @@ server.registerTool(
   },
 );
 
+server.registerTool(
+  "upscale_image",
+  {
+    description: "Upscale an image using the Parallax pipeline (parallax upscale image)",
+    inputSchema: {
+      model:                   z.string().describe("Model to use (e.g. esrgan, latent_upscale)"),
+      prompt:                  z.string().describe("Text prompt"),
+      input:                   z.string().describe("Path to the input image file to upscale"),
+      checkpoint:              z.string().optional().describe("Base checkpoint filename (overrides PYCOMFY_CHECKPOINT)"),
+      esrganCheckpoint:        z.string().optional().describe("ESRGAN checkpoint filename (required for esrgan)"),
+      latentUpscaleCheckpoint: z.string().optional().describe("Latent upscale checkpoint filename (required for latent_upscale)"),
+      negativePrompt:          z.string().optional().describe("Negative prompt (what to avoid)"),
+      width:                   z.string().optional().describe("Image width in pixels"),
+      height:                  z.string().optional().describe("Image height in pixels"),
+      steps:                   z.string().optional().describe("Number of sampling steps"),
+      cfg:                     z.string().optional().describe("CFG guidance scale"),
+      seed:                    z.string().optional().describe("Random seed for reproducibility"),
+      output:                  z.string().optional().describe("Output file path (default: output.png)"),
+      outputBase:              z.string().optional().describe("Intermediate base image before upscaling (default: output_base.png)"),
+      modelsDir:               z.string().optional().describe("Models directory (overrides PYCOMFY_MODELS_DIR)"),
+    },
+  },
+  async (input) => {
+    const args: string[] = ["upscale", "image", "--model", input.model, "--prompt", input.prompt, "--input", input.input];
+    if (input.checkpoint)              args.push("--checkpoint",               input.checkpoint);
+    if (input.esrganCheckpoint)        args.push("--esrgan-checkpoint",        input.esrganCheckpoint);
+    if (input.latentUpscaleCheckpoint) args.push("--latent-upscale-checkpoint", input.latentUpscaleCheckpoint);
+    if (input.negativePrompt)          args.push("--negative-prompt",          input.negativePrompt);
+    if (input.width)                   args.push("--width",                    input.width);
+    if (input.height)                  args.push("--height",                   input.height);
+    if (input.steps)                   args.push("--steps",                    input.steps);
+    if (input.cfg)                     args.push("--cfg",                      input.cfg);
+    if (input.seed)                    args.push("--seed",                     input.seed);
+    if (input.output)                  args.push("--output",                   input.output);
+    if (input.outputBase)              args.push("--output-base",              input.outputBase);
+    if (input.modelsDir)               args.push("--models-dir",               input.modelsDir);
+
+    const outputPath = resolve(input.output ?? "output.png");
+
+    const proc = Bun.spawn(["bun", "run", "src/index.ts", ...args], {
+      stdout: "pipe",
+      stderr: "pipe",
+      cwd: CLI_DIR,
+    });
+
+    const [exitCode, stderr] = await Promise.all([
+      proc.exited,
+      new Response(proc.stderr).text(),
+    ]);
+
+    if (exitCode !== 0) {
+      return {
+        content: [{ type: "text", text: `Error: ${stderr.trim()}` }],
+        isError: true,
+      };
+    }
+
+    return {
+      content: [{ type: "text", text: outputPath }],
+    };
+  },
+);
+
 const transport = new StdioServerTransport();
 await server.connect(transport);

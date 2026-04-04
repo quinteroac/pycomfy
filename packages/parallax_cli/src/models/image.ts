@@ -56,6 +56,7 @@ export interface EditImageOpts {
 export interface UpscaleImageOpts {
   model: string;
   prompt: string;
+  input: string;
   negativePrompt?: string;
   checkpoint: string;
   esrganCheckpoint?: string;      // esrgan only
@@ -82,6 +83,7 @@ export function buildUpscaleImageArgs(opts: UpscaleImageOpts, modelsDir: string)
     "--models-dir", modelsDir,
     "--checkpoint", opts.checkpoint,
     "--prompt", opts.prompt,
+    "--input", opts.input,
     "--width", opts.width,
     "--height", opts.height,
     "--steps", opts.steps,
