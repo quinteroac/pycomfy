@@ -25,3 +25,17 @@
 
 **Useful Context for Future Agents:** `bunqueue/client` exports both `Queue` (producer + job management) and `Worker` (consumer/processor) separately. Prefer `Queue` when building a shared queue handle with no processing logic attached. The `Bunqueue` convenience class is unsuitable when you want to defer processor assignment. `QueueOptions` accepts `embedded: boolean` and `dataPath: string` for SQLite path configuration.
 
+
+## US-003 — submitJob() helper
+
+**Summary:** Created `packages/parallax_sdk/src/submit.ts` exporting `submitJob(data: ParallaxJobData): Promise<string>`. It enqueues a `"pipeline"` job via `getQueue().add(...)` with `attempts: 1` and `timeout: 30 * 60 * 1000`, spawns a detached Bun worker process, closes the queue, then returns the job ID string.
+
+**Key Decisions:**
+- Used `Bun.spawn(...)` (built-in Bun API) for the detached child process — no `child_process` import needed. `detached: true` with all stdio set to `"ignore"` satisfies AC03.
+- The job ID is coerced to `String(job.id)` because `bunqueue` returns an ID typed as `number | string`; callers expect `Promise<string>`.
+- `queue.close()` is called after spawning (not before) to ensure the job is fully committed to the SQLite DB before the connection is torn down (AC04).
+- Re-exported from `src/index.ts` to keep the single-entry-point convention.
+
+**Pitfalls Encountered:** None. `bun run typecheck` passes cleanly with the existing `tsconfig.json` setup (already has `"types": ["bun-types"]` from US-002).
+
+**Useful Context for Future Agents:** `Bun.spawn` is the correct API for detached subprocesses in Bun — it mirrors Node's `child_process.spawn` with `detached: true`. The `detached` option combined with all stdio set to `"ignore"` produces a fully independent process that survives the parent exiting.
