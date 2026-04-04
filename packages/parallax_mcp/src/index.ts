@@ -65,5 +65,61 @@ server.registerTool(
   },
 );
 
+server.registerTool(
+  "create_video",
+  {
+    description: "Generate a video using the Parallax pipeline (parallax create video)",
+    inputSchema: {
+      model:     z.string().describe("Model to use (e.g. ltx2, ltx23, wan21, wan22)"),
+      prompt:    z.string().describe("Text prompt describing the video to generate"),
+      input:     z.string().optional().describe("Input image path for image-to-video (ltx2, ltx23, wan21, wan22)"),
+      width:     z.string().optional().describe("Video width in pixels"),
+      height:    z.string().optional().describe("Video height in pixels"),
+      length:    z.string().optional().describe("Number of frames to generate"),
+      steps:     z.string().optional().describe("Number of sampling steps"),
+      cfg:       z.string().optional().describe("CFG guidance scale"),
+      seed:      z.string().optional().describe("Random seed for reproducibility"),
+      output:    z.string().optional().describe("Output file path (default: output.mp4)"),
+      modelsDir: z.string().optional().describe("Models directory (overrides PYCOMFY_MODELS_DIR)"),
+    },
+  },
+  async (input) => {
+    const args: string[] = ["create", "video", "--model", input.model, "--prompt", input.prompt];
+    if (input.input)     args.push("--input",      input.input);
+    if (input.width)     args.push("--width",      input.width);
+    if (input.height)    args.push("--height",     input.height);
+    if (input.length)    args.push("--length",     input.length);
+    if (input.steps)     args.push("--steps",      input.steps);
+    if (input.cfg)       args.push("--cfg",        input.cfg);
+    if (input.seed)      args.push("--seed",       input.seed);
+    if (input.output)    args.push("--output",     input.output);
+    if (input.modelsDir) args.push("--models-dir", input.modelsDir);
+
+    const outputPath = resolve(input.output ?? "output.mp4");
+
+    const proc = Bun.spawn(["bun", "run", "src/index.ts", ...args], {
+      stdout: "pipe",
+      stderr: "pipe",
+      cwd: CLI_DIR,
+    });
+
+    const [exitCode, stderr] = await Promise.all([
+      proc.exited,
+      new Response(proc.stderr).text(),
+    ]);
+
+    if (exitCode !== 0) {
+      return {
+        content: [{ type: "text", text: `Error: ${stderr.trim()}` }],
+        isError: true,
+      };
+    }
+
+    return {
+      content: [{ type: "text", text: outputPath }],
+    };
+  },
+);
+
 const transport = new StdioServerTransport();
 await server.connect(transport);
