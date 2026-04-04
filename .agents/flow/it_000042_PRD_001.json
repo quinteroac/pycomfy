@@ -1,0 +1,124 @@
+{
+  "goals": [
+    "Per-model defaults in `registry.ts` are the single source of truth for all CLI parameter defaults, derived from the Python `run()` signatures.",
+    "When a user invokes `parallax create video --model ltx2` without specifying `--width`, the pipeline receives `1280` (ltx2's default), not `832` (the old global default).",
+    "`--help` footer shows a per-model defaults table so users see the correct values for the model they intend to use."
+  ],
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Registry stores per-model defaults",
+      "description": "As a developer or CLI user, I want each model's default parameter values to be declared in `registry.ts` so that there is one place to update when a pipeline's defaults change.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-001-AC01",
+          "text": "`registry.ts` defines a `ModelDefaults` interface with fields: `width?`, `height?`, `length?`, `fps?`, `steps?`, `cfg?` (all optional; absent means the param is not applicable for that model)."
+        },
+        {
+          "id": "US-001-AC02",
+          "text": "Every model that has a `create` script has a corresponding `ModelDefaults` entry, populated from its `run()` signature (see table below)."
+        },
+        {
+          "id": "US-001-AC03",
+          "text": "A `getModelDefaults(media, model)` helper is exported from `registry.ts` and returns `ModelDefaults | undefined`."
+        },
+        {
+          "id": "US-001-AC04",
+          "text": "Typecheck / lint passes."
+        }
+      ]
+    },
+    {
+      "id": "US-002",
+      "title": "CLI applies per-model defaults at runtime",
+      "description": "As a CLI user, I want `parallax create video --model ltx2` (without `--width`) to use ltx2's width `1280` so that I get the pipeline's optimal output without having to memorize model-specific values.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-002-AC01",
+          "text": "In `create.ts`, the static commander defaults for `--width`, `--height`, `--length`, `--steps`, `--cfg`, and `--fps` (where applicable) are removed (i.e. not hardcoded in `.option(...)` calls)."
+        },
+        {
+          "id": "US-002-AC02",
+          "text": "In each action handler, after the model is validated, `getModelDefaults(media, model)` is called and any param that is `undefined` (not supplied by the user) is filled with the model default before being passed to `buildArgs`."
+        },
+        {
+          "id": "US-002-AC03",
+          "text": "Running `parallax create video --model ltx2 --prompt \"test\"` passes `--width 1280 --height 720 --length 97 --steps 20 --cfg-pass1 4` to the Python script."
+        },
+        {
+          "id": "US-002-AC04",
+          "text": "Running `parallax create video --model wan21 --prompt \"test\"` passes `--width 832 --height 480 --length 33 --steps 30 --cfg 6` to the Python script."
+        },
+        {
+          "id": "US-002-AC05",
+          "text": "Running `parallax create audio --model ace_step --prompt \"test\"` passes `--duration 120 --steps 8 --cfg 1` to the Python script."
+        },
+        {
+          "id": "US-002-AC06",
+          "text": "Explicitly supplied flags override model defaults (e.g. `--steps 50` is forwarded as `--steps 50`)."
+        },
+        {
+          "id": "US-002-AC07",
+          "text": "Typecheck / lint passes."
+        }
+      ]
+    },
+    {
+      "id": "US-003",
+      "title": "`--help` footer shows per-model defaults table",
+      "description": "As a CLI user, I want `parallax create video --help` to include a table of per-model defaults so that I can see the correct values for each model without reading Python source.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-003-AC01",
+          "text": "`create video --help` shows an \"Defaults per model\" section (via `addHelpText(\"after\", ...)`) listing width, height, length, fps, steps, and cfg for ltx2, ltx23, wan21, and wan22."
+        },
+        {
+          "id": "US-003-AC02",
+          "text": "`create image --help` shows a similar table for sdxl, anima, and z_image."
+        },
+        {
+          "id": "US-003-AC03",
+          "text": "`create audio --help` shows the ace_step defaults (duration, steps, cfg, bpm)."
+        },
+        {
+          "id": "US-003-AC04",
+          "text": "Table values match the entries in `ModelDefaults` from US-001 (no duplication; table is generated from `registry.ts` data)."
+        },
+        {
+          "id": "US-003-AC05",
+          "text": "Visually verified in terminal (`parallax create video --help` output reviewed)."
+        }
+      ]
+    }
+  ],
+  "functionalRequirements": [
+    {
+      "id": "FR-1",
+      "description": "`registry.ts` exports a `ModelDefaults` interface and a `getModelDefaults(media: string, model: string): ModelDefaults | undefined` function."
+    },
+    {
+      "id": "FR-2",
+      "description": "`ModelDefaults` fields are all optional (`?`) so models that lack a parameter (e.g. z_image has no `cfg`) simply omit it."
+    },
+    {
+      "id": "FR-3",
+      "description": "Commander option declarations in `create.ts` must not specify static defaults for dimension/sampling params — default resolution is `undefined` so the handler can detect omission."
+    },
+    {
+      "id": "FR-4",
+      "description": "Each action handler in `create.ts` applies model defaults before calling `buildArgs`, so `buildArgs` always receives fully-resolved values."
+    },
+    {
+      "id": "FR-5",
+      "description": "`addHelpText(\"after\", ...)` in `create.ts` generates the defaults table dynamically from `getModelDefaults` calls, not from hardcoded strings."
+    },
+    {
+      "id": "FR-6",
+      "description": "Existing `cfgFlag` and `omitSteps` behaviour in `VIDEO_MODEL_CONFIG` and `buildVideoArgs` is preserved unchanged."
+    },
+    {
+      "id": "FR-7",
+      "description": "The `edit` commands are out of scope (all are `notImplemented`); their default values are not touched."
+    }
+  ]
+}

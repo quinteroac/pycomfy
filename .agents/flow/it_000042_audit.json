@@ -1,0 +1,50 @@
+{
+  "iteration": "000042",
+  "prd_index": "001",
+  "overall_assessment": "comply",
+  "refactor_items": [
+    {
+      "priority": 1,
+      "title": "Remove --bpm static commander default",
+      "rationale": "The static '120' in .option('--bpm', ..., '120') duplicates the ace_step registry entry and violates the registry-as-single-source-of-truth principle (FR-3 spirit).",
+      "file": "packages/parallax_cli/src/commands/create.ts",
+      "changes": [
+        {
+          "description": "Remove static default from .option('--bpm <n>', 'Beats per minute', '120')",
+          "from": ".option(\"--bpm <n>\", \"Beats per minute\", \"120\")",
+          "to": ".option(\"--bpm <n>\", \"Beats per minute\")"
+        },
+        {
+          "description": "Apply registry default for bpm in the audio handler before passing to AudioOpts",
+          "from": "bpm:          opts.bpm,",
+          "to": "bpm:          opts.bpm ?? (defaults?.bpm != null ? String(defaults.bpm) : \"120\"),"
+        }
+      ]
+    },
+    {
+      "priority": 2,
+      "title": "Remove unreachable hardcoded fallback strings from handlers",
+      "rationale": "The ternary fallbacks (e.g., '832', '480', '20') after the model-defaults expression are unreachable for registered models and silently mask future registry omissions.",
+      "file": "packages/parallax_cli/src/commands/create.ts",
+      "changes": [
+        {
+          "description": "Add a guard in each handler that exits with a clear error if getModelDefaults returns undefined, then simplify the ?? expressions to use String(defaults.field) directly.",
+          "pattern": "After validateModel call, before building *Opts",
+          "example": "if (!defaults) { console.error(`Error: no defaults for model '${opts.model}'. Update registry.ts.`); process.exit(1); }"
+        }
+      ]
+    },
+    {
+      "priority": 3,
+      "title": "(Optional UX) Add footnote for — cells in defaults table",
+      "rationale": "ltx23 shows — for steps; users unfamiliar with omitSteps may be confused.",
+      "file": "packages/parallax_cli/src/commands/create.ts",
+      "changes": [
+        {
+          "description": "In buildDefaultsTable, if any data cell equals '—', append a footnote line: '  (—) = parameter not applicable for this model'",
+          "location": "buildDefaultsTable function, before return statement"
+        }
+      ]
+    }
+  ]
+}

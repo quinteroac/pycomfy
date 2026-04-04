@@ -112,7 +112,7 @@ def run(
     prompt: str,
     width: int = 1024,
     height: int = 1024,
-    steps: int = 4,
+    steps: int = 8,
     seed: int = 0,
     unet_filename: str | None = None,
     clip_filename: str | None = None,
@@ -136,7 +136,7 @@ def run(
     height : int, optional
         Output image height in pixels.  Default ``1024``.
     steps : int, optional
-        Number of denoising steps.  Default ``4``.
+        Number of denoising steps.  Default ``8``.
     seed : int, optional
         Random seed for reproducibility.  Default ``0``.
     unet_filename : str | None, optional

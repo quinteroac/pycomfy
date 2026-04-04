@@ -3,6 +3,7 @@ import { Command } from "commander";
 import { registerInstall } from "./commands/install";
 import { registerCreate } from "./commands/create";
 import { registerEdit } from "./commands/edit";
+import { registerUpscale } from "./commands/upscale";
 import { formatRequiredFlagError } from "./utils";
 
 const program = new Command();
@@ -15,5 +16,6 @@ program
 registerInstall(program);
 registerCreate(program);
 registerEdit(program);
+registerUpscale(program);
 if (process.argv.length <= 2) program.help();
 program.parse();

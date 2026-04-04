@@ -107,7 +107,7 @@ def main() -> int:
     parser.add_argument("--width", type=int, default=768, help="Frame width in px (default 768).")
     parser.add_argument("--height", type=int, default=512, help="Frame height in px (default 512).")
     parser.add_argument("--length", type=int, default=97, help="Number of frames (default 97, ≈4s at 25fps).")
-    parser.add_argument("--fps", type=int, default=24, help="Frame rate (default 24).")
+    parser.add_argument("--fps", type=int, default=25, help="Frame rate (default 25).")
     parser.add_argument("--cfg", type=float, default=1.0, help="CFG scale (default 1.0 for distilled).")
     parser.add_argument("--seed", type=int, default=0, help="Random seed (default 0).")
     parser.add_argument(
@@ -151,10 +151,15 @@ def main() -> int:
         fps=args.fps,
         cfg=args.cfg,
         seed=args.seed,
+        distilled_lora_strength=args.distilled_lora_strength,
+        te_lora_strength=args.te_lora_strength,
         unet_filename=args.unet_filename,
         vae_filename=args.vae_filename,
         audio_vae_filename=args.audio_vae_filename,
         text_encoder_filename=args.text_encoder_filename,
+        distilled_lora_filename=args.distilled_lora_filename,
+        te_lora_filename=args.te_lora_filename,
+        upscaler_filename=args.upscaler_filename,
     )
 
     frames = result["frames"]

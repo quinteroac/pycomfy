@@ -29,7 +29,7 @@ Usage
         --models-dir /path/to/models \\
         --prompt "Latina female with thick wavy hair, harbor boats behind" \\
         --width 1024 --height 1024 \\
-        --steps 4 --seed 42 \\
+        --steps 8 --seed 42 \\
         --output z_image_turbo_output.png
 """
 
@@ -60,8 +60,8 @@ def main() -> int:
     parser.add_argument(
         "--steps",
         type=int,
-        default=4,
-        help="Number of denoising steps.  Default 4.",
+        default=8,
+        help="Number of denoising steps.  Default 8.",
     )
     parser.add_argument("--seed", type=int, default=42, help="Random seed.")
     parser.add_argument(
