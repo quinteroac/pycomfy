@@ -1,0 +1,168 @@
+{
+  "goals": [
+    "`parallax edit image --model <flux_*|qwen> --prompt \"...\" --input photo.jpg` reaches the",
+    "`parallax upscale image --model <esrgan|latent_upscale> ...` reaches its Python runtime",
+    "Both commands follow the exact same pattern as `create.ts`:",
+    "TypeScript typecheck passes after all changes."
+  ],
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Registry declares `edit image` and `upscale image` models and scripts",
+      "description": "As a developer, I want `registry.ts` to be the single source of truth for edit/upscale model names and their script paths so that adding future models only requires editing one file.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-001-AC01",
+          "text": "`MODELS[\"edit image\"]` is updated to:"
+        },
+        {
+          "id": "US-001-AC02",
+          "text": "A new `EDIT_IMAGE_SCRIPTS` map is added, keyed by model name, with the following values:"
+        },
+        {
+          "id": "US-001-AC03",
+          "text": "`MODELS[\"upscale image\"]` is added: `[\"esrgan\", \"latent_upscale\"]`."
+        },
+        {
+          "id": "US-001-AC04",
+          "text": "A new `UPSCALE_IMAGE_SCRIPTS` map is added:"
+        },
+        {
+          "id": "US-001-AC05",
+          "text": "`getScript(\"edit\", \"image\", model)` returns the correct entry from `EDIT_IMAGE_SCRIPTS`."
+        },
+        {
+          "id": "US-001-AC06",
+          "text": "`getScript(\"upscale\", \"image\", model)` returns the correct entry from"
+        },
+        {
+          "id": "US-001-AC07",
+          "text": "Typecheck / lint passes."
+        }
+      ]
+    },
+    {
+      "id": "US-002",
+      "title": "`edit image` action wires up flux and qwen models",
+      "description": "As a CLI user, I want `parallax edit image --model flux_4b_base --prompt \"...\" --input photo.jpg` to actually invoke the Python script so that I can edit images from the terminal.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-002-AC01",
+          "text": "`edit.ts` imports `spawnPipeline`, `resolveModelsDir`, `readConfig`, `getScript`, and"
+        },
+        {
+          "id": "US-002-AC02",
+          "text": "The `edit image` action handler follows the pattern:"
+        },
+        {
+          "id": "US-002-AC03",
+          "text": "`--input` is a `requiredOption` and is validated to exist on disk before invoking the"
+        },
+        {
+          "id": "US-002-AC04",
+          "text": "`buildEditImageArgs` maps CLI options to Python script args per model:"
+        },
+        {
+          "id": "US-002-AC05",
+          "text": "Running `parallax edit image --model flux_4b_base --prompt \"test\" --input photo.jpg`"
+        },
+        {
+          "id": "US-002-AC06",
+          "text": "Running `parallax edit image --model qwen --prompt \"change background\" --input photo.jpg`"
+        },
+        {
+          "id": "US-002-AC07",
+          "text": "Typecheck / lint passes."
+        }
+      ]
+    },
+    {
+      "id": "US-003",
+      "title": "New `upscale image` command wires up esrgan and latent_upscale",
+      "description": "As a CLI user, I want `parallax upscale image --model esrgan --checkpoint model.safetensors --esrgan-checkpoint RealESRGAN_x4plus.safetensors --prompt \"...\"` to invoke the upscale Python script so that I can upscale images from the terminal.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-003-AC01",
+          "text": "A new file `packages/parallax_cli/src/commands/upscale.ts` exports `registerUpscale`."
+        },
+        {
+          "id": "US-003-AC02",
+          "text": "`upscale image` command is structured identically to `create image` (validate →"
+        },
+        {
+          "id": "US-003-AC03",
+          "text": "CLI options for `upscale image`:"
+        },
+        {
+          "id": "US-003-AC04",
+          "text": "`buildUpscaleImageArgs` in `models/image.ts` (or `models/edit_image.ts`) correctly maps"
+        },
+        {
+          "id": "US-003-AC05",
+          "text": "The handler exits with an error if the model-specific required flag"
+        },
+        {
+          "id": "US-003-AC06",
+          "text": "Running `parallax upscale image --model esrgan --checkpoint my.safetensors"
+        },
+        {
+          "id": "US-003-AC07",
+          "text": "Typecheck / lint passes."
+        }
+      ]
+    },
+    {
+      "id": "US-004",
+      "title": "`index.ts` registers the upscale command",
+      "description": "As a CLI user, I want `parallax upscale` to appear as a valid top-level command so that it is discoverable via `parallax --help`.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-004-AC01",
+          "text": "`index.ts` imports `registerUpscale` from `./commands/upscale`."
+        },
+        {
+          "id": "US-004-AC02",
+          "text": "`registerUpscale(program)` is called alongside `registerCreate` and `registerEdit`."
+        },
+        {
+          "id": "US-004-AC03",
+          "text": "`parallax --help` lists `upscale` as a command."
+        },
+        {
+          "id": "US-004-AC04",
+          "text": "Typecheck / lint passes."
+        }
+      ]
+    }
+  ],
+  "functionalRequirements": [
+    {
+      "id": "FR-1",
+      "description": "`getScript(action, media, model)` in `registry.ts` handles `action = \"edit\"` and"
+    },
+    {
+      "id": "FR-2",
+      "description": "`EDIT_IMAGE_SCRIPTS` and `UPSCALE_IMAGE_SCRIPTS` are `Partial<Record<string, string>>`"
+    },
+    {
+      "id": "FR-3",
+      "description": "`buildEditImageArgs` encapsulates all model-specific arg differences (no inline model"
+    },
+    {
+      "id": "FR-4",
+      "description": "`buildUpscaleImageArgs` encapsulates all model-specific arg differences (no inline"
+    },
+    {
+      "id": "FR-5",
+      "description": "The qwen `--output-prefix` mapping strips a trailing `.png` extension from the CLI"
+    },
+    {
+      "id": "FR-6",
+      "description": "`flux_9b_kv` requires both `--input` and `--subject-image`; the handler validates"
+    },
+    {
+      "id": "FR-7",
+      "description": "The `edit video` command in `edit.ts` is left unchanged (still calls `notImplemented`)."
+    }
+  ]
+}
