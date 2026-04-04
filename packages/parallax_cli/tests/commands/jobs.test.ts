@@ -17,6 +17,8 @@ import {
   formatNotFoundMessage,
   formatJobStatus,
   formatJobStatusJson,
+  formatCancelledMessage,
+  formatAlreadyTerminalMessage,
 } from "../../src/commands/jobs";
 import type { JobSummary } from "@parallax/sdk/list";
 import type { ParallaxJobStatus } from "@parallax/sdk/status";
@@ -347,5 +349,53 @@ describe("US-004-AC02: formatJobStatusJson", () => {
     const trimmed = json.trim();
     expect(trimmed.startsWith("{")).toBe(true);
     expect(trimmed.endsWith("}")).toBe(true);
+  });
+});
+
+// ── US-005 cancel helpers ─────────────────────────────────────────────────────
+
+// US-005-AC01: cancelled message format
+describe("US-005-AC01: formatCancelledMessage", () => {
+  it("starts with the checkmark ✔", () => {
+    expect(formatCancelledMessage("job-99")).toContain("✔");
+  });
+
+  it("contains the job id", () => {
+    expect(formatCancelledMessage("job-99")).toContain("job-99");
+  });
+
+  it("matches exact format '✔ Job <id> cancelled'", () => {
+    expect(formatCancelledMessage("job-99")).toBe("✔ Job job-99 cancelled");
+  });
+});
+
+// US-005-AC02: not-found message is reused
+describe("US-005-AC02: formatNotFoundMessage (reuse)", () => {
+  it("matches 'Job <id> not found' for cancel context", () => {
+    expect(formatNotFoundMessage("job-99")).toBe("Job job-99 not found");
+  });
+});
+
+// US-005-AC03: already-terminal message format
+describe("US-005-AC03: formatAlreadyTerminalMessage", () => {
+  it("contains the job id", () => {
+    expect(formatAlreadyTerminalMessage("job-99", "completed")).toContain("job-99");
+  });
+
+  it("contains the status", () => {
+    expect(formatAlreadyTerminalMessage("job-99", "completed")).toContain("completed");
+    expect(formatAlreadyTerminalMessage("job-99", "failed")).toContain("failed");
+  });
+
+  it("matches exact format for completed", () => {
+    expect(formatAlreadyTerminalMessage("job-99", "completed")).toBe(
+      "Job job-99 is already completed — nothing to cancel",
+    );
+  });
+
+  it("matches exact format for failed", () => {
+    expect(formatAlreadyTerminalMessage("job-99", "failed")).toBe(
+      "Job job-99 is already failed — nothing to cancel",
+    );
   });
 });

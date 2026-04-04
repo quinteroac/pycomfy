@@ -75,3 +75,20 @@
 - The `getJobStatus()` singleton close-after-use pattern IS safe for one-shot calls (the queue is fully usable until `.close()` is called). Only polling/long-lived consumers need a dedicated Queue instance (as established in US-003).
 - `ParallaxJobStatus` no longer has `createdAt` — use `startedAt` (maps to `job.processedOn`) or `finishedAt` (maps to `job.finishedOn`).
 - `formatJobStatusJson` uses `undefined` for absent/mutually-exclusive fields — these are omitted from `JSON.stringify` output automatically.
+
+## US-005 — parallax jobs cancel \<id\>
+
+**Summary:** Added `parallax jobs cancel <id>` command to the `jobs` group in `src/commands/jobs.ts`. Calls `cancelJob()` from `@parallax/sdk/cancel`, handles not-found (exit 1), already-terminal (exit 0 with status in message), and success cases.
+
+**Key Decisions:**
+- Updated `CancelJobOutcome` in `@parallax/sdk/cancel.ts` to return `"completed" | "failed"` instead of the opaque `"terminal"` — needed so the CLI can print `Job <id> is already <status>` with the actual status value.
+- Updated `parallax_ms/src/index.ts` DELETE handler from `result === "terminal"` to `result !== true` — this is backward-compatible with both old `"terminal"` mock values in ms tests and the new `"completed"/"failed"` return values.
+- `cancelJob` import added as a direct top-level import in `jobs.ts` (consistent with `listJobs` and `getJobStatus` pattern; not lazy-imported).
+- Pure helpers `formatCancelledMessage` and `formatAlreadyTerminalMessage` are exported for testability, following the established CLI testing pattern.
+
+**Pitfalls Encountered:**
+- `parallax_ms/tests/cancel_job.test.ts` was already failing before this story due to a missing `getQueueStats` export in `@parallax/sdk/index.ts` — pre-existing issue, not introduced by this story.
+
+**Useful Context for Future Agents:**
+- `CancelJobOutcome` is now `true | null | "completed" | "failed"` (no `"terminal"` anymore). Any consumer that checks `=== "terminal"` needs updating; the ms handler was updated to use `!== true`.
+- The CLI cancel command correctly exits with code 1 for not-found and code 0 for already-terminal (per AC02/AC03). The `process.exit(1)` is only called in the not-found path.

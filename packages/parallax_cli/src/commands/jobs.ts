@@ -3,6 +3,7 @@
 import { Command } from "commander";
 import { listJobs } from "@parallax/sdk/list";
 import { getJobStatus } from "@parallax/sdk/status";
+import { cancelJob } from "@parallax/sdk/cancel";
 import type { JobSummary, JobStatusValue } from "@parallax/sdk/list";
 import type { ParallaxJobData, ParallaxJobResult } from "@parallax/sdk/jobs";
 import type { ParallaxJobStatus } from "@parallax/sdk/status";
@@ -254,6 +255,31 @@ async function statusJobAction(id: string, opts: { json?: boolean }): Promise<vo
   }
 }
 
+export function formatCancelledMessage(id: string): string {
+  return `✔ Job ${id} cancelled`;
+}
+
+export function formatAlreadyTerminalMessage(id: string, status: string): string {
+  return `Job ${id} is already ${status} — nothing to cancel`;
+}
+
+async function cancelJobAction(id: string): Promise<void> {
+  const outcome = await cancelJob(id);
+
+  if (outcome === null) {
+    process.stdout.write(formatNotFoundMessage(id) + "\n");
+    process.exit(1);
+    return;
+  }
+
+  if (outcome === "completed" || outcome === "failed") {
+    console.log(formatAlreadyTerminalMessage(id, outcome));
+    return;
+  }
+
+  console.log(formatCancelledMessage(id));
+}
+
 export function registerJobs(program: Command): void {
   const jobs = program
     .command("jobs")
@@ -272,6 +298,13 @@ export function registerJobs(program: Command): void {
     .description("Watch a job until it finishes")
     .action(async (id: string) => {
       await watchJobAction(id);
+    });
+
+  jobs
+    .command("cancel <id>")
+    .description("Cancel a running or waiting job")
+    .action(async (id: string) => {
+      await cancelJobAction(id);
     });
 
   jobs

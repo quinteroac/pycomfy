@@ -141,7 +141,7 @@ export const app = new Elysia()
       set.status = 404;
       return { error: "Job not found" };
     }
-    if (result === "terminal") {
+    if (result !== true) {
       set.status = 409;
       return { error: "Job already completed" };
     }

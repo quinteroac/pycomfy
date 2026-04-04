@@ -1,7 +1,7 @@
 import { getQueue } from "./queue";
 
-/** `null` = job not found; `"terminal"` = already completed/failed; `true` = cancelled */
-export type CancelJobOutcome = true | null | "terminal";
+/** `null` = job not found; `"completed"` or `"failed"` = already in terminal state; `true` = cancelled */
+export type CancelJobOutcome = true | null | "completed" | "failed";
 
 export async function cancelJob(id: string): Promise<CancelJobOutcome> {
   const queue = getQueue();
@@ -16,7 +16,7 @@ export async function cancelJob(id: string): Promise<CancelJobOutcome> {
 
   if (state === "completed" || state === "failed") {
     await queue.close();
-    return "terminal";
+    return state;
   }
 
   await queue.removeAsync(id);
