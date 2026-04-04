@@ -8,8 +8,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
     "@parallax/sdk": "workspace:*",
-    "@modelcontextprotocol/sdk": "^1.0.0"
+    "zod": "3"
   },
   "devDependencies": {
     "typescript": "^5.0.0",
