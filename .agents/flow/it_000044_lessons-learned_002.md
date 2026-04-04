@@ -101,3 +101,21 @@
 - The `CancelJobOutcome` type (`true | null | "terminal"`) is exported from `cancel.ts` and re-exported via the SDK index.
 - Functional test pattern: mock `cancelJob` with a function that returns `true` for active/waiting IDs, `"terminal"` for done/failed IDs, and `null` for unknown IDs.
 - The `queue.close()` call is required after every queue operation — always include it in all branches (early returns and happy path).
+
+## US-006 — Health endpoint enrichment
+
+**Summary:** Enriched `GET /health` to return `{ status: "ok", queue: { waiting, active, completed, failed } }` by adding a `getQueueStats()` function to the SDK (`packages/parallax_sdk/src/health.ts`) and updating the route handler in `parallax_ms/src/index.ts`.
+
+**Key Decisions:**
+- **Dedicated `getQueueStats()` in SDK**: Rather than reusing `listJobs()` (which fetches all jobs + counts), a lightweight `getQueueStats()` was created that only calls `queue.getJobCountsAsync()`. This avoids loading all job objects just for a health check.
+- **`health.ts` module in SDK**: Consistent with the pattern of one file per concern (submit, status, list, cancel, health). Exported via the SDK index as `export * from "./health"`.
+- **`async` handler for `/health`**: The route handler became `async` since `getQueueStats()` is async — straightforward Elysia pattern.
+- **`QueueStats` type exported**: `QueueStats` interface mirrors the `counts` field in `JobListResult` — intentionally kept separate to avoid coupling the health API to the list API's types.
+
+**Pitfalls Encountered:**
+- None specific to this story. The implementation was straightforward once the pattern from previous SDK modules was clear.
+
+**Useful Context for Future Agents:**
+- `getQueueStats()` is now exported from `@parallax/sdk` — it calls `queue.getJobCountsAsync()` and closes the queue. Use it anywhere queue statistics are needed (e.g., metrics endpoints, admin dashboards).
+- The `parallax_ms` typecheck still reports 102 pre-existing Elysia 1.4.x errors from its own `.d.ts` files — these are unrelated to our changes and documented across all previous US lessons learned.
+- Test pattern: mock `getQueueStats` with `mock.module("@parallax/sdk", ...)` at the top of the test file (Bun hoists before static imports). Include it alongside other mocked SDK exports (`submitJob`, `getJobStatus`, `listJobs`, `cancelJob`).

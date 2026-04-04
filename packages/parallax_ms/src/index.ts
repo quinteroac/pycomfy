@@ -1,6 +1,6 @@
 import { Elysia, t } from "elysia";
 import { Stream } from "@elysiajs/stream";
-import { submitJob, getJobStatus, listJobs, cancelJob } from "@parallax/sdk";
+import { submitJob, getJobStatus, listJobs, cancelJob, getQueueStats } from "@parallax/sdk";
 import type { JobStatusValue } from "@parallax/sdk";
 import type { ParallaxJobData } from "@parallax/sdk";
 
@@ -47,7 +47,10 @@ function getUvPath(): string {
 }
 
 export const app = new Elysia()
-  .get("/health", () => ({ status: "ok" }))
+  .get("/health", async () => {
+    const queue = await getQueueStats();
+    return { status: "ok", queue };
+  })
   .onError(({ code, error, set }) => {
     if (code === "VALIDATION") {
       set.status = 400;
