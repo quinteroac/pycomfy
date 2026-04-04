@@ -20,6 +20,7 @@ export function registerUpscale(program: Command): void {
     .description("Upscale an image")
     .requiredOption("--model <name>", `Model to use (choices: ${getModels("upscale", "image").join(", ")})`)
     .requiredOption("--prompt <text>", "Text prompt")
+    .requiredOption("--input <path>", "Path to the input image file to upscale")
     .option("--checkpoint <file>", "Base checkpoint filename (overrides PYCOMFY_CHECKPOINT)")
     .option("--esrgan-checkpoint <file>", "ESRGAN checkpoint filename (required for esrgan; overrides PYCOMFY_ESRGAN_CHECKPOINT)")
     .option("--latent-upscale-checkpoint <file>", "Latent upscale checkpoint filename (required for latent_upscale; overrides PYCOMFY_LATENT_UPSCALE_CHECKPOINT)")
@@ -67,6 +68,7 @@ export function registerUpscale(program: Command): void {
       const upscaleOpts: UpscaleImageOpts = {
         model:                   opts.model,
         prompt:                  opts.prompt,
+        input:                   opts.input,
         negativePrompt:          opts.negativePrompt,
         checkpoint,
         esrganCheckpoint:        opts.esrganCheckpoint,

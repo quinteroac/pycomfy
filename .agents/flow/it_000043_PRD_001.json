@@ -1,0 +1,85 @@
+{
+  "goals": [
+    "Provide an interactive `parallax mcp install` command in the CLI.",
+    "Allow users to select which AI clients (Claude, Gemini, GitHub Copilot, Codex) they want to install the MCP server to.",
+    "Automatically update the respective configuration files for the chosen clients."
+  ],
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Run Interactive MCP Install Command",
+      "description": "As an end user, I want to execute `parallax mcp install` so that I can interactively configure my AI clients to use the MCP server.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-001-AC01",
+          "text": "Executing `parallax mcp install` starts an interactive prompt using `@clack/prompts`."
+        },
+        {
+          "id": "US-001-AC02",
+          "text": "The prompt displays a multi-select list of supported clients: Claude, Gemini, GitHub Copilot, Codex."
+        },
+        {
+          "id": "US-001-AC03",
+          "text": "The user can select one or more clients from the list."
+        },
+        {
+          "id": "US-001-AC04",
+          "text": "Typecheck / lint passes."
+        },
+        {
+          "id": "US-001-AC05",
+          "text": "**[UI stories only]** Visually verified in terminal."
+        }
+      ]
+    },
+    {
+      "id": "US-002",
+      "title": "Apply MCP Configuration to Selected Clients",
+      "description": "As an end user, I want the CLI to automatically update the configuration files of the clients I selected so that I don't have to manually edit their config files.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-002-AC01",
+          "text": "The CLI identifies the correct configuration file path for the selected clients based on the host OS (Linux, macOS, Windows)."
+        },
+        {
+          "id": "US-002-AC02",
+          "text": "For Claude Desktop, the `claude_desktop_config.json` is updated with the parallax MCP server details."
+        },
+        {
+          "id": "US-002-AC03",
+          "text": "For Gemini, the appropriate configuration file is updated with the parallax MCP server details."
+        },
+        {
+          "id": "US-002-AC04",
+          "text": "For GitHub Copilot, the appropriate configuration file is updated with the parallax MCP server details."
+        },
+        {
+          "id": "US-002-AC05",
+          "text": "For Codex, the appropriate configuration file is updated with the parallax MCP server details."
+        },
+        {
+          "id": "US-002-AC06",
+          "text": "A success message is displayed indicating which clients were successfully configured."
+        },
+        {
+          "id": "US-002-AC07",
+          "text": "Typecheck / lint passes."
+        }
+      ]
+    }
+  ],
+  "functionalRequirements": [
+    {
+      "id": "FR-1",
+      "description": "The CLI must use the existing `@clack/prompts` library for interactive elements."
+    },
+    {
+      "id": "FR-2",
+      "description": "The tool must append or update the MCP server configuration into the client's configuration files (valid JSON or required format) without overwriting existing settings."
+    },
+    {
+      "id": "FR-3",
+      "description": "The CLI command must be implemented in the `@parallax/cli` package."
+    }
+  ]
+}

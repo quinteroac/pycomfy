@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [000043] - 2026-04-04
+
+### Added
+- **PRD 001 — MCP Server Installation CLI Command:** Provide an interactive `parallax mcp install` command in the CLI.
+- **PRD 001 — MCP Server Installation CLI Command:** Allow users to select which AI clients (Claude, Gemini, GitHub Copilot, Codex) they want to install the MCP server to.
+- **PRD 001 — MCP Server Installation CLI Command:** Automatically update the respective configuration files for the chosen clients.
+- **PRD 002 — MCP Server — Parallax CLI Tool Bindings:** Expose all existing `parallax` CLI commands as MCP tools inside `@parallax/mcp`.
+- **PRD 002 — MCP Server — Parallax CLI Tool Bindings:** Each tool invokes the `parallax` CLI binary as a subprocess via `Bun.spawn`, forwarding arguments built from the tool's input schema.
+- **PRD 002 — MCP Server — Parallax CLI Tool Bindings:** Return the output file path (and any relevant metadata) to the calling AI client upon success.
+- **PRD 002 — MCP Server — Parallax CLI Tool Bindings:** The MCP server is startable via `bun run start` in `packages/parallax_mcp/` and registerable in any MCP-compatible AI client config.
+
 ## [000042] - 2026-04-04
 
 ### Added

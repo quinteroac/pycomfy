@@ -4,6 +4,7 @@ import { registerInstall } from "./commands/install";
 import { registerCreate } from "./commands/create";
 import { registerEdit } from "./commands/edit";
 import { registerUpscale } from "./commands/upscale";
+import { registerMcp } from "./commands/mcp";
 import { formatRequiredFlagError } from "./utils";
 
 const program = new Command();
@@ -17,5 +18,6 @@ registerInstall(program);
 registerCreate(program);
 registerEdit(program);
 registerUpscale(program);
+registerMcp(program);
 if (process.argv.length <= 2) program.help();
 program.parse();
