@@ -1,0 +1,193 @@
+{
+  "goals": [
+    "Add `--async` flag to `create image`, `create video`, `create audio`, `edit image`, and `upscale image` commands.",
+    "Add `parallax jobs` subcommand with `list`, `watch`, `status`, `cancel`, and `open` sub-commands.",
+    "Show a real-time progress bar in `parallax jobs watch` using the existing `@clack/prompts` dependency."
+  ],
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "--async flag on generation commands",
+      "description": "As a developer, I want to append `--async` to any generation command so that the CLI returns a job ID immediately and I can continue working without waiting for inference to finish.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-001-AC01",
+          "text": "The following commands accept an `--async` flag: `parallax create image`, `parallax create video`, `parallax create audio`, `parallax edit image`, `parallax upscale image`."
+        },
+        {
+          "id": "US-001-AC02",
+          "text": "When `--async` is provided, the command calls `submitJob()` from `@parallax/sdk/submit` instead of `spawnPipeline()`."
+        },
+        {
+          "id": "US-001-AC03",
+          "text": "The command prints exactly: `Job <jobId> queued\\n  → parallax jobs watch <jobId>` and exits with code 0."
+        },
+        {
+          "id": "US-001-AC04",
+          "text": "When `--async` is NOT provided, behavior is identical to current (calls `spawnPipeline()`)."
+        },
+        {
+          "id": "US-001-AC05",
+          "text": "`bun typecheck` passes."
+        },
+        {
+          "id": "US-001-AC06",
+          "text": "Manually verified: `parallax create video --model wan22 --prompt \"a sunset\" --async` returns within 1 second."
+        }
+      ]
+    },
+    {
+      "id": "US-002",
+      "title": "parallax jobs list",
+      "description": "As a developer, I want to run `parallax jobs list` and see a table of recent jobs so that I can see what is running, queued, and done.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-002-AC01",
+          "text": "`parallax jobs list` prints a table with columns: `ID`, `Status`, `Action`, `Model`, `Progress`, `Started`, `Duration`."
+        },
+        {
+          "id": "US-002-AC02",
+          "text": "Status is color-coded: `waiting` = dim, `active` = cyan, `completed` = green, `failed` = red (using `@clack/prompts` or `kleur`)."
+        },
+        {
+          "id": "US-002-AC03",
+          "text": "Shows at most 20 most-recent jobs, newest first."
+        },
+        {
+          "id": "US-002-AC04",
+          "text": "When no jobs exist, prints: `No jobs found. Run a command with --async to submit one.`"
+        },
+        {
+          "id": "US-002-AC05",
+          "text": "`bun typecheck` passes."
+        },
+        {
+          "id": "US-002-AC06",
+          "text": "Visually verified in terminal."
+        }
+      ]
+    },
+    {
+      "id": "US-003",
+      "title": "parallax jobs watch \\<id\\>",
+      "description": "As a developer, I want to run `parallax jobs watch <id>` and see a live progress bar until the job finishes so that I can monitor a previously submitted job.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-003-AC01",
+          "text": "`parallax jobs watch <id>` polls `getQueue().getJob(id)` every 500ms."
+        },
+        {
+          "id": "US-003-AC02",
+          "text": "Displays a spinner with the current step and percentage (e.g. `sampling… 45%`)."
+        },
+        {
+          "id": "US-003-AC03",
+          "text": "When the job completes, stops the spinner and prints: `✔ Done: <outputPath>`."
+        },
+        {
+          "id": "US-003-AC04",
+          "text": "When the job fails, stops the spinner and prints: `✖ Failed: <failedReason>` and exits with code 1."
+        },
+        {
+          "id": "US-003-AC05",
+          "text": "When the job ID does not exist, prints: `Job <id> not found` and exits with code 1."
+        },
+        {
+          "id": "US-003-AC06",
+          "text": "`bun typecheck` passes."
+        },
+        {
+          "id": "US-003-AC07",
+          "text": "Visually verified: spinner updates, success/failure message renders correctly."
+        }
+      ]
+    },
+    {
+      "id": "US-004",
+      "title": "parallax jobs status \\<id\\>",
+      "description": "As a developer or script, I want to run `parallax jobs status <id>` and get a one-shot status print so that I can check a job without keeping a watch loop open.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-004-AC01",
+          "text": "`parallax jobs status <id>` prints a single structured block: `id`, `status`, `progress`, `model`, `action`, `output` (or `error`), `startedAt`, `finishedAt`."
+        },
+        {
+          "id": "US-004-AC02",
+          "text": "When `--json` flag is provided, output is valid JSON (one object, no extra text)."
+        },
+        {
+          "id": "US-004-AC03",
+          "text": "Returns exit code 0 if completed, 1 if failed, 0 otherwise."
+        },
+        {
+          "id": "US-004-AC04",
+          "text": "`bun typecheck` passes."
+        }
+      ]
+    },
+    {
+      "id": "US-005",
+      "title": "parallax jobs cancel \\<id\\>",
+      "description": "As a developer, I want to run `parallax jobs cancel <id>` to stop a running job so that I can free GPU resources if inference is no longer needed.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-005-AC01",
+          "text": "`parallax jobs cancel <id>` calls `getQueue().cancel(jobId)` and prints: `✔ Job <id> cancelled`."
+        },
+        {
+          "id": "US-005-AC02",
+          "text": "When the job does not exist, prints: `Job <id> not found` and exits with code 1."
+        },
+        {
+          "id": "US-005-AC03",
+          "text": "When the job is already completed or failed, prints: `Job <id> is already <status> — nothing to cancel` and exits with code 0."
+        },
+        {
+          "id": "US-005-AC04",
+          "text": "`bun typecheck` passes."
+        }
+      ]
+    },
+    {
+      "id": "US-006",
+      "title": "parallax jobs open \\<id\\>",
+      "description": "As a developer, I want to run `parallax jobs open <id>` to open the output file in the system default application so that I can preview the result without navigating to the output directory.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-006-AC01",
+          "text": "`parallax jobs open <id>` reads the job result's `outputPath` and calls `Bun.spawn([\"xdg-open\", outputPath])` on Linux or `[\"open\", outputPath]` on macOS."
+        },
+        {
+          "id": "US-006-AC02",
+          "text": "When the job is not yet completed, prints: `Job <id> is not completed yet (status: <status>)` and exits with code 1."
+        },
+        {
+          "id": "US-006-AC03",
+          "text": "When the job does not exist, prints: `Job <id> not found` and exits with code 1."
+        },
+        {
+          "id": "US-006-AC04",
+          "text": "`bun typecheck` passes."
+        }
+      ]
+    }
+  ],
+  "functionalRequirements": [
+    {
+      "id": "FR-1",
+      "description": "All `parallax jobs` sub-commands must be implemented in `packages/parallax_cli/src/commands/jobs.ts` and registered in `src/index.ts` under a `jobs` parent command."
+    },
+    {
+      "id": "FR-2",
+      "description": "`getQueue()` from `@parallax/sdk` must be called and `.close()` must be called before process exit to avoid hanging SQLite handles."
+    },
+    {
+      "id": "FR-3",
+      "description": "The `--async` flag must be a Commander `Option` so it appears in `--help` output."
+    },
+    {
+      "id": "FR-4",
+      "description": "`parallax jobs list` and `parallax jobs watch` must use the spinner/log API from `@clack/prompts` — not `console.log`."
+    }
+  ]
+}

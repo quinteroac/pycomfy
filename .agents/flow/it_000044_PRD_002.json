@@ -1,0 +1,198 @@
+{
+  "goals": [
+    "Expose HTTP endpoints for submitting all five inference operations (create image/video/audio, edit image, upscale image).",
+    "Provide a job status endpoint for polling.",
+    "Provide an SSE endpoint per job for real-time progress streaming without polling.",
+    "Provide job list and cancel endpoints for job management."
+  ],
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Submit inference jobs via REST",
+      "description": "As an external consumer (web UI, script, webhook), I want to POST a job request and receive a job ID immediately so that I can track a long-running inference without keeping the HTTP connection open.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-001-AC01",
+          "text": "`POST /jobs/create/image` accepts a JSON body matching `GenerateImageRequest` from `@parallax/sdk` plus a required `model: string` field."
+        },
+        {
+          "id": "US-001-AC02",
+          "text": "`POST /jobs/create/video` accepts a JSON body matching `GenerateVideoRequest` plus `model: string` and optional `input: string` (image path for i2v)."
+        },
+        {
+          "id": "US-001-AC03",
+          "text": "`POST /jobs/create/audio` accepts a JSON body matching `GenerateAudioRequest` plus `model: string`."
+        },
+        {
+          "id": "US-001-AC04",
+          "text": "`POST /jobs/edit/image` accepts a JSON body matching `EditImageRequest` plus `model: string`."
+        },
+        {
+          "id": "US-001-AC05",
+          "text": "`POST /jobs/upscale/image` accepts `{ image_path: string, model: string, output?: string }`."
+        },
+        {
+          "id": "US-001-AC06",
+          "text": "All five endpoints call `submitJob()` from `@parallax/sdk/submit` and return `{ job_id: string, status: \"queued\" }` within 200ms."
+        },
+        {
+          "id": "US-001-AC07",
+          "text": "Returns `400` with a descriptive error body when required fields are missing."
+        },
+        {
+          "id": "US-001-AC08",
+          "text": "Visually verified: `curl -X POST http://localhost:3000/jobs/create/image -d '{\"model\":\"sdxl\",\"prompt\":\"a cat\"}' -H 'Content-Type: application/json'` returns `{ job_id, status: \"queued\" }`."
+        }
+      ]
+    },
+    {
+      "id": "US-002",
+      "title": "Get job status by ID",
+      "description": "As a consumer, I want to `GET /jobs/:id` and receive the current state of a job so that I can poll status without an open SSE connection.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-002-AC01",
+          "text": "`GET /jobs/:id` returns a JSON object with: `id`, `status` (`waiting|active|completed|failed`), `progress` (0–100 number), `output` (string or null), `error` (string or null), `createdAt` (epoch ms), `startedAt` (epoch ms or null), `finishedAt` (epoch ms or null)."
+        },
+        {
+          "id": "US-002-AC02",
+          "text": "Returns `404` with `{ error: \"Job not found\" }` when the ID does not exist."
+        },
+        {
+          "id": "US-002-AC03",
+          "text": "`bun typecheck` passes."
+        }
+      ]
+    },
+    {
+      "id": "US-003",
+      "title": "Stream job progress via SSE",
+      "description": "As a consumer, I want to `GET /jobs/:id/stream` and receive Server-Sent Events until the job completes or fails so that I get real-time progress without polling.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-003-AC01",
+          "text": "`GET /jobs/:id/stream` returns a `text/event-stream` response."
+        },
+        {
+          "id": "US-003-AC02",
+          "text": "While the job is active or waiting, emits `event: progress\\ndata: {\"pct\":N,\"step\":\"...\"}` every 500ms."
+        },
+        {
+          "id": "US-003-AC03",
+          "text": "When the job completes, emits `event: completed\\ndata: {\"output\":\"<path>\"}` then closes the stream."
+        },
+        {
+          "id": "US-003-AC04",
+          "text": "When the job fails, emits `event: failed\\ndata: {\"error\":\"<reason>\"}` then closes the stream."
+        },
+        {
+          "id": "US-003-AC05",
+          "text": "Returns `404` before opening the stream if the job ID does not exist."
+        },
+        {
+          "id": "US-003-AC06",
+          "text": "`@elysiajs/stream` is added as a dependency."
+        },
+        {
+          "id": "US-003-AC07",
+          "text": "Visually verified in browser: EventSource connects, receives progress events, stream closes on completion."
+        }
+      ]
+    },
+    {
+      "id": "US-004",
+      "title": "List jobs",
+      "description": "As a consumer, I want to `GET /jobs` and see all recent jobs with their status so that I can inspect the queue state.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-004-AC01",
+          "text": "`GET /jobs` returns `{ jobs: JobSummary[], counts: { waiting, active, completed, failed } }`."
+        },
+        {
+          "id": "US-004-AC02",
+          "text": "`JobSummary` includes: `id`, `status`, `progress`, `model`, `action`, `media`, `createdAt`."
+        },
+        {
+          "id": "US-004-AC03",
+          "text": "Defaults to returning at most 50 most-recent jobs."
+        },
+        {
+          "id": "US-004-AC04",
+          "text": "Supports optional query param `?status=active|completed|failed|waiting` to filter."
+        },
+        {
+          "id": "US-004-AC05",
+          "text": "`bun typecheck` passes."
+        }
+      ]
+    },
+    {
+      "id": "US-005",
+      "title": "Cancel a job",
+      "description": "As a consumer, I want to `DELETE /jobs/:id` to cancel a running or waiting job so that I can abort inference that is no longer needed.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-005-AC01",
+          "text": "`DELETE /jobs/:id` calls `getQueue().cancel(jobId)` and returns `{ cancelled: true }`."
+        },
+        {
+          "id": "US-005-AC02",
+          "text": "Returns `404` if the job ID does not exist."
+        },
+        {
+          "id": "US-005-AC03",
+          "text": "Returns `409` with `{ error: \"Job already completed\" }` if the job is already in a terminal state."
+        },
+        {
+          "id": "US-005-AC04",
+          "text": "`bun typecheck` passes."
+        }
+      ]
+    },
+    {
+      "id": "US-006",
+      "title": "Health endpoint enrichment",
+      "description": "As an operator, I want `GET /health` to include queue statistics so that I can verify the queue is operational.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-006-AC01",
+          "text": "`GET /health` returns `{ status: \"ok\", queue: { waiting, active, completed, failed } }`."
+        },
+        {
+          "id": "US-006-AC02",
+          "text": "Does not break existing behavior (still returns HTTP 200)."
+        },
+        {
+          "id": "US-006-AC03",
+          "text": "`bun typecheck` passes."
+        }
+      ]
+    }
+  ],
+  "functionalRequirements": [
+    {
+      "id": "FR-1",
+      "description": "All route handlers must use Elysia's native TypeScript input validation (no manual `if (!body.field)` checks)."
+    },
+    {
+      "id": "FR-2",
+      "description": "The server listens on port `3000` by default, overridable via `PORT` environment variable."
+    },
+    {
+      "id": "FR-3",
+      "description": "CORS must be enabled for all origins in development (`@elysiajs/cors`)."
+    },
+    {
+      "id": "FR-4",
+      "description": "Unhandled errors in route handlers must return `500` with `{ error: \"Internal server error\" }` — not crash the server."
+    },
+    {
+      "id": "FR-5",
+      "description": "`parallax_ms/package.json` must declare `@parallax/sdk` as `workspace:*` dependency if not already present."
+    },
+    {
+      "id": "FR-6",
+      "description": "All job submission endpoints must resolve the correct Python script path using the same `getScript()` / model registry logic already in `parallax_cli/src/models/registry.ts` — do not hardcode script paths."
+    }
+  ]
+}

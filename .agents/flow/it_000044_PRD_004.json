@@ -1,0 +1,144 @@
+{
+  "goals": [
+    "Refactor all five inference tools to return a job ID within 200ms instead of blocking until completion.",
+    "Add `get_job_status` tool for single-shot status checks.",
+    "Add `wait_for_job` tool that polls internally and resolves only when the job reaches a terminal state (with a configurable timeout).",
+    "Remove the subprocess-spawning pattern from `parallax_mcp` — all execution goes through the shared job layer."
+  ],
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Non-blocking inference tools",
+      "description": "As an AI agent using the MCP server, I want `create_image`, `create_video`, `create_audio`, `edit_image`, and `upscale_image` to return a job ID immediately so that I can avoid tool timeouts on long-running operations and continue with other reasoning while inference runs.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-001-AC01",
+          "text": "All five tools call `submitJob()` from `@parallax/sdk/submit` instead of spawning `parallax_cli` as a subprocess."
+        },
+        {
+          "id": "US-001-AC02",
+          "text": "Each tool returns within 200ms with a text response of the form: `job_id: <id>\\nstatus: queued\\nmodel: <model>`."
+        },
+        {
+          "id": "US-001-AC03",
+          "text": "The tool descriptions in `registerTool` are updated to mention that they return a job ID, not the output path directly."
+        },
+        {
+          "id": "US-001-AC04",
+          "text": "The `Bun.spawn` subprocess pattern is fully removed from `parallax_mcp/src/index.ts`."
+        },
+        {
+          "id": "US-001-AC05",
+          "text": "`bun typecheck` passes on `parallax_mcp`."
+        },
+        {
+          "id": "US-001-AC06",
+          "text": "Manually verified: calling `create_video` via Claude returns a job ID in under 1 second."
+        }
+      ]
+    },
+    {
+      "id": "US-002",
+      "title": "get_job_status tool",
+      "description": "As an AI agent, I want to call `get_job_status` with a job ID and receive the current state, progress percentage, and output path (when done) so that I can check whether inference has finished before taking further actions.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-002-AC01",
+          "text": "`get_job_status` is registered with input schema `{ job_id: z.string() }`."
+        },
+        {
+          "id": "US-002-AC02",
+          "text": "Returns a JSON-formatted text response with fields: `id`, `status`, `progress`, `output` (null or string), `error` (null or string), `model`, `action`, `media`."
+        },
+        {
+          "id": "US-002-AC03",
+          "text": "When `job_id` does not exist, returns `isError: true` with message `Job <id> not found`."
+        },
+        {
+          "id": "US-002-AC04",
+          "text": "`bun typecheck` passes."
+        }
+      ]
+    },
+    {
+      "id": "US-003",
+      "title": "wait_for_job tool",
+      "description": "As an AI agent, I want to call `wait_for_job` with a job ID and optional timeout so that I can block until inference finishes and get the output path in one tool call — useful when the agent wants a synchronous-style result but without causing MCP transport timeouts.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-003-AC01",
+          "text": "`wait_for_job` is registered with input schema `{ job_id: z.string(), timeout_seconds: z.number().optional().default(600) }`."
+        },
+        {
+          "id": "US-003-AC02",
+          "text": "Polls `getQueue().getJob(id)` every 2 seconds until the job reaches `completed` or `failed`, or the timeout is exceeded."
+        },
+        {
+          "id": "US-003-AC03",
+          "text": "On `completed`: returns `{ status: \"completed\", output: \"<path>\", duration_seconds: N }`."
+        },
+        {
+          "id": "US-003-AC04",
+          "text": "On `failed`: returns `isError: true` with `{ status: \"failed\", error: \"<reason>\" }`."
+        },
+        {
+          "id": "US-003-AC05",
+          "text": "On timeout: returns `isError: true` with `{ status: \"timeout\", job_id: \"<id>\", message: \"Job did not complete within <N> seconds. Use get_job_status to check later.\" }`."
+        },
+        {
+          "id": "US-003-AC06",
+          "text": "Closes the queue connection before returning."
+        },
+        {
+          "id": "US-003-AC07",
+          "text": "`bun typecheck` passes."
+        }
+      ]
+    },
+    {
+      "id": "US-004",
+      "title": "Update tool descriptions for agent discoverability",
+      "description": "As an AI agent discovering MCP tools, I want the tool descriptions to reflect the async pattern so that I know to call `get_job_status` or `wait_for_job` after submitting a job.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-004-AC01",
+          "text": "Each inference tool description ends with: `Returns a job_id. Use get_job_status to poll or wait_for_job to block until done.`"
+        },
+        {
+          "id": "US-004-AC02",
+          "text": "`get_job_status` description reads: `Check the current status and progress of a submitted inference job. Returns status, progress percentage (0-100), and output path when completed.`"
+        },
+        {
+          "id": "US-004-AC03",
+          "text": "`wait_for_job` description reads: `Block until a submitted inference job completes. Polls internally every 2 seconds. Default timeout: 600 seconds. Returns output path on success.`"
+        },
+        {
+          "id": "US-004-AC04",
+          "text": "`bun typecheck` passes."
+        }
+      ]
+    }
+  ],
+  "functionalRequirements": [
+    {
+      "id": "FR-1",
+      "description": "`@parallax/sdk` must be added as a `workspace:*` dependency in `parallax_mcp/package.json`."
+    },
+    {
+      "id": "FR-2",
+      "description": "`getQueue().close()` must be called after every tool handler that calls `getQueue()` — do not leave SQLite handles open across tool calls."
+    },
+    {
+      "id": "FR-3",
+      "description": "The `CLI_DIR` constant and all `Bun.spawn([\"bun\", \"run\", \"src/index.ts\", ...args])` calls must be removed."
+    },
+    {
+      "id": "FR-4",
+      "description": "All model validation (does the model exist for the given action/media?) must use `validateModel()` from `@parallax/cli/models/registry` or equivalent — do not silently submit jobs with invalid models."
+    },
+    {
+      "id": "FR-5",
+      "description": "Script path resolution for `ParallaxJobData.script` must use `getScript()` from the model registry — same logic as the CLI."
+    }
+  ]
+}
