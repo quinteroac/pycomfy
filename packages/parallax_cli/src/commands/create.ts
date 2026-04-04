@@ -11,10 +11,7 @@ import { getModels, getScript, getModelConfig, getModelDefaults, type ModelDefau
 import { buildArgs as buildImageArgs, type ImageOpts } from "../models/image";
 import { buildArgs as buildVideoArgs, type VideoOpts } from "../models/video";
 import { buildArgs as buildAudioArgs, type AudioOpts } from "../models/audio";
-
-function modelsFooter(action: string, media: string): string {
-  return `\nAvailable models: ${getModels(action, media).join(", ")}`;
-}
+import { modelsFooter, validateModel, notImplemented, resolveParam } from "../utils";
 
 // Columns per media type: [key in ModelDefaults, display label]
 const DEFAULTS_COLUMNS: Record<string, Array<[keyof ModelDefaults, string]>> = {
@@ -42,21 +39,6 @@ export function buildDefaultsTable(media: string): string {
   const dataRows = rows.map(row => "  " + row.map((cell, i) => pad(cell, widths[i])).join("  "));
 
   return "\nDefaults per model:\n\n" + headerRow + "\n" + sepRow + "\n" + dataRows.join("\n");
-}
-
-function validateModel(action: string, media: string, model: string): void {
-  const known = getModels(action, media);
-  if (!known.includes(model)) {
-    console.error(
-      `Error: unknown model "${model}" for ${action} ${media}. Known models: ${known.join(", ")}`
-    );
-    process.exit(1);
-  }
-}
-
-function notImplemented(action: string, media: string, model: string): never {
-  console.log(`[parallax] ${action} ${media} --model ${model} — not yet implemented (coming soon)`);
-  process.exit(0);
 }
 
 export function registerCreate(program: Command): void {
@@ -90,10 +72,10 @@ export function registerCreate(program: Command): void {
         model:          opts.model,
         prompt:         opts.prompt,
         negativePrompt: opts.negativePrompt,
-        width:          opts.width  ?? (defaults?.width  != null ? String(defaults.width)  : "1024"),
-        height:         opts.height ?? (defaults?.height != null ? String(defaults.height) : "1024"),
-        steps:          opts.steps  ?? (defaults?.steps  != null ? String(defaults.steps)  : "20"),
-        cfg:            opts.cfg    ?? (defaults?.cfg    != null ? String(defaults.cfg)    : "7"),
+        width:          resolveParam(opts.width,  defaults?.width,  "width"),
+        height:         resolveParam(opts.height, defaults?.height, "height"),
+        steps:          resolveParam(opts.steps,  defaults?.steps,  "steps"),
+        cfg:            resolveParam(opts.cfg,    defaults?.cfg,    "cfg"),
         seed:           opts.seed,
         output:         opts.output,
       };
@@ -133,11 +115,11 @@ export function registerCreate(program: Command): void {
         model:  opts.model,
         prompt: opts.prompt,
         input:  opts.input,
-        width:  opts.width  ?? (defaults?.width  != null ? String(defaults.width)  : "832"),
-        height: opts.height ?? (defaults?.height != null ? String(defaults.height) : "480"),
-        length: opts.length ?? (defaults?.length != null ? String(defaults.length) : "81"),
-        steps:  opts.steps  ?? (defaults?.steps  != null ? String(defaults.steps)  : "30"),
-        cfg:    opts.cfg    ?? (defaults?.cfg    != null ? String(defaults.cfg)    : "6"),
+        width:  resolveParam(opts.width,  defaults?.width,  "width"),
+        height: resolveParam(opts.height, defaults?.height, "height"),
+        length: resolveParam(opts.length, defaults?.length, "length"),
+        steps:  resolveParam(opts.steps,  defaults?.steps,  "steps"),
+        cfg:    resolveParam(opts.cfg,    defaults?.cfg,    "cfg"),
         seed:   opts.seed,
         output: opts.output,
       };
@@ -153,7 +135,7 @@ export function registerCreate(program: Command): void {
     .option("--length <seconds>", "Duration in seconds")
     .option("--steps <n>", "Number of sampling steps")
     .option("--cfg <value>", "CFG guidance scale")
-    .option("--bpm <n>", "Beats per minute", "120")
+    .option("--bpm <n>", "Beats per minute")
     .option("--lyrics <text>", "Lyrics text (ace_step)", "")
     .option("--seed <n>", "Random seed for reproducibility")
     .option("--output <path>", "Output file path", "output.wav")
@@ -173,10 +155,10 @@ export function registerCreate(program: Command): void {
       const audioOpts: AudioOpts = {
         model:        opts.model,
         prompt:       opts.prompt,
-        length:       opts.length ?? (defaults?.length != null ? String(defaults.length) : "30"),
-        steps:        opts.steps  ?? (defaults?.steps  != null ? String(defaults.steps)  : "60"),
-        cfg:          opts.cfg    ?? (defaults?.cfg    != null ? String(defaults.cfg)    : "2"),
-        bpm:          opts.bpm,
+        length:       resolveParam(opts.length, defaults?.length, "length"),
+        steps:        resolveParam(opts.steps,  defaults?.steps,  "steps"),
+        cfg:          resolveParam(opts.cfg,    defaults?.cfg,    "cfg"),
+        bpm:          resolveParam(opts.bpm,    defaults?.bpm,    "bpm"),
         lyrics:       opts.lyrics,
         seed:         opts.seed,
         output:       opts.output,

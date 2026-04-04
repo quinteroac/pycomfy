@@ -18,11 +18,11 @@ const MODEL_DEFAULTS: Record<string, Record<string, ModelDefaults>> = {
   image: {
     sdxl:    { width: 1024, height: 1024, steps: 25, cfg: 7.5 },
     anima:   { width: 1024, height: 1024, steps: 30, cfg: 4.0 },
-    z_image: { width: 1024, height: 1024, steps: 4 },
+    z_image: { width: 1024, height: 1024, steps: 8, cfg: 7 },     // cfg ignored by buildArgs for z_image
   },
   video: {
     ltx2:  { width: 1280, height: 720,  length: 97, fps: 24, steps: 20, cfg: 4.0 },
-    ltx23: { width: 768,  height: 512,  length: 97, fps: 25,             cfg: 1.0 },
+    ltx23: { width: 768,  height: 512,  length: 97, fps: 25, steps: 20,  cfg: 1.0 }, // steps ignored by buildVideoArgs (omitSteps)
     wan21: { width: 832,  height: 480,  length: 33, fps: 16, steps: 30, cfg: 6.0 },
     wan22: { width: 832,  height: 480,  length: 81,          steps: 4,  cfg: 1.0 },
   },

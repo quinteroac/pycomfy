@@ -76,7 +76,7 @@ def main() -> int:
         default=None,
         help="Number of denoising steps (default=4 with LoRA, 40 without).",
     )
-    parser.add_argument("--cfg", type=float, default=3.0, help="CFG guidance scale.")
+    parser.add_argument("--cfg", type=float, default=None, help="CFG guidance scale (default=1.0 with LoRA, 4.0 without).")
     parser.add_argument("--seed", type=int, default=0, help="Random seed.")
     parser.add_argument(
         "--no-lora",
@@ -152,8 +152,9 @@ def main() -> int:
 
     use_lora = not args.no_lora
     steps = args.steps if args.steps is not None else (4 if use_lora else 40)
+    cfg = args.cfg if args.cfg is not None else (1.0 if use_lora else 4.0)
     print(
-        f"Editing image ({steps} steps, cfg={args.cfg}, "
+        f"Editing image ({steps} steps, cfg={cfg}, "
         f"lora={'on' if use_lora else 'off'}, seed={args.seed}) …"
     )
 
@@ -164,7 +165,7 @@ def main() -> int:
         image3=image3,
         models_dir=models_dir,
         steps=steps,
-        cfg=args.cfg,
+        cfg=cfg,
         use_lora=use_lora,
         seed=args.seed,
     )

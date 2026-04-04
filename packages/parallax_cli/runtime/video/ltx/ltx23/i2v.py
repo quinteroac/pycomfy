@@ -141,6 +141,13 @@ def main() -> int:
         help="Gemma TE LoRA strength (default 1.0).",
     )
     parser.add_argument("--output", default="ltx23_i2v_output.mp4", help="Output video path.")
+    parser.add_argument("--unet-filename", default=None, help="Override UNet filename in checkpoints/.")
+    parser.add_argument("--vae-filename", default=None, help="Override video VAE filename in vae/.")
+    parser.add_argument("--audio-vae-filename", default=None, help="Override audio VAE filename in vae/ (defaults to --vae-filename).")
+    parser.add_argument("--text-encoder-filename", default=None, help="Override text encoder filename in text_encoders/.")
+    parser.add_argument("--distilled-lora-filename", default=None, help="Override distilled LoRA filename in loras/.")
+    parser.add_argument("--te-lora-filename", default=None, help="Override TE LoRA filename in loras/.")
+    parser.add_argument("--upscaler-filename", default=None, help="Override upscaler filename in latent_upscale_models/.")
     args = parser.parse_args()
 
     if not args.models_dir or not Path(args.models_dir).is_dir():
@@ -168,8 +175,17 @@ def main() -> int:
         fps=args.fps,
         cfg=args.cfg,
         seed=args.seed,
-        # i2v currently uses a single guide strength in comfy_diffusion.
-        guide_strength=args.guide_strength_pass2,
+        guide_strength_pass1=args.guide_strength_pass1,
+        guide_strength_pass2=args.guide_strength_pass2,
+        distilled_lora_strength=args.distilled_lora_strength,
+        te_lora_strength=args.te_lora_strength,
+        unet_filename=args.unet_filename,
+        vae_filename=args.vae_filename,
+        audio_vae_filename=args.audio_vae_filename,
+        text_encoder_filename=args.text_encoder_filename,
+        distilled_lora_filename=args.distilled_lora_filename,
+        te_lora_filename=args.te_lora_filename,
+        upscaler_filename=args.upscaler_filename,
     )
 
     frames = result["frames"]

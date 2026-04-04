@@ -7,25 +7,7 @@ import { spawnPipeline } from "../runner";
 import { resolveModelsDir } from "../utils";
 import { getModels, getScript } from "../models/registry";
 import { buildUpscaleImageArgs, type UpscaleImageOpts } from "../models/image";
-
-function modelsFooter(action: string, media: string): string {
-  return `\nAvailable models: ${getModels(action, media).join(", ")}`;
-}
-
-function validateModel(action: string, media: string, model: string): void {
-  const known = getModels(action, media);
-  if (!known.includes(model)) {
-    console.error(
-      `Error: unknown model "${model}" for ${action} ${media}. Known models: ${known.join(", ")}`
-    );
-    process.exit(1);
-  }
-}
-
-function notImplemented(action: string, media: string, model: string): never {
-  console.log(`[parallax] ${action} ${media} --model ${model} — not yet implemented (coming soon)`);
-  process.exit(0);
-}
+import { modelsFooter, validateModel, notImplemented } from "../utils";
 
 export function registerUpscale(program: Command): void {
   const upscale = program

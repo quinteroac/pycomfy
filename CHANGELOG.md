@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [000042] - 2026-04-04
+
+### Added
+- **PRD 001 — Per-Model CLI Defaults:** Per-model defaults in `registry.ts` are the single source of truth for all CLI parameter defaults, derived from the Python `run()` signatures.
+- **PRD 001 — Per-Model CLI Defaults:** When a user invokes `parallax create video --model ltx2` without specifying `--width`, the pipeline receives `1280` (ltx2's default), not `832` (the old global default).
+- **PRD 001 — Per-Model CLI Defaults:** `--help` footer shows a per-model defaults table so users see the correct values for the model they intend to use.
+- **PRD 002 — `edit image` and `upscale image` CLI Commands:** `parallax edit image --model <flux_*|qwen> --prompt "..." --input photo.jpg` reaches the
+- **PRD 002 — `edit image` and `upscale image` CLI Commands:** `parallax upscale image --model <esrgan|latent_upscale> ...` reaches its Python runtime
+- **PRD 002 — `edit image` and `upscale image` CLI Commands:** Both commands follow the exact same pattern as `create.ts`:
+- **PRD 002 — `edit image` and `upscale image` CLI Commands:** TypeScript typecheck passes after all changes.
+
 ## [000041] - 2026-04-04
 
 ### Added

@@ -82,16 +82,22 @@ __all__ = ["manifest", "run"]
 # HuggingFace repositories for LTX-Video 2.3
 # ---------------------------------------------------------------------------
 
-_HF_REPO = "Lightricks/LTX-Video"   # all model files
+_HF_REPO_CKPT = "Lightricks/LTX-2.3-fp8"
+_HF_REPO_LORA = "Lightricks/LTX-2.3"
+_HF_REPO_TE_LORA = "Comfy-Org/ltx-2"
 
 # Relative destination paths — same as ltx23/t2v.py (the model checkpoint is shared).
-_UNET_DEST = Path("diffusion_models") / "ltx-2.3-22b-distilled-fp8.safetensors"
+_UNET_DEST = Path("checkpoints") / "ltx-2.3-22b-dev-fp8.safetensors"
 _TEXT_ENCODER_DEST = Path("text_encoders") / "gemma_3_12B_it_fp4_mixed.safetensors"
+_DISTILLED_LORA_DEST = Path("loras") / "ltx-2.3-22b-distilled-lora-384.safetensors"
+_TE_LORA_DEST = Path("loras") / "gemma-3-12b-it-abliterated_lora_rank64_bf16.safetensors"
+_UPSCALER_DEST = Path("latent_upscale_models") / "ltx-2.3-spatial-upscaler-x2-1.1.safetensors"
 
 _AUDIO_VAE_DEST = _UNET_DEST
 
-# ManualSigmas string from the reference workflow.
-_SIGMAS = "1.0, 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421875, 0.0"
+# ManualSigmas strings from the reference workflow.
+_SIGMAS_PASS1 = "1.0, 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421875, 0.0"
+_SIGMAS_PASS2 = "0.85, 0.7250, 0.4219, 0.0"
 
 
 # ---------------------------------------------------------------------------
@@ -103,8 +109,9 @@ def manifest() -> list[ModelEntry]:
     """Return the list of model files required by the LTX-Video 2.3 I2V pipeline.
 
     The LTX 2.3 dev fp8 checkpoint bundles the UNet, video VAE, and audio VAE
-    in a single file.  Two LoRAs and a spatial upscaler are also required,
-    matching the reference ``video_ltx2_3_i2v.json`` workflow exactly.
+    in a single file.  Two LoRAs (distilled + TE) and a spatial upscaler are
+    also required, matching the reference ``video_ltx2_3_i2v.json`` workflow
+    exactly.
 
     Each entry is an :class:`~comfy_diffusion.downloader.HFModelEntry` that
     resolves to a deterministic relative path under ``models_dir``.  Pass the
@@ -114,14 +121,29 @@ def manifest() -> list[ModelEntry]:
     """
     return [
         HFModelEntry(
-            repo_id=_HF_REPO,
-            filename="ltx-2.3-22b-distilled-fp8.safetensors",
+            repo_id=_HF_REPO_CKPT,
+            filename="ltx-2.3-22b-dev-fp8.safetensors",
             dest=_UNET_DEST,
         ),
         HFModelEntry(
-            repo_id=_HF_REPO,
+            repo_id=_HF_REPO_LORA,
             filename="split_files/text_encoders/gemma_3_12B_it_fp4_mixed.safetensors",
             dest=_TEXT_ENCODER_DEST,
+        ),
+        HFModelEntry(
+            repo_id=_HF_REPO_LORA,
+            filename="ltx-2.3-22b-distilled-lora-384.safetensors",
+            dest=_DISTILLED_LORA_DEST,
+        ),
+        HFModelEntry(
+            repo_id=_HF_REPO_TE_LORA,
+            filename="split_files/loras/gemma-3-12b-it-abliterated_lora_rank64_bf16.safetensors",
+            dest=_TE_LORA_DEST,
+        ),
+        HFModelEntry(
+            repo_id=_HF_REPO_LORA,
+            filename="ltx-2.3-spatial-upscaler-x2-1.1.safetensors",
+            dest=_UPSCALER_DEST,
         ),
     ]
 
@@ -138,16 +160,24 @@ def run(
     fps: int = 25,
     cfg: float = 1.0,
     seed: int = 0,
-    guide_strength: float = 1.0,
+    guide_strength_pass1: float = 0.7,
+    guide_strength_pass2: float = 1.0,
+    distilled_lora_strength: float = 0.5,
+    te_lora_strength: float = 1.0,
     unet_filename: str | None = None,
     vae_filename: str | None = None,
     audio_vae_filename: str | None = None,
     text_encoder_filename: str | None = None,
+    distilled_lora_filename: str | None = None,
+    te_lora_filename: str | None = None,
+    upscaler_filename: str | None = None,
 ) -> dict[str, Any]:
     """Run the LTX-Video 2.3 (22B dev fp8) image-to-video-with-audio pipeline.
 
-    Mirrors the ``video_ltx2_3_i2v`` official workflow.  Single-pass sampling
-    using ``manual_sigmas`` and ``ltxv_add_guide`` for image conditioning.
+    Mirrors the ``video_ltx2_3_i2v`` official workflow.  Two-pass sampling with
+    spatial upscaling: the input image is injected at strength ``guide_strength_pass1``
+    before pass 1 and re-injected at strength ``guide_strength_pass2`` into the
+    upscaled latent before pass 2.
 
     Parameters
     ----------
@@ -175,8 +205,15 @@ def run(
         Classifier-free guidance scale.  Default ``1.0`` (distilled model).
     seed : int, optional
         Random seed for reproducibility.  Default ``0``.
-    guide_strength : float, optional
-        ``ltxv_add_guide`` strength for image conditioning.  Default ``1.0``.
+    guide_strength_pass1 : float, optional
+        ``LTXVImgToVideoInplace`` strength before pass 1.  Default ``0.7``.
+    guide_strength_pass2 : float, optional
+        ``LTXVImgToVideoInplace`` strength on the upscaled latent before pass 2.
+        Default ``1.0``.
+    distilled_lora_strength : float, optional
+        Strength for the distilled LoRA (model-only).  Default ``0.5``.
+    te_lora_strength : float, optional
+        Strength for the Gemma text-encoder LoRA (clip-only).  Default ``1.0``.
     unet_filename : str | None, optional
         Override the default UNet filename.  Default ``None``.
     vae_filename : str | None, optional
@@ -187,6 +224,13 @@ def run(
         ``vae_filename``.  Default ``None``.
     text_encoder_filename : str | None, optional
         Override the default text-encoder filename.  Default ``None``.
+    distilled_lora_filename : str | None, optional
+        Override the distilled LoRA filename in ``loras/``.  Default ``None``.
+    te_lora_filename : str | None, optional
+        Override the TE LoRA filename in ``loras/``.  Default ``None``.
+    upscaler_filename : str | None, optional
+        Override the upscaler filename in ``latent_upscale_models/``.
+        Default ``None``.
 
     Returns
     -------
@@ -198,13 +242,15 @@ def run(
     """
     # Lazy imports — ComfyUI must not be imported at module top level.
     from comfy_diffusion.audio import ltxv_audio_vae_decode, ltxv_concat_av_latent, ltxv_empty_latent_audio, ltxv_separate_av_latent
-    from comfy_diffusion.conditioning import encode_prompt, ltxv_add_guide, ltxv_conditioning
+    from comfy_diffusion.conditioning import encode_prompt, ltxv_conditioning, ltxv_crop_guides
     from comfy_diffusion.image import image_to_tensor, load_image, ltxv_preprocess
-    from comfy_diffusion.latent import ltxv_empty_latent_video
+    from comfy_diffusion.latent import ltxv_empty_latent_video, ltxv_latent_upsample
+    from comfy_diffusion.lora import apply_lora
     from comfy_diffusion.models import ModelManager
     from comfy_diffusion.runtime import check_runtime
     from comfy_diffusion.sampling import cfg_guider, get_sampler, manual_sigmas, random_noise, sample_custom
     from comfy_diffusion.vae import vae_decode_batch_tiled
+    from comfy_diffusion.video import ltxv_img_to_video_inplace
 
     check_result = check_runtime()
     if check_result.get("error"):
@@ -222,15 +268,31 @@ def run(
     )
     vae_path = Path(vae_filename) if vae_filename else unet_path
     audio_vae_path = Path(audio_vae_filename) if audio_vae_filename else vae_path
+    distilled_lora_path = (
+        Path(distilled_lora_filename) if distilled_lora_filename
+        else models_dir / _DISTILLED_LORA_DEST
+    )
+    te_lora_path = (
+        Path(te_lora_filename) if te_lora_filename else models_dir / _TE_LORA_DEST
+    )
+    upscaler_path = (
+        Path(upscaler_filename) if upscaler_filename else models_dir / _UPSCALER_DEST
+    )
 
     # Load models.
-    # The LTX-Video 2.3 distilled checkpoint bundles UNet + VAE, so load it
-    # through the checkpoint path when no explicit VAE override is provided.
+    # The LTX-Video 2.3 dev fp8 checkpoint bundles UNet + VAE.
     ckpt = mm.load_checkpoint_from_path(unet_path)
     model = ckpt.model
     vae = ckpt.vae if vae_filename is None else mm.load_vae(vae_path)
     audio_vae = mm.load_ltxv_audio_vae(audio_vae_path)
     clip = mm.load_ltxav_text_encoder(te_path, unet_path)
+    upscaler_model = mm.load_latent_upscale_model(upscaler_path)
+
+    # Apply LoRAs.
+    # Distilled LoRA: model-only (mirrors LoraLoaderModelOnly in the workflow).
+    model, _ = apply_lora(model, clip, distilled_lora_path, distilled_lora_strength, 0.0)
+    # TE LoRA: clip-only (mirrors LoraLoader with unconnected MODEL output).
+    _, clip = apply_lora(model, clip, te_lora_path, 0.0, te_lora_strength)
 
     # Load and preprocess the input image → BHWC float32 tensor.
     if hasattr(image, "mode"):
@@ -243,25 +305,44 @@ def run(
     positive, negative = encode_prompt(clip, prompt, negative_prompt)
     positive, negative = ltxv_conditioning(positive, negative, frame_rate=fps)
 
-    # Create empty video latent, inject image guide at frame 0.
+    # Create empty video latent and inject image guide at pass-1 strength.
     video_latent = ltxv_empty_latent_video(width=width, height=height, length=length)
-    positive, negative, video_latent = ltxv_add_guide(
-        positive, negative, vae, video_latent, preprocessed, frame_idx=0, strength=guide_strength
-    )
+    video_latent = ltxv_img_to_video_inplace(vae, preprocessed, video_latent, strength=guide_strength_pass1)
+
+    # LTXVCropGuides — strips keyframe metadata from conditioning (pass-through
+    # when no keyframe_idxs are present, which is the case with LTXVImgToVideoInplace).
+    positive, negative, _ = ltxv_crop_guides(positive, negative, video_latent)
 
     # Create audio latent and concatenate into a single AV latent.
     audio_latent = ltxv_empty_latent_audio(audio_vae, frames_number=length, frame_rate=fps)
     av_latent = ltxv_concat_av_latent(video_latent, audio_latent)
 
-    # Single-pass denoising.
-    guider = cfg_guider(model, positive, negative, cfg)
-    noise = random_noise(seed)
-    sigmas = manual_sigmas(_SIGMAS)
-    sampler_obj = get_sampler("euler_ancestral")
-    _, denoised = sample_custom(noise, guider, sampler_obj, sigmas, av_latent)
+    # Pass 1 — full sigma schedule, euler_ancestral_cfg_pp.
+    guider1 = cfg_guider(model, positive, negative, cfg)
+    noise1 = random_noise(seed)
+    sigmas1 = manual_sigmas(_SIGMAS_PASS1)
+    sampler1 = get_sampler("euler_ancestral_cfg_pp")
+    _, denoised1 = sample_custom(noise1, guider1, sampler1, sigmas1, av_latent)
+
+    # Split pass-1 result and spatially upscale the video latent.
+    video_latent1, audio_latent1 = ltxv_separate_av_latent(denoised1)
+    video_upscaled = ltxv_latent_upsample(video_latent1, upscaler_model, vae)
+
+    # Re-inject image into the upscaled latent at pass-2 strength.
+    video_upscaled = ltxv_img_to_video_inplace(vae, preprocessed, video_upscaled, strength=guide_strength_pass2)
+
+    # Re-concatenate upscaled video with pass-1 audio latent.
+    av_latent2 = ltxv_concat_av_latent(video_upscaled, audio_latent1)
+
+    # Pass 2 — short sigma schedule, euler_cfg_pp.
+    guider2 = cfg_guider(model, positive, negative, cfg)
+    noise2 = random_noise(seed)
+    sigmas2 = manual_sigmas(_SIGMAS_PASS2)
+    sampler2 = get_sampler("euler_cfg_pp")
+    _, denoised2 = sample_custom(noise2, guider2, sampler2, sigmas2, av_latent2)
 
     # Separate, decode video and audio.
-    video_latent_out, audio_latent_out = ltxv_separate_av_latent(denoised)
+    video_latent_out, audio_latent_out = ltxv_separate_av_latent(denoised2)
     frames = vae_decode_batch_tiled(vae, video_latent_out)
     audio = ltxv_audio_vae_decode(audio_vae, audio_latent_out)
 

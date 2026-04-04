@@ -8,25 +8,7 @@ import { spawnPipeline } from "../runner";
 import { resolveModelsDir } from "../utils";
 import { getModels, getScript } from "../models/registry";
 import { buildEditImageArgs, type EditImageOpts } from "../models/image";
-
-function modelsFooter(action: string, media: string): string {
-  return `\nAvailable models: ${getModels(action, media).join(", ")}`;
-}
-
-function validateModel(action: string, media: string, model: string): void {
-  const known = getModels(action, media);
-  if (!known.includes(model)) {
-    console.error(
-      `Error: unknown model "${model}" for ${action} ${media}. Known models: ${known.join(", ")}`
-    );
-    process.exit(1);
-  }
-}
-
-function notImplemented(action: string, media: string, model: string): never {
-  console.log(`[parallax] ${action} ${media} --model ${model} — not yet implemented (coming soon)`);
-  process.exit(0);
-}
+import { modelsFooter, validateModel, notImplemented } from "../utils";
 
 export function registerEdit(program: Command): void {
   const edit = program
@@ -43,8 +25,8 @@ export function registerEdit(program: Command): void {
     .option("--subject-image <path>", "Subject reference image (flux_9b_kv only)")
     .option("--width <pixels>", "Image width in pixels", "1024")
     .option("--height <pixels>", "Image height in pixels", "1024")
-    .option("--steps <n>", "Number of sampling steps", "20")
-    .option("--cfg <value>", "CFG guidance scale", "7")
+    .option("--steps <n>", "Number of sampling steps (qwen: auto 4 with LoRA, 40 without)")
+    .option("--cfg <value>", "CFG guidance scale (qwen: auto 1.0 with LoRA, 4.0 without)")
     .option("--seed <n>", "Random seed for reproducibility")
     .option("--output <path>", "Output file path", "output.png")
     .option("--image2 <path>", "Second input image (qwen only)")
@@ -84,7 +66,7 @@ export function registerEdit(program: Command): void {
         subjectImage: opts.subjectImage,
         image2:       opts.image2,
         image3:       opts.image3,
-        noLora:       opts.noLora === true,
+        noLora:       !!opts.noLora,
       };
       const args = buildEditImageArgs(editOpts, modelsDir);
       await spawnPipeline(script, args, readConfig());

@@ -43,8 +43,8 @@ export interface EditImageOpts {
   input: string;
   width: string;
   height: string;
-  steps: string;
-  cfg: string;
+  steps?: string;   // qwen: omit to let Python auto-detect (4 w/ LoRA, 40 w/o)
+  cfg?: string;     // qwen: omit to let Python auto-detect (1.0 w/ LoRA, 4.0 w/o)
   seed?: string;
   output: string;
   subjectImage?: string; // flux_9b_kv only
@@ -116,8 +116,8 @@ export function buildEditImageArgs(opts: EditImageOpts, modelsDir: string): stri
   if (opts.model === "qwen") {
     args.push("--image", opts.input);
     args.push("--prompt", opts.prompt);
-    args.push("--steps", opts.steps);
-    args.push("--cfg", opts.cfg);
+    if (opts.steps !== undefined) args.push("--steps", opts.steps);
+    if (opts.cfg !== undefined) args.push("--cfg", opts.cfg);
     if (opts.seed !== undefined) args.push("--seed", opts.seed);
     const prefix = opts.output.endsWith(".png") ? opts.output.slice(0, -4) : opts.output;
     args.push("--output-prefix", prefix);
