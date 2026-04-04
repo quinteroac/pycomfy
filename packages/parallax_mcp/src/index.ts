@@ -121,5 +121,59 @@ server.registerTool(
   },
 );
 
+server.registerTool(
+  "create_audio",
+  {
+    description: "Generate audio using the Parallax pipeline (parallax create audio)",
+    inputSchema: {
+      model:     z.string().describe("Model to use (e.g. ace_step)"),
+      prompt:    z.string().describe("Text prompt describing the audio to generate"),
+      length:    z.string().optional().describe("Duration in seconds"),
+      steps:     z.string().optional().describe("Number of sampling steps"),
+      cfg:       z.string().optional().describe("CFG guidance scale"),
+      bpm:       z.string().optional().describe("Beats per minute"),
+      lyrics:    z.string().optional().describe("Lyrics text (ace_step)"),
+      seed:      z.string().optional().describe("Random seed for reproducibility"),
+      output:    z.string().optional().describe("Output file path (default: output.wav)"),
+      modelsDir: z.string().optional().describe("Models directory (overrides PYCOMFY_MODELS_DIR)"),
+    },
+  },
+  async (input) => {
+    const args: string[] = ["create", "audio", "--model", input.model, "--prompt", input.prompt];
+    if (input.length)    args.push("--length",     input.length);
+    if (input.steps)     args.push("--steps",      input.steps);
+    if (input.cfg)       args.push("--cfg",        input.cfg);
+    if (input.bpm)       args.push("--bpm",        input.bpm);
+    if (input.lyrics)    args.push("--lyrics",     input.lyrics);
+    if (input.seed)      args.push("--seed",       input.seed);
+    if (input.output)    args.push("--output",     input.output);
+    if (input.modelsDir) args.push("--models-dir", input.modelsDir);
+
+    const outputPath = resolve(input.output ?? "output.wav");
+
+    const proc = Bun.spawn(["bun", "run", "src/index.ts", ...args], {
+      stdout: "pipe",
+      stderr: "pipe",
+      cwd: CLI_DIR,
+    });
+
+    const [exitCode, stderr] = await Promise.all([
+      proc.exited,
+      new Response(proc.stderr).text(),
+    ]);
+
+    if (exitCode !== 0) {
+      return {
+        content: [{ type: "text", text: `Error: ${stderr.trim()}` }],
+        isError: true,
+      };
+    }
+
+    return {
+      content: [{ type: "text", text: outputPath }],
+    };
+  },
+);
+
 const transport = new StdioServerTransport();
 await server.connect(transport);

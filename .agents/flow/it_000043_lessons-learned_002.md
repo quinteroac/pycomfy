@@ -36,3 +36,20 @@
 - The `parallax create video` CLI command accepts `--input` for i2v workflows; the MCP tool exposes it as optional `input` field.
 - For future `create_audio` or other tools, follow the same `registerTool` → `Bun.spawn` → `exitCode` → return path pattern.
 - Test files in `packages/parallax_mcp/tests/` use source-code scanning (reading `index.ts` as text) rather than live MCP SDK invocation — this avoids needing a running server while still covering all structural and behavioural assertions.
+
+## US-003 — Create Audio via MCP Tool
+
+**Summary:** Added `create_audio` MCP tool to `packages/parallax_mcp/src/index.ts`. The tool registers a fully-typed input schema matching `parallax create audio` options (`model`, `prompt`, `length`, `steps`, `cfg`, `bpm`, `lyrics`, `seed`, `output`, `modelsDir`), spawns the CLI subprocess via `Bun.spawn`, and returns the resolved output path on success or stderr on failure. 22 tests cover all acceptance criteria.
+
+**Key Decisions:**
+- Followed the exact same pattern as `create_image` and `create_video`: `server.registerTool()` with a zod shape, `Bun.spawn` with `cwd: CLI_DIR`, and `resolve(input.output ?? "output.wav")` for the default output path.
+- Default output is `output.wav` — matches the CLI default in `create.ts` for audio.
+- AC01 specifies exactly 10 fields. The CLI also accepts `--unet`, `--vae`, `--text-encoder-1`, `--text-encoder-2` component overrides, but those are not part of the AC and were intentionally omitted.
+
+**Pitfalls Encountered:**
+- None — the pattern from US-001 and US-002 was directly reusable.
+
+**Useful Context for Future Agents:**
+- The `parallax create audio` CLI command accepts `--bpm` and `--lyrics` which are audio-specific; both are mapped in the MCP tool schema.
+- Test files continue using source-code scanning (reading `index.ts` as text) — no running server needed.
+- The `create_audio` tool's default output is `output.wav`; always verify the correct default extension per media type when adding new MCP tools.
