@@ -40,3 +40,26 @@
 - `getJobStatus()` returns `null` (not throws) when a job is not found — consumers should handle null with a 404.
 - bunqueue's `getJob()` is on the `Queue` instance; `getJobState()` is also available if you only need the state string without other job fields.
 - The test file `job_status.test.ts` follows the same mock pattern as `jobs.test.ts`: `mock.module("@parallax/sdk", ...)` at top-level (Bun hoists it before static imports).
+
+## US-003 — Stream job progress via SSE
+
+**Summary:** Implemented `GET /jobs/:id/stream` in `packages/parallax_ms/src/index.ts` using `@elysiajs/stream`'s `Stream` class. The endpoint returns a `text/event-stream` response that polls `getJobStatus` every 500ms, emitting named SSE events (`progress`, `completed`, `failed`) until the job terminates. Added 6 tests in `packages/parallax_ms/tests/stream.test.ts`.
+
+**Key Decisions:**
+- **`Stream` class from `@elysiajs/stream` v1.1.0**: Used the callback form `new Stream(async (s) => {...})`. The `event` setter (`s.event = "progress"`) prepends the SSE `event:` field before each `send()` call, producing correctly-formatted named SSE events without raw byte manipulation.
+- **`return new Response(stream.value, { headers: {...} })`**: The `Stream` instance holds its `ReadableStream` in `.value`. Wrapping it in a native `Response` with explicit `Content-Type: text/event-stream` is the most reliable Elysia pattern — it avoids any ambiguity in how Elysia's `mapResponse` handles custom class instances.
+- **Route ordering**: `GET /jobs/:id/stream` is defined BEFORE `GET /jobs/:id` to avoid the `/stream` suffix being interpreted as a job ID parameter.
+- **`s.close()` must be called explicitly**: In the callback form, `Stream` does NOT auto-close when the callback promise resolves — `close()` must be called manually at the end of each terminal branch.
+- **Existence check before stream opens (AC05)**: `getJobStatus` is called once synchronously before creating the `Stream`. If `null`, returns 404 JSON immediately without opening the SSE connection.
+
+**Pitfalls Encountered:**
+- **`send()` wraps data in `data:` — named events require `stream.event` setter**: To emit `event: progress\ndata: {...}\n\n`, set `stream.event = "progress"` before calling `stream.send(data)`. The README is minimal; this requires reading the source.
+- **`Stream` is marked `@deprecated` in v1.1.0**: The callback form is the only approach that supports named events via the `event` setter without accessing private internals.
+- **Test timing**: 500ms polling interval means streaming tests take ≥500ms per terminal event. Set timeouts to 2000–3000ms accordingly.
+
+**Useful Context for Future Agents:**
+- `@elysiajs/stream@1.1.0` is now in `packages/parallax_ms/package.json` dependencies.
+- `stream.event = "<name>"` BEFORE `stream.send(data)` → named SSE event. Call `stream.close()` explicitly to end the stream.
+- `stream.wait(ms)` is a utility on the `Stream` instance — use inside the callback instead of `new Promise(r => setTimeout(r, ms))`.
+- Test pattern for streaming: mock `getJobStatus` with call counter, read full body via `resp.text()` (waits for stream closure), assert on accumulated SSE text.
+- The `Stream` callback is NOT awaited by the constructor — the async function runs in the background; `close()` signals the controller to end.

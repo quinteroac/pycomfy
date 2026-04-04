@@ -1,4 +1,5 @@
 import { Elysia, t } from "elysia";
+import { Stream } from "@elysiajs/stream";
 import { submitJob, getJobStatus } from "@parallax/sdk";
 import type { ParallaxJobData } from "@parallax/sdk";
 
@@ -51,6 +52,51 @@ export const app = new Elysia()
       set.status = 400;
       return { error: error.message };
     }
+  })
+
+  // US-003: GET /jobs/:id/stream — Server-Sent Events until job completion
+  .get("/jobs/:id/stream", async ({ params, set }) => {
+    const initial = await getJobStatus(params.id);
+    if (!initial) {
+      set.status = 404;
+      return { error: "Job not found" };
+    }
+
+    const id = params.id;
+    const stream = new Stream<object>(async (s) => {
+      while (true) {
+        await s.wait(500);
+        const status = await getJobStatus(id);
+
+        if (!status) {
+          s.close();
+          break;
+        }
+
+        if (status.status === "completed") {
+          s.event = "completed";
+          s.send({ output: status.output });
+          s.close();
+          break;
+        } else if (status.status === "failed") {
+          s.event = "failed";
+          s.send({ error: status.error });
+          s.close();
+          break;
+        } else {
+          s.event = "progress";
+          s.send({ pct: status.progress, step: status.status });
+        }
+      }
+    });
+
+    return new Response(stream.value, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+      },
+    });
   })
 
   // US-002: GET /jobs/:id — poll job status
