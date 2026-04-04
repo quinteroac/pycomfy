@@ -36,3 +36,57 @@ export function buildArgs(opts: ImageOpts, modelsDir: string): string[] {
 
   return args;
 }
+
+export interface EditImageOpts {
+  model: string;
+  prompt: string;
+  input: string;
+  width: string;
+  height: string;
+  steps: string;
+  cfg: string;
+  seed?: string;
+  output: string;
+  subjectImage?: string; // flux_9b_kv only
+  image2?: string;       // qwen only
+  image3?: string;       // qwen only
+  noLora?: boolean;      // qwen only
+}
+
+// Build the CLI args array for an `edit image` invocation.
+//
+// Model-specific behaviours:
+//  - flux variants (not flux_9b_kv): --image <input>, no --cfg forwarded.
+//  - flux_9b_kv: same as other flux variants, plus --subject-image.
+//  - qwen: --image <input>, --cfg forwarded, --output becomes --output-prefix
+//    (with trailing .png stripped), optional --image2/--image3/--no-lora.
+export function buildEditImageArgs(opts: EditImageOpts, modelsDir: string): string[] {
+  const args: string[] = ["--models-dir", modelsDir];
+
+  if (opts.model === "qwen") {
+    args.push("--image", opts.input);
+    args.push("--prompt", opts.prompt);
+    args.push("--steps", opts.steps);
+    args.push("--cfg", opts.cfg);
+    if (opts.seed !== undefined) args.push("--seed", opts.seed);
+    const prefix = opts.output.endsWith(".png") ? opts.output.slice(0, -4) : opts.output;
+    args.push("--output-prefix", prefix);
+    if (opts.image2 !== undefined) args.push("--image2", opts.image2);
+    if (opts.image3 !== undefined) args.push("--image3", opts.image3);
+    if (opts.noLora) args.push("--no-lora");
+  } else {
+    // All flux variants
+    args.push("--prompt", opts.prompt);
+    args.push("--image", opts.input);
+    args.push("--width", opts.width);
+    args.push("--height", opts.height);
+    args.push("--steps", opts.steps);
+    if (opts.seed !== undefined) args.push("--seed", opts.seed);
+    args.push("--output", opts.output);
+    if (opts.model === "flux_9b_kv" && opts.subjectImage !== undefined) {
+      args.push("--subject-image", opts.subjectImage);
+    }
+  }
+
+  return args;
+}
