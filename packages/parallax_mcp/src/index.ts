@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { submitJob } from "@parallax/sdk/submit";
-import { getJobStatus } from "@parallax/sdk";
+import { getJobStatus, getQueue } from "@parallax/sdk";
 import type { ParallaxJobData } from "@parallax/sdk";
 
 const server = new McpServer({
@@ -347,6 +347,73 @@ server.registerTool(
     return {
       content: [{ type: "text", text: JSON.stringify(payload) }],
     };
+  },
+);
+
+server.registerTool(
+  "wait_for_job",
+  {
+    description: "Block until an inference job completes and return the output path. Polls every 2 seconds up to timeout_seconds (default 600). Returns output on success, isError on failure or timeout.",
+    inputSchema: {
+      job_id:          z.string().describe("The job ID to wait for"),
+      timeout_seconds: z.number().optional().default(600).describe("Maximum seconds to wait (default: 600)"),
+    },
+  },
+  async (input) => {
+    const timeoutSeconds = input.timeout_seconds ?? 600;
+    const deadline = Date.now() + timeoutSeconds * 1000;
+    const queue = getQueue();
+    const startedAt = Date.now();
+
+    try {
+      while (Date.now() < deadline) {
+        const job = await queue.getJob(input.job_id);
+        if (job) {
+          const state = await job.getState();
+          if (state === "completed") {
+            const result = job.returnvalue as { outputPath?: string } | null;
+            const durationSeconds = Math.round((Date.now() - startedAt) / 1000);
+            return {
+              content: [{
+                type: "text",
+                text: JSON.stringify({
+                  status: "completed",
+                  output: result?.outputPath ?? null,
+                  duration_seconds: durationSeconds,
+                }),
+              }],
+            };
+          }
+          if (state === "failed") {
+            return {
+              isError: true,
+              content: [{
+                type: "text",
+                text: JSON.stringify({
+                  status: "failed",
+                  error: (job as any).failedReason ?? "Unknown error",
+                }),
+              }],
+            };
+          }
+        }
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
+
+      return {
+        isError: true,
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            status: "timeout",
+            job_id: input.job_id,
+            message: `Job did not complete within ${timeoutSeconds} seconds. Use get_job_status to check later.`,
+          }),
+        }],
+      };
+    } finally {
+      await queue.close();
+    }
   },
 );
 

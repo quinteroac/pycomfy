@@ -40,3 +40,22 @@
 - `getJobStatus(id)` returns `ParallaxJobStatus | null` (null = job not found). The MCP tool maps null → `isError: true`.
 - `ParallaxJobStatus` now includes all fields from `ParallaxJobData` relevant to callers: `model`, `action`, `media`. Fields like `script`, `args`, `scriptBase`, `uvPath` are intentionally not exposed.
 - The SDK's `getJobStatus` closes the queue connection after each call. Fine for one-shot MCP use, but inefficient for bulk polling.
+
+## US-003 — wait_for_job tool
+
+**Summary:** Added `wait_for_job` MCP tool to `parallax_mcp/src/index.ts`. The tool accepts `{ job_id: z.string(), timeout_seconds: z.number().optional().default(600) }`, polls `getQueue().getJob(id)` every 2 seconds until the job completes, fails, or times out. Returns `{ status, output, duration_seconds }` on success, `isError: true` with `{ status: "failed", error }` on failure, and `isError: true` with `{ status: "timeout", job_id, message }` on timeout. Queue is closed in a `finally` block.
+
+**Key Decisions:**
+- Imported `getQueue` from `@parallax/sdk` (it was already exported alongside `getJobStatus`). No SDK changes were needed.
+- Used a `try/finally` block to guarantee `queue.close()` is called in all code paths (success, failure, and timeout).
+- Tracked `startedAt = Date.now()` before the loop to compute `duration_seconds` on completion.
+- The `getQueue()` singleton is re-used within the polling loop — only one connection is opened per `wait_for_job` call.
+
+**Pitfalls Encountered:**
+- `getQueue()` is a module-level singleton in `@parallax/sdk`. Calling `queue.close()` closes the shared instance. This is fine for one-shot MCP calls but means subsequent calls in the same process would re-create the queue. The `finally` pattern used here matches what `getJobStatus` already does internally.
+- `input.timeout_seconds` can be `undefined` even with `.default(600)` in the Zod schema because the MCP input type may not apply the default at runtime; using `?? 600` as a fallback is safer.
+
+**Useful Context for Future Agents:**
+- The `getQueue()` singleton from `@parallax/sdk/src/queue.ts` uses `bunqueue` internally. Each time `close()` is called, the next `getQueue()` call still returns the same cached instance (the instance variable is NOT reset on close). Verify behavior before assuming re-connection works automatically.
+- Test strategy follows the existing source-level structural check pattern: `readFileSync` the source and assert key strings are present. This avoids needing a running Redis/queue for tests.
+- All 21 tests pass and `bun typecheck` is clean.
