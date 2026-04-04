@@ -89,3 +89,21 @@
 - The `upscale image` CLI command now requires `--input <path>` as a required option alongside `--model` and `--prompt`.
 - All 5 MCP tools (`create_image`, `create_video`, `create_audio`, `edit_image`, `upscale_image`) follow the identical `registerTool → args array → Bun.spawn → exitCode check → return` pattern.
 - The pre-existing typecheck error in `parallax_cli` (`opts.steps` in `buildEditImageArgs`) should be addressed in a dedicated cleanup iteration — it's in the `EditImageOpts` flux branch at line ~135.
+
+## US-006 — MCP Server Startup and Client Registration
+
+**Summary:** Documented `bun run start` for the `@parallax/mcp` package, updated `docs/parallax_mcp.md` with registration config snippets for Claude Desktop, GitHub Copilot (VS Code + CLI), and Claude Code. Added `tests/server_startup.test.ts` with 21 tests covering all acceptance criteria.
+
+**Key Decisions:**
+- All 5 tools (`create_image`, `create_video`, `create_audio`, `edit_image`, `upscale_image`) were already registered in `src/index.ts` from prior iterations — no `index.ts` changes were needed.
+- `package.json` already had `"start": "bun run src/index.ts"` — AC01 was already satisfied; only the test and docs were missing.
+- The GitHub Copilot VS Code MCP config goes in `.vscode/mcp.json` (key `servers`); the Copilot CLI agent config goes in `.github/copilot/mcp.json` (key `mcpServers`). Both formats documented.
+- AC05 (visual verification) is covered by the documentation — the config snippets allow users to register and verify in their client.
+
+**Pitfalls Encountered:**
+- AC01's "starts without errors" is tested by spawning the process with `stdin: "pipe"`, immediately closing stdin, then asserting there is no `SyntaxError` or `Cannot find module` in stderr. This approach avoids hanging the test while still catching real import failures.
+
+**Useful Context for Future Agents:**
+- The `docs/parallax_mcp.md` now serves as the canonical registration guide — update it if new tools are added or the startup command changes.
+- GitHub Copilot VS Code extension uses `"type": "stdio"` in `.vscode/mcp.json`; Claude Desktop and Copilot CLI use `"command"` + `"args"` without a `"type"` key.
+- The server's stdio transport means it has no port — the MCP client spawns and owns the server process. There is nothing to `curl` or health-check separately.
