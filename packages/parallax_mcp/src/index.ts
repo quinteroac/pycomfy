@@ -59,7 +59,7 @@ function getModelsDir(override?: string): string {
 server.registerTool(
   "create_image",
   {
-    description: "Generate an image using the Parallax pipeline (parallax create image). Returns a job ID immediately — use get_job_status to poll for the output path.",
+    description: "Generate an image using the Parallax pipeline (parallax create image). Returns a job_id. Use get_job_status to poll or wait_for_job to block until done.",
     inputSchema: {
       model:          z.string().describe("Model to use (e.g. sdxl, anima, z_image, flux_klein)"),
       prompt:         z.string().describe("Text prompt describing the image to generate"),
@@ -106,7 +106,7 @@ server.registerTool(
 server.registerTool(
   "create_video",
   {
-    description: "Generate a video using the Parallax pipeline (parallax create video). Returns a job ID immediately — use get_job_status to poll for the output path.",
+    description: "Generate a video using the Parallax pipeline (parallax create video). Returns a job_id. Use get_job_status to poll or wait_for_job to block until done.",
     inputSchema: {
       model:     z.string().describe("Model to use (e.g. ltx2, ltx23, wan21, wan22)"),
       prompt:    z.string().describe("Text prompt describing the video to generate"),
@@ -157,7 +157,7 @@ server.registerTool(
 server.registerTool(
   "create_audio",
   {
-    description: "Generate audio using the Parallax pipeline (parallax create audio). Returns a job ID immediately — use get_job_status to poll for the output path.",
+    description: "Generate audio using the Parallax pipeline (parallax create audio). Returns a job_id. Use get_job_status to poll or wait_for_job to block until done.",
     inputSchema: {
       model:     z.string().describe("Model to use (e.g. ace_step)"),
       prompt:    z.string().describe("Text prompt describing the audio to generate"),
@@ -202,7 +202,7 @@ server.registerTool(
 server.registerTool(
   "edit_image",
   {
-    description: "Edit an image using the Parallax pipeline (parallax edit image). Returns a job ID immediately — use get_job_status to poll for the output path.",
+    description: "Edit an image using the Parallax pipeline (parallax edit image). Returns a job_id. Use get_job_status to poll or wait_for_job to block until done.",
     inputSchema: {
       model:        z.string().describe("Model to use (e.g. flux_klein, qwen)"),
       prompt:       z.string().describe("Text prompt describing the desired edits"),
@@ -267,7 +267,7 @@ server.registerTool(
 server.registerTool(
   "upscale_image",
   {
-    description: "Upscale an image using the Parallax pipeline (parallax upscale image). Returns a job ID immediately — use get_job_status to poll for the output path.",
+    description: "Upscale an image using the Parallax pipeline (parallax upscale image). Returns a job_id. Use get_job_status to poll or wait_for_job to block until done.",
     inputSchema: {
       model:                   z.string().describe("Model to use (e.g. esrgan, latent_upscale)"),
       prompt:                  z.string().describe("Text prompt"),
@@ -321,7 +321,7 @@ server.registerTool(
 server.registerTool(
   "get_job_status",
   {
-    description: "Check the status of an inference job by its ID. Returns current state, progress, and output path when done.",
+    description: "Check the current status and progress of a submitted inference job. Returns status, progress percentage (0-100), and output path when completed.",
     inputSchema: {
       job_id: z.string().describe("The job ID returned by a create/edit/upscale tool"),
     },
@@ -353,7 +353,7 @@ server.registerTool(
 server.registerTool(
   "wait_for_job",
   {
-    description: "Block until an inference job completes and return the output path. Polls every 2 seconds up to timeout_seconds (default 600). Returns output on success, isError on failure or timeout.",
+    description: "Block until a submitted inference job completes. Polls internally every 2 seconds. Default timeout: 600 seconds. Returns output path on success.",
     inputSchema: {
       job_id:          z.string().describe("The job ID to wait for"),
       timeout_seconds: z.number().optional().default(600).describe("Maximum seconds to wait (default: 600)"),

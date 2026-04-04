@@ -38,8 +38,8 @@ describe("US-001-AC02: create_image returns job_id response", () => {
 // ── AC03: tool descriptions mention job ID ────────────────────────────────────
 
 describe("US-001-AC03: create_image description mentions job ID", () => {
-  it("description mentions Returns a job ID", () => {
-    expect(SRC).toContain("Returns a job ID immediately");
+  it("description mentions Returns a job_id", () => {
+    expect(SRC).toContain("Returns a job_id. Use get_job_status to poll or wait_for_job to block until done.");
   });
 });
 

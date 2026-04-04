@@ -34,8 +34,8 @@ describe("US-001-AC02: create_audio returns job_id response", () => {
 // ── AC03: description mentions job ID ─────────────────────────────────────────
 
 describe("US-001-AC03: create_audio description mentions job ID", () => {
-  it("description says Returns a job ID immediately", () => {
-    expect(SRC).toContain("Returns a job ID immediately");
+  it("description says Returns a job_id", () => {
+    expect(SRC).toContain("Returns a job_id. Use get_job_status to poll or wait_for_job to block until done.");
   });
 });
 

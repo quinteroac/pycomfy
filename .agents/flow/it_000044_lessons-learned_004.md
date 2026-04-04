@@ -59,3 +59,20 @@
 - The `getQueue()` singleton from `@parallax/sdk/src/queue.ts` uses `bunqueue` internally. Each time `close()` is called, the next `getQueue()` call still returns the same cached instance (the instance variable is NOT reset on close). Verify behavior before assuming re-connection works automatically.
 - Test strategy follows the existing source-level structural check pattern: `readFileSync` the source and assert key strings are present. This avoids needing a running Redis/queue for tests.
 - All 21 tests pass and `bun typecheck` is clean.
+
+## US-004 — Update tool descriptions for agent discoverability
+
+**Summary:** Updated all 7 tool descriptions in `packages/parallax_mcp/src/index.ts`. The 5 inference tools (`create_image`, `create_video`, `create_audio`, `edit_image`, `upscale_image`) now end with the canonical suffix. `get_job_status` and `wait_for_job` have exact verbatim descriptions from the ACs.
+
+**Key Decisions:**
+- Description changes were pure string edits — no logic changes required.
+- Added `tests/tool_descriptions.test.ts` to assert the exact new descriptions for all 7 tools.
+- Updated 5 existing test assertions in `create_image.test.ts`, `create_video.test.ts`, `create_audio.test.ts`, `edit_image.test.ts`, and `upscale_image.test.ts` that were asserting the old `"Returns a job ID immediately"` text.
+
+**Pitfalls Encountered:**
+- The US-001 tests (in the 5 inference tool test files) each had an AC03 assertion checking for the old description text `"Returns a job ID immediately"`. These had to be updated alongside the source changes to avoid regressions. Always grep tests for any string being changed in source.
+
+**Useful Context for Future Agents:**
+- The canonical inference tool description suffix is: `Returns a job_id. Use get_job_status to poll or wait_for_job to block until done.`
+- When updating tool descriptions, remember to also update any test files that assert the old description text.
+- All 180 tests pass and `bun typecheck` is clean after changes.
