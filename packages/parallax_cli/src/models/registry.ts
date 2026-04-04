@@ -39,14 +39,29 @@ export const MODELS: Record<string, string[]> = {
   "create image": ["sdxl", "anima", "z_image", "flux_klein", "qwen"],
   "create video": ["ltx2", "ltx23", "wan21", "wan22"],
   "create audio": ["ace_step"],
-  "edit image":   ["qwen"],
+  "edit image":   ["flux_4b_base", "flux_4b_distilled", "flux_9b_base", "flux_9b_distilled", "flux_9b_kv", "qwen"],
   "edit video":   ["wan21", "wan22"],
+  "upscale image": ["esrgan", "latent_upscale"],
 };
 
 export const IMAGE_SCRIPTS: Partial<Record<string, string>> = {
   sdxl:    "runtime/image/generation/sdxl/t2i.py",
   anima:   "runtime/image/generation/anima/t2i.py",
   z_image: "runtime/image/generation/z_image/turbo.py",
+};
+
+export const EDIT_IMAGE_SCRIPTS: Partial<Record<string, string>> = {
+  flux_4b_base:       "runtime/image/edit/flux/4b_base.py",
+  flux_4b_distilled:  "runtime/image/edit/flux/4b_distilled.py",
+  flux_9b_base:       "runtime/image/edit/flux/9b_base.py",
+  flux_9b_distilled:  "runtime/image/edit/flux/9b_distilled.py",
+  flux_9b_kv:         "runtime/image/edit/flux/9b_kv.py",
+  qwen:               "runtime/image/edit/qwen/edit_2511.py",
+};
+
+export const UPSCALE_IMAGE_SCRIPTS: Partial<Record<string, string>> = {
+  esrgan:         "runtime/image/edit/sd/esrgan_upscale.py",
+  latent_upscale: "runtime/image/edit/sd/latent_upscale.py",
 };
 
 export interface ModelConfig {
@@ -72,7 +87,11 @@ export function getModels(action: string, media: string): string[] {
 }
 
 export function getScript(action: string, media: string, model: string): string | undefined {
-  if (media === "image") return IMAGE_SCRIPTS[model];
+  if (media === "image") {
+    if (action === "edit") return EDIT_IMAGE_SCRIPTS[model];
+    if (action === "upscale") return UPSCALE_IMAGE_SCRIPTS[model];
+    return IMAGE_SCRIPTS[model];
+  }
   if (media === "audio") return AUDIO_SCRIPTS[model];
   if (media === "video") {
     const cfg = VIDEO_MODEL_CONFIG[model];
