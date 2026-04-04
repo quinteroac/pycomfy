@@ -7,13 +7,41 @@ import { Command } from "commander";
 import { readConfig } from "../config";
 import { spawnPipeline } from "../runner";
 import { resolveModelsDir } from "../utils";
-import { getModels, getScript, getModelConfig, getModelDefaults } from "../models/registry";
+import { getModels, getScript, getModelConfig, getModelDefaults, type ModelDefaults } from "../models/registry";
 import { buildArgs as buildImageArgs, type ImageOpts } from "../models/image";
 import { buildArgs as buildVideoArgs, type VideoOpts } from "../models/video";
 import { buildArgs as buildAudioArgs, type AudioOpts } from "../models/audio";
 
 function modelsFooter(action: string, media: string): string {
   return `\nAvailable models: ${getModels(action, media).join(", ")}`;
+}
+
+// Columns per media type: [key in ModelDefaults, display label]
+const DEFAULTS_COLUMNS: Record<string, Array<[keyof ModelDefaults, string]>> = {
+  video: [["width","width"],["height","height"],["length","length"],["fps","fps"],["steps","steps"],["cfg","cfg"]],
+  image: [["width","width"],["height","height"],["steps","steps"],["cfg","cfg"]],
+  audio: [["length","duration"],["steps","steps"],["cfg","cfg"],["bpm","bpm"]],
+};
+
+export function buildDefaultsTable(media: string): string {
+  const cols = DEFAULTS_COLUMNS[media];
+  if (!cols) return "";
+  const models = getModels("create", media).filter(m => getModelDefaults(media, m) !== undefined);
+  if (models.length === 0) return "";
+
+  const headers = ["model", ...cols.map(([, label]) => label)];
+  const rows: string[][] = models.map(model => {
+    const d = getModelDefaults(media, model)!;
+    return [model, ...cols.map(([key]) => d[key] != null ? String(d[key]) : "—")];
+  });
+
+  const widths = headers.map((h, i) => Math.max(h.length, ...rows.map(r => r[i].length)));
+  const pad = (s: string, w: number) => s.padEnd(w);
+  const headerRow = "  " + headers.map((h, i) => pad(h, widths[i])).join("  ");
+  const sepRow = "  " + "─".repeat(headerRow.length - 2);
+  const dataRows = rows.map(row => "  " + row.map((cell, i) => pad(cell, widths[i])).join("  "));
+
+  return "\nDefaults per model:\n\n" + headerRow + "\n" + sepRow + "\n" + dataRows.join("\n");
 }
 
 function validateModel(action: string, media: string, model: string): void {
@@ -51,6 +79,7 @@ export function registerCreate(program: Command): void {
     .option("--output <path>", "Output file path", "output.png")
     .option("--models-dir <path>", "Models directory (overrides PYCOMFY_MODELS_DIR)")
     .addHelpText("after", modelsFooter("create", "image"))
+    .addHelpText("after", buildDefaultsTable("image"))
     .action(async (opts) => {
       validateModel("create", "image", opts.model);
       const script = getScript("create", "image", opts.model);
@@ -87,6 +116,7 @@ export function registerCreate(program: Command): void {
     .option("--output <path>", "Output file path", "output.mp4")
     .option("--models-dir <path>", "Models directory (overrides PYCOMFY_MODELS_DIR)")
     .addHelpText("after", modelsFooter("create", "video"))
+    .addHelpText("after", buildDefaultsTable("video"))
     .action(async (opts) => {
       validateModel("create", "video", opts.model);
       if (opts.input !== undefined && !existsSync(opts.input)) {
@@ -133,6 +163,7 @@ export function registerCreate(program: Command): void {
     .option("--text-encoder-1 <path>", "Text encoder 1 path (overrides PYCOMFY_ACE_TEXT_ENCODER_1)")
     .option("--text-encoder-2 <path>", "Text encoder 2 path (overrides PYCOMFY_ACE_TEXT_ENCODER_2)")
     .addHelpText("after", modelsFooter("create", "audio"))
+    .addHelpText("after", buildDefaultsTable("audio"))
     .action(async (opts) => {
       validateModel("create", "audio", opts.model);
       const script = getScript("create", "audio", opts.model);

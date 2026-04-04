@@ -1,9 +1,11 @@
 // Tests for US-002: CLI applies per-model defaults at runtime.
+// Tests for US-003: --help footer shows per-model defaults table.
 // Strategy: simulate what the action handler does — call getModelDefaults then buildArgs —
 // and assert the resulting args array contains the correct flags and values.
 
 import { describe, it, expect } from "bun:test";
 import { getModelDefaults } from "../../src/models/registry";
+import { buildDefaultsTable } from "../../src/commands/create";
 import { buildArgs as buildVideoArgs, type VideoOpts } from "../../src/models/video";
 import { buildArgs as buildAudioArgs, type AudioOpts } from "../../src/models/audio";
 
@@ -168,5 +170,140 @@ describe("US-002-AC06: explicit flags override model defaults", () => {
     const idx = args.indexOf("--duration");
     expect(idx).toBeGreaterThan(-1);
     expect(args[idx + 1]).toBe("60");
+  });
+});
+
+// US-003-AC01: create video --help shows per-model defaults table
+describe("US-003-AC01: video defaults table", () => {
+  const table = buildDefaultsTable("video");
+
+  it("includes 'Defaults per model' heading", () => {
+    expect(table).toContain("Defaults per model");
+  });
+
+  it("shows all four video models", () => {
+    expect(table).toContain("ltx2");
+    expect(table).toContain("ltx23");
+    expect(table).toContain("wan21");
+    expect(table).toContain("wan22");
+  });
+
+  it("shows column headers: width, height, length, fps, steps, cfg", () => {
+    expect(table).toContain("width");
+    expect(table).toContain("height");
+    expect(table).toContain("length");
+    expect(table).toContain("fps");
+    expect(table).toContain("steps");
+    expect(table).toContain("cfg");
+  });
+
+  it("ltx2 values match registry (1280 × 720, 97 frames, 24fps, 20 steps, 4 cfg)", () => {
+    const lines = table.split("\n");
+    const ltx2Line = lines.find(l => l.trimStart().startsWith("ltx2 ") || l.trimStart() === "ltx2")!;
+    expect(ltx2Line).toBeDefined();
+    expect(ltx2Line).toContain("1280");
+    expect(ltx2Line).toContain("720");
+    expect(ltx2Line).toContain("97");
+    expect(ltx2Line).toContain("24");
+    expect(ltx2Line).toContain("20");
+    expect(ltx2Line).toContain("4");
+  });
+
+  it("ltx23 shows — for missing steps", () => {
+    const lines = table.split("\n");
+    const line = lines.find(l => l.trimStart().startsWith("ltx23"))!;
+    expect(line).toBeDefined();
+    expect(line).toContain("—");
+  });
+
+  it("wan22 shows — for missing fps", () => {
+    const lines = table.split("\n");
+    const line = lines.find(l => l.trimStart().startsWith("wan22"))!;
+    expect(line).toBeDefined();
+    expect(line).toContain("—");
+  });
+});
+
+// US-003-AC02: create image --help shows per-model defaults table
+describe("US-003-AC02: image defaults table", () => {
+  const table = buildDefaultsTable("image");
+
+  it("includes 'Defaults per model' heading", () => {
+    expect(table).toContain("Defaults per model");
+  });
+
+  it("shows sdxl, anima, z_image (models with defined defaults)", () => {
+    expect(table).toContain("sdxl");
+    expect(table).toContain("anima");
+    expect(table).toContain("z_image");
+  });
+
+  it("does not show flux_klein or qwen (no defaults in registry)", () => {
+    expect(table).not.toContain("flux_klein");
+    expect(table).not.toContain("qwen");
+  });
+
+  it("shows column headers: width, height, steps, cfg", () => {
+    expect(table).toContain("width");
+    expect(table).toContain("height");
+    expect(table).toContain("steps");
+    expect(table).toContain("cfg");
+  });
+
+  it("z_image shows — for missing cfg", () => {
+    const lines = table.split("\n");
+    const line = lines.find(l => l.trimStart().startsWith("z_image"))!;
+    expect(line).toBeDefined();
+    expect(line).toContain("—");
+  });
+});
+
+// US-003-AC03: create audio --help shows ace_step defaults table
+describe("US-003-AC03: audio defaults table", () => {
+  const table = buildDefaultsTable("audio");
+
+  it("includes 'Defaults per model' heading", () => {
+    expect(table).toContain("Defaults per model");
+  });
+
+  it("shows ace_step model", () => {
+    expect(table).toContain("ace_step");
+  });
+
+  it("shows column headers: duration, steps, cfg, bpm", () => {
+    expect(table).toContain("duration");
+    expect(table).toContain("steps");
+    expect(table).toContain("cfg");
+    expect(table).toContain("bpm");
+  });
+
+  it("ace_step values match registry (120 duration, 8 steps, 1 cfg, 120 bpm)", () => {
+    const lines = table.split("\n");
+    const line = lines.find(l => l.trimStart().startsWith("ace_step"))!;
+    expect(line).toBeDefined();
+    expect(line).toContain("120");
+    expect(line).toContain("8");
+    expect(line).toContain("1");
+  });
+});
+
+// US-003-AC04: table values are generated from registry data (no hardcoding)
+describe("US-003-AC04: table values match registry", () => {
+  it("video ltx2 cfg matches getModelDefaults", () => {
+    const defaults = getModelDefaults("video", "ltx2");
+    const table = buildDefaultsTable("video");
+    expect(table).toContain(String(defaults!.cfg));
+  });
+
+  it("image sdxl steps matches getModelDefaults", () => {
+    const defaults = getModelDefaults("image", "sdxl");
+    const table = buildDefaultsTable("image");
+    expect(table).toContain(String(defaults!.steps));
+  });
+
+  it("audio ace_step bpm matches getModelDefaults", () => {
+    const defaults = getModelDefaults("audio", "ace_step");
+    const table = buildDefaultsTable("audio");
+    expect(table).toContain(String(defaults!.bpm));
   });
 });

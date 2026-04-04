@@ -10,6 +10,7 @@ export interface ModelDefaults {
   fps?: number;
   steps?: number;
   cfg?: number;
+  bpm?: number;
 }
 
 // Keyed as MODEL_DEFAULTS[media][model].
@@ -26,7 +27,7 @@ const MODEL_DEFAULTS: Record<string, Record<string, ModelDefaults>> = {
     wan22: { width: 832,  height: 480,  length: 81,          steps: 4,  cfg: 1.0 },
   },
   audio: {
-    ace_step: { length: 120, steps: 8, cfg: 1.0 },
+    ace_step: { length: 120, steps: 8, cfg: 1.0, bpm: 120 },
   },
 };
 

@@ -40,3 +40,23 @@
 - The pattern for applying defaults is: `opts.field ?? (defaults?.field != null ? String(defaults.field) : fallback)`. The `!= null` guard prevents `String(undefined)` → `"undefined"` if a model has a partial defaults entry.
 - `ace_step` audio model's `length` maps to `--duration` in `buildArgs` (the flag remapping is in `audio.ts`). Defaults for `ace_step` are `length: 120, steps: 8, cfg: 1.0`.
 - The `ltx2` cfg test expects `"4"` in the args (not `"4.0"`) because `String(4.0)` → `"4"` in JavaScript.
+
+---
+
+## US-003 — `--help` footer shows per-model defaults table
+
+**Summary:** Added a `buildDefaultsTable(media: string): string` exported function to `create.ts` that generates a padded ASCII table from `getModelDefaults` registry data. Wired it into all three `create` subcommands via a second `.addHelpText("after", ...)` call. Also added `bpm?: number` to `ModelDefaults` and `bpm: 120` to the `ace_step` registry entry (required because AC03 explicitly lists bpm as a displayed column).
+
+**Key Decisions:**
+- `buildDefaultsTable` is exported from `create.ts` so tests can import and assert on the output string directly, without spawning Commander.
+- Column sets are defined as a `Record<string, Array<[keyof ModelDefaults, string]>>` in `DEFAULTS_COLUMNS`, keyed by media. The audio table maps `length` → label `"duration"` to match the CLI flag name.
+- Models without a registry entry (e.g. `flux_klein`, `qwen`) are filtered out with `filter(m => getModelDefaults(media, m) !== undefined)`, so the image table only shows sdxl, anima, and z_image.
+- `bpm` was added to `ModelDefaults` (and `ace_step`'s entry) rather than hardcoded in the table, satisfying AC04's "no duplication; generated from registry.ts data" requirement.
+
+**Pitfalls Encountered:**
+- None significant. The filter-by-defined-defaults approach cleanly handles models like `flux_klein` that exist in `getModels()` but have no defaults.
+
+**Useful Context for Future Agents:**
+- `buildDefaultsTable` column widths are computed dynamically from the actual cell content, so adding new models or changing values in the registry automatically resizes the table.
+- The "—" sentinel is used for absent fields (e.g. ltx23 steps, wan22 fps, z_image cfg). Tests look for this sentinel on the relevant model row.
+- `cfg` values like `4.0` render as `"4"` via `String(4.0)` in JavaScript — this is expected and intentional.
