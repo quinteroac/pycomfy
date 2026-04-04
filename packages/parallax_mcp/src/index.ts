@@ -175,5 +175,66 @@ server.registerTool(
   },
 );
 
+server.registerTool(
+  "edit_image",
+  {
+    description: "Edit an image using the Parallax pipeline (parallax edit image)",
+    inputSchema: {
+      model:        z.string().describe("Model to use (e.g. flux_klein, qwen)"),
+      prompt:       z.string().describe("Text prompt describing the desired edits"),
+      input:        z.string().describe("Path to the input image file"),
+      subjectImage: z.string().optional().describe("Subject reference image (flux_9b_kv only)"),
+      width:        z.string().optional().describe("Image width in pixels"),
+      height:       z.string().optional().describe("Image height in pixels"),
+      steps:        z.string().optional().describe("Number of sampling steps"),
+      cfg:          z.string().optional().describe("CFG guidance scale"),
+      seed:         z.string().optional().describe("Random seed for reproducibility"),
+      output:       z.string().optional().describe("Output file path (default: output.png)"),
+      image2:       z.string().optional().describe("Second input image (qwen only)"),
+      image3:       z.string().optional().describe("Third input image (qwen only)"),
+      noLora:       z.boolean().optional().describe("Disable LoRA (qwen only)"),
+      modelsDir:    z.string().optional().describe("Models directory (overrides PYCOMFY_MODELS_DIR)"),
+    },
+  },
+  async (input) => {
+    const args: string[] = ["edit", "image", "--model", input.model, "--prompt", input.prompt, "--input", input.input];
+    if (input.subjectImage) args.push("--subject-image", input.subjectImage);
+    if (input.width)        args.push("--width",         input.width);
+    if (input.height)       args.push("--height",        input.height);
+    if (input.steps)        args.push("--steps",         input.steps);
+    if (input.cfg)          args.push("--cfg",           input.cfg);
+    if (input.seed)         args.push("--seed",          input.seed);
+    if (input.output)       args.push("--output",        input.output);
+    if (input.image2)       args.push("--image2",        input.image2);
+    if (input.image3)       args.push("--image3",        input.image3);
+    if (input.noLora)       args.push("--no-lora");
+    if (input.modelsDir)    args.push("--models-dir",    input.modelsDir);
+
+    const outputPath = resolve(input.output ?? "output.png");
+
+    const proc = Bun.spawn(["bun", "run", "src/index.ts", ...args], {
+      stdout: "pipe",
+      stderr: "pipe",
+      cwd: CLI_DIR,
+    });
+
+    const [exitCode, stderr] = await Promise.all([
+      proc.exited,
+      new Response(proc.stderr).text(),
+    ]);
+
+    if (exitCode !== 0) {
+      return {
+        content: [{ type: "text", text: `Error: ${stderr.trim()}` }],
+        isError: true,
+      };
+    }
+
+    return {
+      content: [{ type: "text", text: outputPath }],
+    };
+  },
+);
+
 const transport = new StdioServerTransport();
 await server.connect(transport);

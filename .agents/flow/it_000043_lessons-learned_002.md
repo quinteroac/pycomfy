@@ -53,3 +53,21 @@
 - The `parallax create audio` CLI command accepts `--bpm` and `--lyrics` which are audio-specific; both are mapped in the MCP tool schema.
 - Test files continue using source-code scanning (reading `index.ts` as text) — no running server needed.
 - The `create_audio` tool's default output is `output.wav`; always verify the correct default extension per media type when adding new MCP tools.
+
+## US-004 — Edit Image via MCP Tool
+
+**Summary:** Added `edit_image` MCP tool to `packages/parallax_mcp/src/index.ts`. The tool registers a fully-typed input schema matching all 14 `parallax edit image` options (`model`, `prompt`, `input`, `subjectImage`, `width`, `height`, `steps`, `cfg`, `seed`, `output`, `image2`, `image3`, `noLora`, `modelsDir`), spawns the CLI subprocess via `Bun.spawn`, and returns the resolved output path on success or stderr on failure. 28 tests cover all acceptance criteria.
+
+**Key Decisions:**
+- Followed the exact same pattern as `create_image`, `create_video`, and `create_audio`: `server.registerTool()` with a zod shape (not `z.object()`), `Bun.spawn` with `cwd: CLI_DIR`, and `resolve(input.output ?? "output.png")` for the default output path.
+- `noLora` is a `z.boolean().optional()` field — when truthy, only `"--no-lora"` (no value) is appended to args, matching the commander `--no-lora` boolean flag behavior in the CLI.
+- `subjectImage` maps to `--subject-image` (kebab-case), consistent with commander option naming.
+- `image2` and `image3` map directly to `--image2` and `--image3`.
+
+**Pitfalls Encountered:**
+- None — the pattern from US-001/002/003 was directly reusable with no new issues.
+
+**Useful Context for Future Agents:**
+- The `edit image` CLI command is spawned as `["edit", "image", ...]` — the subcommand structure is `edit image` with flags following.
+- Boolean flags like `--no-lora` must be pushed without a value argument: `args.push("--no-lora")` — not `args.push("--no-lora", "true")`.
+- All 4 MCP tools (`create_image`, `create_video`, `create_audio`, `edit_image`) follow the identical `registerTool → args array → Bun.spawn → exitCode check → return` pattern. Future tools should continue this pattern.
