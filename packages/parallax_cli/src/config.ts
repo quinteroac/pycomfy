@@ -4,6 +4,7 @@ import { homedir } from "os";
 
 export interface ParallaxConfig {
   repoRoot?: string;
+  runtimeDir?: string;
   modelsDir?: string;
   uvPath?: string;
   variant?: string;
@@ -32,6 +33,9 @@ export function readConfig(): ParallaxConfig {
     ...stored,
     ...(process.env.PARALLAX_REPO_ROOT !== undefined && {
       repoRoot: process.env.PARALLAX_REPO_ROOT,
+    }),
+    ...(process.env.PARALLAX_RUNTIME_DIR !== undefined && {
+      runtimeDir: process.env.PARALLAX_RUNTIME_DIR,
     }),
     ...(process.env.PYCOMFY_MODELS_DIR !== undefined && {
       modelsDir: process.env.PYCOMFY_MODELS_DIR,

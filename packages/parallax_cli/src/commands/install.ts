@@ -2,15 +2,29 @@
 // Interactive TTY flow uses @clack/prompts; non-interactive mode (--non-interactive or no TTY) uses flag values / defaults.
 
 import { Command } from "commander";
-import { existsSync } from "fs";
+import { cpSync, existsSync } from "fs";
 import { homedir } from "os";
-import { join } from "path";
+import { dirname, join } from "path";
 import { configExists, readConfig, writeConfig } from "../config";
+
+// In dev mode import.meta.dir resolves to the source directory where runtime/ is a sibling.
+// In a compiled binary import.meta.dir holds the compile-time source path which no longer
+// exists on disk; dirname(process.execPath) gives the directory containing the binary, where
+// the build scripts copy runtime/ during the dist step.
+const _devRuntimeDir = join(import.meta.dir, "../../runtime");
+const BUNDLED_RUNTIME_DIR = existsSync(_devRuntimeDir)
+  ? _devRuntimeDir
+  : join(dirname(process.execPath), "runtime");
+const INSTALLED_RUNTIME_DIR = join(homedir(), ".config", "parallax", "runtime");
 
 const DEFAULT_INSTALL_DIR = join(homedir(), ".parallax");
 const DEFAULT_MODELS_DIR = join(homedir(), "parallax-models");
 const DEFAULT_VARIANT = "cpu";
 const DEFAULT_UV_PATH = join(homedir(), ".local", "bin", "uv");
+
+function copyRuntime(): void {
+  cpSync(BUNDLED_RUNTIME_DIR, INSTALLED_RUNTIME_DIR, { recursive: true, force: true });
+}
 
 interface InstallOpts {
   nonInteractive?: boolean;
@@ -41,12 +55,16 @@ export function registerInstall(program: Command): void {
 async function runNonInteractive(opts: InstallOpts): Promise<void> {
   const { installDir, modelsDir, variant } = opts;
 
+  console.log("[parallax] Copying runtime scripts…");
+  copyRuntime();
+
   applyConfig(installDir, modelsDir, variant);
 
   console.log("[parallax] Installation configured:");
   console.log(`  install-dir: ${installDir}`);
   console.log(`  models-dir:  ${modelsDir}`);
   console.log(`  variant:     ${variant}`);
+  console.log(`  runtime-dir: ${INSTALLED_RUNTIME_DIR}`);
   console.log("[parallax] Configuration saved to ~/.config/parallax/config.json");
 }
 
@@ -97,6 +115,12 @@ async function runInteractive(opts: InstallOpts): Promise<void> {
     process.exit(0);
   }
 
+  // Copy bundled runtime scripts to ~/.config/parallax/runtime/.
+  const rs = spinner();
+  rs.start("Copying runtime scripts…");
+  copyRuntime();
+  rs.stop("Runtime scripts copied.");
+
   // Detect or install uv.
   const uvPath = await detectOrInstallUv(spinner);
 
@@ -136,7 +160,7 @@ async function runInteractive(opts: InstallOpts): Promise<void> {
     uvPath,
   );
 
-  outro("Listo. Ejecuta: parallax create image --help");
+  outro("Done. Run: parallax create image --help");
 }
 
 async function detectOrInstallUv(
@@ -172,6 +196,7 @@ function applyConfig(installDir: string, modelsDir: string, variant: string, uvP
     repoRoot: installDir,
     modelsDir,
     variant,
+    runtimeDir: INSTALLED_RUNTIME_DIR,
     installedAt: new Date().toISOString(),
     ...(uvPath !== undefined && { uvPath }),
   });
