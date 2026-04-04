@@ -2973,10 +2973,11 @@ describe("parallax CLI — clean entry point (US-008)", () => {
     const lines = src.split("\n").filter((l) => l.trim().length > 0);
     // Under 20 non-blank lines
     expect(lines.length).toBeLessThan(20);
-    // Only the three register calls are present
+    // Only the four register calls are present
     expect(src).toContain("registerInstall");
     expect(src).toContain("registerCreate");
     expect(src).toContain("registerEdit");
+    expect(src).toContain("registerUpscale");
     // No model data or spawnPipeline
     expect(src).not.toContain("spawnPipeline");
     expect(src).not.toContain("MODELS");
@@ -2990,5 +2991,29 @@ describe("parallax CLI — clean entry point (US-008)", () => {
     expect(stdout).toContain("install");
     expect(stdout).toContain("create");
     expect(stdout).toContain("edit");
+  });
+});
+
+describe("parallax CLI — upscale command registration (US-004)", () => {
+  it("US-004-AC01: index.ts imports registerUpscale from ./commands/upscale", async () => {
+    const { readFileSync } = await import("fs");
+    const { join } = await import("path");
+    const src = readFileSync(join(import.meta.dir, "../src/index.ts"), "utf-8");
+    expect(src).toContain('import { registerUpscale } from "./commands/upscale"');
+  });
+
+  it("US-004-AC02: index.ts calls registerUpscale(program) alongside registerCreate and registerEdit", async () => {
+    const { readFileSync } = await import("fs");
+    const { join } = await import("path");
+    const src = readFileSync(join(import.meta.dir, "../src/index.ts"), "utf-8");
+    expect(src).toContain("registerUpscale(program)");
+    expect(src).toContain("registerCreate(program)");
+    expect(src).toContain("registerEdit(program)");
+  });
+
+  it("US-004-AC03: parallax --help lists upscale as a command", async () => {
+    const { stdout, exitCode } = await runCLI(["--help"]);
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("upscale");
   });
 });
