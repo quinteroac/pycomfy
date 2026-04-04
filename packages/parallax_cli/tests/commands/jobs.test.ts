@@ -19,6 +19,7 @@ import {
   formatJobStatusJson,
   formatCancelledMessage,
   formatAlreadyTerminalMessage,
+  formatNotCompletedMessage,
 } from "../../src/commands/jobs";
 import type { JobSummary } from "@parallax/sdk/list";
 import type { ParallaxJobStatus } from "@parallax/sdk/status";
@@ -397,5 +398,38 @@ describe("US-005-AC03: formatAlreadyTerminalMessage", () => {
     expect(formatAlreadyTerminalMessage("job-99", "failed")).toBe(
       "Job job-99 is already failed — nothing to cancel",
     );
+  });
+});
+
+// ── US-006 open helpers ───────────────────────────────────────────────────────
+
+// US-006-AC02: not-completed message format
+describe("US-006-AC02: formatNotCompletedMessage", () => {
+  it("contains the job id", () => {
+    expect(formatNotCompletedMessage("job-42", "active")).toContain("job-42");
+  });
+
+  it("contains the status", () => {
+    expect(formatNotCompletedMessage("job-42", "active")).toContain("active");
+    expect(formatNotCompletedMessage("job-42", "waiting")).toContain("waiting");
+  });
+
+  it("matches exact format for active status", () => {
+    expect(formatNotCompletedMessage("job-42", "active")).toBe(
+      "Job job-42 is not completed yet (status: active)",
+    );
+  });
+
+  it("matches exact format for waiting status", () => {
+    expect(formatNotCompletedMessage("job-42", "waiting")).toBe(
+      "Job job-42 is not completed yet (status: waiting)",
+    );
+  });
+});
+
+// US-006-AC03: not-found message reused for open command
+describe("US-006-AC03: formatNotFoundMessage (reuse for open)", () => {
+  it("matches 'Job <id> not found' for open context", () => {
+    expect(formatNotFoundMessage("job-42")).toBe("Job job-42 not found");
   });
 });

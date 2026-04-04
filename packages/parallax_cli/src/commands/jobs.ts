@@ -1,4 +1,4 @@
-// jobs command: `parallax jobs list`, `parallax jobs watch <id>`, and `parallax jobs status <id>`
+// jobs command: `parallax jobs list`, `parallax jobs watch <id>`, `parallax jobs status <id>`, and `parallax jobs open <id>`
 
 import { Command } from "commander";
 import { listJobs } from "@parallax/sdk/list";
@@ -263,6 +263,32 @@ export function formatAlreadyTerminalMessage(id: string, status: string): string
   return `Job ${id} is already ${status} — nothing to cancel`;
 }
 
+// ── open command helpers ─────────────────────────────────────────────────────
+
+export function formatNotCompletedMessage(id: string, status: string): string {
+  return `Job ${id} is not completed yet (status: ${status})`;
+}
+
+async function openJobAction(id: string): Promise<void> {
+  const job = await getJobStatus(id);
+
+  if (!job) {
+    process.stdout.write(formatNotFoundMessage(id) + "\n");
+    process.exit(1);
+    return;
+  }
+
+  if (job.status !== "completed") {
+    process.stdout.write(formatNotCompletedMessage(id, job.status) + "\n");
+    process.exit(1);
+    return;
+  }
+
+  const outputPath = job.output ?? "";
+  const opener = process.platform === "darwin" ? "open" : "xdg-open";
+  Bun.spawn([opener, outputPath]);
+}
+
 async function cancelJobAction(id: string): Promise<void> {
   const outcome = await cancelJob(id);
 
@@ -298,6 +324,13 @@ export function registerJobs(program: Command): void {
     .description("Watch a job until it finishes")
     .action(async (id: string) => {
       await watchJobAction(id);
+    });
+
+  jobs
+    .command("open <id>")
+    .description("Open the output file of a completed job in the default application")
+    .action(async (id: string) => {
+      await openJobAction(id);
     });
 
   jobs

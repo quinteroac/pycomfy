@@ -92,3 +92,21 @@
 **Useful Context for Future Agents:**
 - `CancelJobOutcome` is now `true | null | "completed" | "failed"` (no `"terminal"` anymore). Any consumer that checks `=== "terminal"` needs updating; the ms handler was updated to use `!== true`.
 - The CLI cancel command correctly exits with code 1 for not-found and code 0 for already-terminal (per AC02/AC03). The `process.exit(1)` is only called in the not-found path.
+
+## US-006 — parallax jobs open <id>
+
+**Summary:** Added `parallax jobs open <id>` command to the `jobs` group. It fetches the job via `getJobStatus()`, guards for not-found (exit 1) and non-completed status (exit 1 with status in message), then calls `Bun.spawn(["xdg-open", outputPath])` on Linux or `Bun.spawn(["open", outputPath])` on macOS via `process.platform === "darwin"` check.
+
+**Key Decisions:**
+- Reused `getJobStatus()` (one-shot singleton pattern) — safe because no polling is needed.
+- Reused `formatNotFoundMessage()` from US-003/005 — consistent message format across all job subcommands.
+- Added `formatNotCompletedMessage(id, status)` as a pure exported helper for testability.
+- Platform detection uses `process.platform === "darwin"` to pick `"open"` vs `"xdg-open"`.
+
+**Pitfalls Encountered:**
+- None. The pattern was well-established by US-003/004/005; this story was a straightforward extension.
+
+**Useful Context for Future Agents:**
+- `job.output` from `ParallaxJobStatus` holds the `outputPath` string (or null). Always guard for null before passing to `Bun.spawn`.
+- `Bun.spawn` is a global in the Bun runtime — no import needed.
+- The `openJobAction` uses `getJobStatus()` (one-shot, singleton close-after-use) which is correct for non-polling use cases.
