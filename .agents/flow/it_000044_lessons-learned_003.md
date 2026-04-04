@@ -17,3 +17,23 @@
 - The existing test suite has several pre-existing failures in `tests/index.test.ts` where tests assert `"Error: PARALLAX_REPO_ROOT is required"` but the actual error from `runner.ts` is the longer message `"Error: no script directory configured — run \`parallax install\` to set runtimeDir, or set PARALLAX_REPO_ROOT"`. Do not fix these unless explicitly tasked — they are integration tests for a different US.
 - The CLI testing pattern is: test pure helper functions directly (no mocking, no spawning). Action handlers that call `process.exit` are validated via `bun typecheck` and integration tests in `tests/index.test.ts`. Follow this pattern for any future story touching command handlers.
 - `@parallax/sdk` now has subpath exports in `package.json`. Adding a new file to the SDK requires adding a corresponding entry in the `exports` map.
+
+## US-002 — parallax jobs list
+
+**Summary:** Added `parallax jobs list` command that fetches up to 20 most-recent jobs from the bunqueue queue via `listJobs({ limit: 20 })` from `@parallax/sdk/list`, then renders a formatted table with columns ID, Status, Action, Model, Progress, Started, Duration. Status is color-coded with ANSI escape codes. When no jobs exist, a guidance message is printed.
+
+**Key Decisions:**
+- Used raw ANSI escape codes (`\x1b[2m`, `\x1b[36m`, `\x1b[32m`, `\x1b[31m`) directly instead of pulling in `picocolors` as an explicit dep. `picocolors` is only a transitive dep of `@clack/prompts`; importing it directly would add an implicit dependency not in `package.json`.
+- Extracted all pure helpers (`colorStatus`, `formatStarted`, `buildRows`, `formatJobsTable`, `EMPTY_MESSAGE`) so they can be unit-tested without spawning processes or touching the queue.
+- `visibleLength()` strips ANSI codes before measuring string width for column alignment — critical for correct padding when status cells contain escape sequences.
+- `formatJobsTable` is the main tested function: it takes `JobSummary[]` and returns a string, making it trivially testable.
+- The `Duration` column shows `—` for all jobs because `JobSummary` has no `endedAt`/`completedAt` field. This is intentional and correct given the current SDK data model.
+
+**Pitfalls Encountered:**
+- None significant. The SDK already exports `listJobs` with `limit` support from `@parallax/sdk/list` (already in the `exports` map), so no SDK changes were needed.
+
+**Useful Context for Future Agents:**
+- `JobSummary` (from `@parallax/sdk/list`) has: `id`, `status`, `progress`, `model`, `action`, `media`, `createdAt`. No end-time field exists yet.
+- `listJobs({ limit: 20 })` already sorts newest-first and enforces the limit — the CLI does not need to re-sort or re-slice.
+- All ANSI color codes used: dim=`\x1b[2m`, cyan=`\x1b[36m`, green=`\x1b[32m`, red=`\x1b[31m`, reset=`\x1b[0m`.
+- The `tsconfig.json` for the CLI only includes `src/`, not `tests/` — test files are type-checked by bun test itself, not `tsc --noEmit`. This means typecheck in tests only catches obvious errors; full type safety is in `src/`.

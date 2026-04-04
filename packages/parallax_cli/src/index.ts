@@ -5,6 +5,7 @@ import { registerCreate } from "./commands/create";
 import { registerEdit } from "./commands/edit";
 import { registerUpscale } from "./commands/upscale";
 import { registerMcp } from "./commands/mcp";
+import { registerJobs } from "./commands/jobs";
 import { formatRequiredFlagError } from "./utils";
 
 const program = new Command();
@@ -19,5 +20,6 @@ registerCreate(program);
 registerEdit(program);
 registerUpscale(program);
 registerMcp(program);
+registerJobs(program);
 if (process.argv.length <= 2) program.help();
 program.parse();
