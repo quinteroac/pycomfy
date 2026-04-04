@@ -56,3 +56,22 @@
 - `@parallax/cli` already depends on `bunqueue` directly (in `package.json` dependencies), so importing `Queue` from `bunqueue/client` inside CLI code is safe and does not add a new dependency.
 - The `getQueue()` singleton in `@parallax/sdk/queue.ts` is NOT reset after `close()`. If you call `close()` on it and then call `getQueue()` again, you get the same closed instance. For any polling or long-lived queue consumer, bypass the singleton and construct `new Queue(...)` directly with the same `dbPath` configuration.
 - `ParallaxJobResult` from `@parallax/sdk/jobs` is `{ outputPath: string }`. Access `job.returnvalue as ParallaxJobResult` after a completed state check.
+
+## US-004 — parallax jobs status \<id\>
+
+**Summary:** Added `parallax jobs status <id>` command to the `jobs` group in `src/commands/jobs.ts`. Prints a structured block with `id`, `status`, `progress`, `model`, `action`, `output` (or `error`), `startedAt`, `finishedAt`. Supports `--json` flag for machine-readable output. Exits 1 for failed jobs or missing job IDs.
+
+**Key Decisions:**
+- Extended `ParallaxJobStatus` type in `@parallax/sdk/status.ts` to add `model` and `action` fields (sourced from `job.data as ParallaxJobData`). Also fixed `output` to use `job.returnvalue?.outputPath` (via cast) instead of `String(job.returnvalue)` which produced `[object Object]` — pre-existing bug.
+- Removed `createdAt` from `ParallaxJobStatus` (was unused in the one-shot status display; `startedAt` and `finishedAt` are the relevant timestamps per the AC).
+- `statusJobAction` uses `getJobStatus()` from `@parallax/sdk/status` directly (one-shot, no polling), so the singleton close-after-use pattern is fine here — no need to create a dedicated Queue instance.
+- Pure helpers `formatJobStatus` and `formatJobStatusJson` exported for testability following established CLI convention.
+- `formatJobStatusJson` omits the `output` key entirely when `error` is non-null (uses `undefined`), ensuring clean JSON with no `null` noise.
+
+**Pitfalls Encountered:**
+- Removing `createdAt` from `ParallaxJobStatus` is a breaking change to the type. Any consumers that relied on `status.createdAt` will get a TypeScript error. Check `parallax_ms` if it uses `getJobStatus` directly.
+
+**Useful Context for Future Agents:**
+- The `getJobStatus()` singleton close-after-use pattern IS safe for one-shot calls (the queue is fully usable until `.close()` is called). Only polling/long-lived consumers need a dedicated Queue instance (as established in US-003).
+- `ParallaxJobStatus` no longer has `createdAt` — use `startedAt` (maps to `job.processedOn`) or `finishedAt` (maps to `job.finishedOn`).
+- `formatJobStatusJson` uses `undefined` for absent/mutually-exclusive fields — these are omitted from `JSON.stringify` output automatically.

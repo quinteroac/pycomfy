@@ -1,9 +1,11 @@
-// jobs command: `parallax jobs list` and `parallax jobs watch <id>`
+// jobs command: `parallax jobs list`, `parallax jobs watch <id>`, and `parallax jobs status <id>`
 
 import { Command } from "commander";
 import { listJobs } from "@parallax/sdk/list";
+import { getJobStatus } from "@parallax/sdk/status";
 import type { JobSummary, JobStatusValue } from "@parallax/sdk/list";
 import type { ParallaxJobData, ParallaxJobResult } from "@parallax/sdk/jobs";
+import type { ParallaxJobStatus } from "@parallax/sdk/status";
 
 export const EMPTY_MESSAGE =
   "No jobs found. Run a command with --async to submit one.";
@@ -194,6 +196,64 @@ async function watchJobAction(id: string): Promise<void> {
   await queue.close();
 }
 
+// ── status command helpers ───────────────────────────────────────────────────
+
+function formatTimestamp(ts: number | null): string {
+  if (ts === null) return "—";
+  return new Date(ts).toISOString();
+}
+
+export function formatJobStatus(job: ParallaxJobStatus): string {
+  const lines: string[] = [
+    `id:         ${job.id}`,
+    `status:     ${job.status}`,
+    `progress:   ${job.progress}%`,
+    `model:      ${job.model ?? "—"}`,
+    `action:     ${job.action ?? "—"}`,
+  ];
+  if (job.error != null) {
+    lines.push(`error:      ${job.error}`);
+  } else {
+    lines.push(`output:     ${job.output ?? "—"}`);
+  }
+  lines.push(`startedAt:  ${formatTimestamp(job.startedAt)}`);
+  lines.push(`finishedAt: ${formatTimestamp(job.finishedAt)}`);
+  return lines.join("\n");
+}
+
+export function formatJobStatusJson(job: ParallaxJobStatus): string {
+  return JSON.stringify({
+    id: job.id,
+    status: job.status,
+    progress: job.progress,
+    model: job.model,
+    action: job.action,
+    output: job.error == null ? job.output : undefined,
+    error: job.error ?? undefined,
+    startedAt: job.startedAt,
+    finishedAt: job.finishedAt,
+  });
+}
+
+async function statusJobAction(id: string, opts: { json?: boolean }): Promise<void> {
+  const job = await getJobStatus(id);
+  if (!job) {
+    process.stderr.write(`Job ${id} not found\n`);
+    process.exit(1);
+    return;
+  }
+
+  if (opts.json) {
+    console.log(formatJobStatusJson(job));
+  } else {
+    console.log(formatJobStatus(job));
+  }
+
+  if (job.status === "failed") {
+    process.exit(1);
+  }
+}
+
 export function registerJobs(program: Command): void {
   const jobs = program
     .command("jobs")
@@ -212,5 +272,13 @@ export function registerJobs(program: Command): void {
     .description("Watch a job until it finishes")
     .action(async (id: string) => {
       await watchJobAction(id);
+    });
+
+  jobs
+    .command("status <id>")
+    .description("Print a one-shot status block for a job")
+    .option("--json", "Output as JSON")
+    .action(async (id: string, opts: { json?: boolean }) => {
+      await statusJobAction(id, opts);
     });
 }

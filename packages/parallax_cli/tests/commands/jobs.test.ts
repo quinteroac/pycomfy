@@ -15,8 +15,11 @@ import {
   formatDoneLine,
   formatFailLine,
   formatNotFoundMessage,
+  formatJobStatus,
+  formatJobStatusJson,
 } from "../../src/commands/jobs";
 import type { JobSummary } from "@parallax/sdk/list";
+import type { ParallaxJobStatus } from "@parallax/sdk/status";
 
 // --- helpers ---
 
@@ -233,5 +236,116 @@ describe("US-003-AC05: formatNotFoundMessage", () => {
 
   it("matches exact format 'Job <id> not found'", () => {
     expect(formatNotFoundMessage("abc-123")).toBe("Job abc-123 not found");
+  });
+});
+
+// ── US-004 status helpers ─────────────────────────────────────────────────────
+
+function makeJobStatus(overrides: Partial<ParallaxJobStatus> = {}): ParallaxJobStatus {
+  return {
+    id: "job-42",
+    status: "completed",
+    progress: 100,
+    model: "sdxl",
+    action: "create",
+    output: "/tmp/output.png",
+    error: null,
+    startedAt: 1700000000000,
+    finishedAt: 1700000060000,
+    ...overrides,
+  };
+}
+
+// US-004-AC01: structured block fields
+describe("US-004-AC01: formatJobStatus block", () => {
+  const job = makeJobStatus();
+  const block = formatJobStatus(job);
+
+  it("contains id", () => {
+    expect(block).toContain("job-42");
+  });
+
+  it("contains status", () => {
+    expect(block).toContain("completed");
+  });
+
+  it("contains progress", () => {
+    expect(block).toContain("100%");
+  });
+
+  it("contains model", () => {
+    expect(block).toContain("sdxl");
+  });
+
+  it("contains action", () => {
+    expect(block).toContain("create");
+  });
+
+  it("contains output when no error", () => {
+    expect(block).toContain("/tmp/output.png");
+  });
+
+  it("contains startedAt as ISO string", () => {
+    expect(block).toContain(new Date(1700000000000).toISOString());
+  });
+
+  it("contains finishedAt as ISO string", () => {
+    expect(block).toContain(new Date(1700000060000).toISOString());
+  });
+
+  it("shows error field when job has an error", () => {
+    const failed = makeJobStatus({ error: "OOM error", output: null, status: "failed" });
+    const failBlock = formatJobStatus(failed);
+    expect(failBlock).toContain("OOM error");
+    expect(failBlock).not.toContain("output:");
+  });
+
+  it("shows dashes for null model/action/output", () => {
+    const minimal = makeJobStatus({ model: null, action: null, output: null });
+    const out = formatJobStatus(minimal);
+    expect(out).toContain("—");
+  });
+
+  it("shows — for null startedAt/finishedAt", () => {
+    const pending = makeJobStatus({ startedAt: null, finishedAt: null });
+    const out = formatJobStatus(pending);
+    // Two dashes for the two null timestamps
+    expect(out.split("—").length - 1).toBeGreaterThanOrEqual(2);
+  });
+});
+
+// US-004-AC02: --json output is valid JSON with correct fields
+describe("US-004-AC02: formatJobStatusJson", () => {
+  it("produces valid JSON", () => {
+    const job = makeJobStatus();
+    const json = formatJobStatusJson(job);
+    expect(() => JSON.parse(json)).not.toThrow();
+  });
+
+  it("contains all required fields", () => {
+    const job = makeJobStatus();
+    const parsed = JSON.parse(formatJobStatusJson(job));
+    expect(parsed).toHaveProperty("id", "job-42");
+    expect(parsed).toHaveProperty("status", "completed");
+    expect(parsed).toHaveProperty("progress", 100);
+    expect(parsed).toHaveProperty("model", "sdxl");
+    expect(parsed).toHaveProperty("action", "create");
+    expect(parsed).toHaveProperty("output", "/tmp/output.png");
+    expect(parsed).toHaveProperty("startedAt", 1700000000000);
+    expect(parsed).toHaveProperty("finishedAt", 1700000060000);
+  });
+
+  it("includes error field (not output) when job failed", () => {
+    const job = makeJobStatus({ error: "OOM error", output: null, status: "failed" });
+    const parsed = JSON.parse(formatJobStatusJson(job));
+    expect(parsed).toHaveProperty("error", "OOM error");
+    expect(parsed).not.toHaveProperty("output");
+  });
+
+  it("produces a single JSON object (no extra text)", () => {
+    const json = formatJobStatusJson(makeJobStatus());
+    const trimmed = json.trim();
+    expect(trimmed.startsWith("{")).toBe(true);
+    expect(trimmed.endsWith("}")).toBe(true);
   });
 });
