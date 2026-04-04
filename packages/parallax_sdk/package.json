@@ -6,7 +6,11 @@
   "scripts": {
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "bunqueue": "^2.6.113"
+  },
   "devDependencies": {
+    "bun-types": "latest",
     "typescript": "^5.0.0"
   }
 }

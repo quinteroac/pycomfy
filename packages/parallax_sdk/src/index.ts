@@ -2,3 +2,4 @@
 
 export * from "./types";
 export * from "./jobs";
+export * from "./queue";
