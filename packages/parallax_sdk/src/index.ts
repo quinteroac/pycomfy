@@ -4,3 +4,4 @@ export * from "./types";
 export * from "./jobs";
 export * from "./queue";
 export * from "./submit";
+export * from "./status";

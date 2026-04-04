@@ -1,5 +1,5 @@
 import { Elysia, t } from "elysia";
-import { submitJob } from "@parallax/sdk";
+import { submitJob, getJobStatus } from "@parallax/sdk";
 import type { ParallaxJobData } from "@parallax/sdk";
 
 // Script registry — mirrors parallax_cli/src/models/registry.ts
@@ -51,6 +51,16 @@ export const app = new Elysia()
       set.status = 400;
       return { error: error.message };
     }
+  })
+
+  // US-002: GET /jobs/:id — poll job status
+  .get("/jobs/:id", async ({ params, set }) => {
+    const status = await getJobStatus(params.id);
+    if (!status) {
+      set.status = 404;
+      return { error: "Job not found" };
+    }
+    return status;
   })
 
   // AC01: POST /jobs/create/image
