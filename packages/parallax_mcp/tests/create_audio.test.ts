@@ -1,4 +1,4 @@
-// Tests for US-003: create_audio MCP tool.
+// Tests for US-001: create_audio MCP tool — non-blocking job submission.
 
 import { describe, it, expect } from "bun:test";
 import { readFileSync } from "fs";
@@ -6,9 +6,50 @@ import { join } from "path";
 
 const SRC = readFileSync(join(import.meta.dir, "../src/index.ts"), "utf-8");
 
-// ── AC01: create_audio tool is registered with the correct input schema ────────
+// ── AC01: create_audio calls submitJob ────────────────────────────────────────
 
-describe("US-003-AC01: create_audio tool registration", () => {
+describe("US-001-AC01: create_audio calls submitJob", () => {
+  it("imports submitJob from @parallax/sdk/submit", () => {
+    expect(SRC).toContain("submitJob");
+    expect(SRC).toContain("@parallax/sdk/submit");
+  });
+
+  it("does not use Bun.spawn subprocess pattern", () => {
+    expect(SRC).not.toContain("Bun.spawn");
+  });
+});
+
+// ── AC02: create_audio returns job_id response ────────────────────────────────
+
+describe("US-001-AC02: create_audio returns job_id response", () => {
+  it("response text contains job_id:", () => {
+    expect(SRC).toContain("job_id:");
+  });
+
+  it("response text contains status: queued", () => {
+    expect(SRC).toContain("status: queued");
+  });
+});
+
+// ── AC03: description mentions job ID ─────────────────────────────────────────
+
+describe("US-001-AC03: create_audio description mentions job ID", () => {
+  it("description says Returns a job ID immediately", () => {
+    expect(SRC).toContain("Returns a job ID immediately");
+  });
+});
+
+// ── AC04: Bun.spawn is removed ────────────────────────────────────────────────
+
+describe("US-001-AC04: Bun.spawn removed", () => {
+  it("Bun.spawn is not present in index.ts", () => {
+    expect(SRC).not.toContain("Bun.spawn");
+  });
+});
+
+// ── Schema fields ─────────────────────────────────────────────────────────────
+
+describe("US-001 schema: create_audio fields", () => {
   it("registers a tool named create_audio", () => {
     expect(SRC).toContain('"create_audio"');
   });
@@ -54,90 +95,19 @@ describe("US-003-AC01: create_audio tool registration", () => {
   });
 });
 
-// ── AC02: tool spawns bun run src/index.ts create audio via Bun.spawn ─────────
+// ── Script registry and arg mapping ───────────────────────────────────────────
 
-describe("US-003-AC02: spawn command structure", () => {
-  it("uses Bun.spawn to invoke the CLI", () => {
-    expect(SRC).toContain("Bun.spawn");
+describe("US-001 script registry: AUDIO_CREATE_SCRIPTS", () => {
+  it("contains ace_step script path", () => {
+    expect(SRC).toContain("runtime/audio/ace/t2a.py");
   });
 
-  it("spawns bun run src/index.ts", () => {
-    expect(SRC).toContain('"bun"');
-    expect(SRC).toContain('"run"');
-    expect(SRC).toContain('"src/index.ts"');
+  it("remaps --prompt to --tags for audio scripts", () => {
+    expect(SRC).toContain('"--tags"');
   });
 
-  it("passes create audio subcommand", () => {
-    expect(SRC).toContain('"create"');
-    expect(SRC).toContain('"audio"');
-  });
-
-  it("passes --model flag from input", () => {
-    expect(SRC).toContain('"--model"');
-    expect(SRC).toContain("input.model");
-  });
-
-  it("passes --prompt flag from input", () => {
-    expect(SRC).toContain('"--prompt"');
-    expect(SRC).toContain("input.prompt");
-  });
-
-  it("passes optional flags when provided", () => {
-    expect(SRC).toContain('"--length"');
-    expect(SRC).toContain('"--steps"');
-    expect(SRC).toContain('"--cfg"');
-    expect(SRC).toContain('"--bpm"');
-    expect(SRC).toContain('"--lyrics"');
-    expect(SRC).toContain('"--seed"');
-    expect(SRC).toContain('"--output"');
-    expect(SRC).toContain('"--models-dir"');
-  });
-
-  it("uses CLI_DIR as cwd for spawn", () => {
-    expect(SRC).toContain("CLI_DIR");
-    expect(SRC).toContain("parallax_cli");
-  });
-
-  it("returns output path on success", () => {
-    expect(SRC).toContain("output.wav");
-    expect(SRC).toContain("outputPath");
-  });
-
-  it("returns stderr on failure with isError", () => {
-    expect(SRC).toContain("exitCode !== 0");
-    expect(SRC).toContain("isError: true");
+  it("remaps --length to --duration for audio scripts", () => {
+    expect(SRC).toContain('"--duration"');
   });
 });
 
-// ── Functional: spawn subprocess success/failure ───────────────────────────────
-
-describe("US-003 functional: subprocess behaviour", () => {
-  it("returns error result when CLI exits non-zero", async () => {
-    Bun.write("/tmp/_mcp_audio_test_fail.ts", `process.stderr.write("audio pipeline failed\\n"); process.exit(1);`);
-
-    const proc = Bun.spawn(["bun", "run", "/tmp/_mcp_audio_test_fail.ts"], {
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-
-    const [exitCode, stderr] = await Promise.all([
-      proc.exited,
-      new Response(proc.stderr).text(),
-    ]);
-
-    expect(exitCode).toBe(1);
-    expect(stderr.trim()).toBe("audio pipeline failed");
-  });
-
-  it("returns success result when CLI exits zero", async () => {
-    Bun.write("/tmp/_mcp_audio_test_ok.ts", `process.exit(0);`);
-
-    const proc = Bun.spawn(["bun", "run", "/tmp/_mcp_audio_test_ok.ts"], {
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-
-    const exitCode = await proc.exited;
-    expect(exitCode).toBe(0);
-  });
-});

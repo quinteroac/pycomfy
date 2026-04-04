@@ -1,4 +1,4 @@
-// Tests for US-001: create_image MCP tool.
+// Tests for US-001-AC01–AC05: create_image MCP tool — non-blocking job submission.
 
 import { describe, it, expect } from "bun:test";
 import { readFileSync } from "fs";
@@ -6,9 +6,58 @@ import { join } from "path";
 
 const SRC = readFileSync(join(import.meta.dir, "../src/index.ts"), "utf-8");
 
-// ── AC01: create_image tool is registered with the correct input schema ────────
+// ── AC01: create_image calls submitJob from @parallax/sdk/submit ──────────────
 
-describe("US-001-AC01: create_image tool registration", () => {
+describe("US-001-AC01: create_image calls submitJob", () => {
+  it("imports submitJob from @parallax/sdk/submit", () => {
+    expect(SRC).toContain("submitJob");
+    expect(SRC).toContain("@parallax/sdk/submit");
+  });
+
+  it("does not use Bun.spawn subprocess pattern", () => {
+    expect(SRC).not.toContain("Bun.spawn");
+  });
+});
+
+// ── AC02: create_image returns job_id response immediately ────────────────────
+
+describe("US-001-AC02: create_image returns job_id response", () => {
+  it("response contains job_id:", () => {
+    expect(SRC).toContain("job_id:");
+  });
+
+  it("response contains status: queued", () => {
+    expect(SRC).toContain("status: queued");
+  });
+
+  it("response contains model:", () => {
+    expect(SRC).toContain("model: ${input.model}");
+  });
+});
+
+// ── AC03: tool descriptions mention job ID ────────────────────────────────────
+
+describe("US-001-AC03: create_image description mentions job ID", () => {
+  it("description mentions Returns a job ID", () => {
+    expect(SRC).toContain("Returns a job ID immediately");
+  });
+});
+
+// ── AC04: Bun.spawn subprocess pattern is removed ────────────────────────────
+
+describe("US-001-AC04: Bun.spawn removed from index.ts", () => {
+  it("Bun.spawn is not present anywhere in index.ts", () => {
+    expect(SRC).not.toContain("Bun.spawn");
+  });
+
+  it("CLI_DIR is not present (no subprocess CLI invocation)", () => {
+    expect(SRC).not.toContain("CLI_DIR");
+  });
+});
+
+// ── Schema fields still present ───────────────────────────────────────────────
+
+describe("US-001 schema: create_image fields", () => {
   it("registers a tool named create_image", () => {
     expect(SRC).toContain('"create_image"');
   });
@@ -54,111 +103,19 @@ describe("US-001-AC01: create_image tool registration", () => {
   });
 });
 
-// ── AC02: tool spawns bun run src/index.ts create image via Bun.spawn ──────────
+// ── Script registry ───────────────────────────────────────────────────────────
 
-describe("US-001-AC02: spawn command structure", () => {
-  it("uses Bun.spawn to invoke the CLI", () => {
-    expect(SRC).toContain("Bun.spawn");
+describe("US-001 script registry: IMAGE_CREATE_SCRIPTS", () => {
+  it("contains sdxl script path", () => {
+    expect(SRC).toContain("runtime/image/generation/sdxl/t2i.py");
   });
 
-  it("spawns bun run src/index.ts", () => {
-    expect(SRC).toContain('"bun"');
-    expect(SRC).toContain('"run"');
-    expect(SRC).toContain('"src/index.ts"');
+  it("contains anima script path", () => {
+    expect(SRC).toContain("runtime/image/generation/anima/t2i.py");
   });
 
-  it("passes create image subcommand", () => {
-    expect(SRC).toContain('"create"');
-    expect(SRC).toContain('"image"');
-  });
-
-  it("passes --model flag from input", () => {
-    expect(SRC).toContain('"--model"');
-    expect(SRC).toContain("input.model");
-  });
-
-  it("passes --prompt flag from input", () => {
-    expect(SRC).toContain('"--prompt"');
-    expect(SRC).toContain("input.prompt");
-  });
-
-  it("passes optional flags when provided", () => {
-    expect(SRC).toContain('"--negative-prompt"');
-    expect(SRC).toContain('"--width"');
-    expect(SRC).toContain('"--height"');
-    expect(SRC).toContain('"--steps"');
-    expect(SRC).toContain('"--cfg"');
-    expect(SRC).toContain('"--seed"');
-    expect(SRC).toContain('"--output"');
-    expect(SRC).toContain('"--models-dir"');
-  });
-
-  it("uses CLI_DIR as cwd for spawn", () => {
-    expect(SRC).toContain("CLI_DIR");
-    expect(SRC).toContain("parallax_cli");
+  it("contains z_image script path", () => {
+    expect(SRC).toContain("runtime/image/generation/z_image/turbo.py");
   });
 });
 
-// ── AC03 + AC04: success and failure path returns ─────────────────────────────
-
-describe("US-001-AC03: success returns output path", () => {
-  it("resolves and returns output path on success", () => {
-    expect(SRC).toContain("outputPath");
-    expect(SRC).toContain("resolve(");
-    expect(SRC).toContain("output.png");
-  });
-
-  it("returns content with text on success", () => {
-    expect(SRC).toContain("content: [{ type: \"text\", text: outputPath }]");
-  });
-});
-
-describe("US-001-AC04: failure returns stderr", () => {
-  it("checks exit code", () => {
-    expect(SRC).toContain("exitCode !== 0");
-  });
-
-  it("returns stderr on non-zero exit", () => {
-    expect(SRC).toContain("stderr");
-    expect(SRC).toContain("isError: true");
-  });
-});
-
-// ── Functional: tool handler invokes CLI and captures result ──────────────────
-
-describe("US-001 functional: tool handler behaviour", () => {
-  it("returns error result when CLI exits non-zero", async () => {
-    // Spawn a fake CLI script that exits with code 1 and writes to stderr
-    const tmpScript = await Bun.file("/tmp/_mcp_test_fail.ts").exists()
-      ? "/tmp/_mcp_test_fail.ts"
-      : (() => {
-          Bun.write("/tmp/_mcp_test_fail.ts", `process.stderr.write("pipeline failed\\n"); process.exit(1);`);
-          return "/tmp/_mcp_test_fail.ts";
-        })();
-
-    const proc = Bun.spawn(["bun", "run", "/tmp/_mcp_test_fail.ts"], {
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-
-    const [exitCode, stderr] = await Promise.all([
-      proc.exited,
-      new Response(proc.stderr).text(),
-    ]);
-
-    expect(exitCode).toBe(1);
-    expect(stderr.trim()).toBe("pipeline failed");
-  });
-
-  it("returns success result when CLI exits zero", async () => {
-    Bun.write("/tmp/_mcp_test_ok.ts", `process.exit(0);`);
-
-    const proc = Bun.spawn(["bun", "run", "/tmp/_mcp_test_ok.ts"], {
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-
-    const exitCode = await proc.exited;
-    expect(exitCode).toBe(0);
-  });
-});

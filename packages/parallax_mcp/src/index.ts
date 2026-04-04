@@ -1,20 +1,64 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { resolve, join } from "path";
+import { submitJob } from "@parallax/sdk/submit";
+import type { ParallaxJobData } from "@parallax/sdk";
 
 const server = new McpServer({
   name: "parallax-mcp",
   version: "0.1.0",
 });
 
-// Absolute path to the @parallax/cli package directory.
-const CLI_DIR = resolve(join(import.meta.dir, "../../parallax_cli"));
+// Script registries — mirrors parallax_cli/src/models/registry.ts
+const IMAGE_CREATE_SCRIPTS: Record<string, string> = {
+  sdxl:       "runtime/image/generation/sdxl/t2i.py",
+  anima:      "runtime/image/generation/anima/t2i.py",
+  z_image:    "runtime/image/generation/z_image/turbo.py",
+  flux_klein: "runtime/image/generation/flux/4b_distilled.py",
+  qwen:       "runtime/image/generation/qwen/layered_t2l.py",
+};
+
+const IMAGE_EDIT_SCRIPTS: Record<string, string> = {
+  flux_4b_base:      "runtime/image/edit/flux/4b_base.py",
+  flux_4b_distilled: "runtime/image/edit/flux/4b_distilled.py",
+  flux_9b_base:      "runtime/image/edit/flux/9b_base.py",
+  flux_9b_distilled: "runtime/image/edit/flux/9b_distilled.py",
+  flux_9b_kv:        "runtime/image/edit/flux/9b_kv.py",
+  qwen:              "runtime/image/edit/qwen/edit_2511.py",
+};
+
+const IMAGE_UPSCALE_SCRIPTS: Record<string, string> = {
+  esrgan:         "runtime/image/edit/sd/esrgan_upscale.py",
+  latent_upscale: "runtime/image/edit/sd/latent_upscale.py",
+};
+
+const VIDEO_CREATE_SCRIPTS: Record<string, { t2v: string; i2v?: string }> = {
+  ltx2:  { t2v: "runtime/video/ltx/ltx2/t2v.py",  i2v: "runtime/video/ltx/ltx2/i2v.py"  },
+  ltx23: { t2v: "runtime/video/ltx/ltx23/t2v.py", i2v: "runtime/video/ltx/ltx23/i2v.py" },
+  wan21: { t2v: "runtime/video/wan/wan21/t2v.py",  i2v: "runtime/video/wan/wan21/i2v.py"  },
+  wan22: { t2v: "runtime/video/wan/wan22/t2v.py",  i2v: "runtime/video/wan/wan22/i2v.py"  },
+};
+
+const AUDIO_CREATE_SCRIPTS: Record<string, string> = {
+  ace_step: "runtime/audio/ace/t2a.py",
+};
+
+function getScriptBase(): string {
+  return process.env.PARALLAX_RUNTIME_DIR ?? process.env.PARALLAX_REPO_ROOT ?? process.cwd();
+}
+
+function getUvPath(): string {
+  return process.env.PARALLAX_UV_PATH ?? "uv";
+}
+
+function getModelsDir(override?: string): string {
+  return override ?? process.env.PYCOMFY_MODELS_DIR ?? "";
+}
 
 server.registerTool(
   "create_image",
   {
-    description: "Generate an image using the Parallax pipeline (parallax create image)",
+    description: "Generate an image using the Parallax pipeline (parallax create image). Returns a job ID immediately — use get_job_status to poll for the output path.",
     inputSchema: {
       model:          z.string().describe("Model to use (e.g. sdxl, anima, z_image, flux_klein)"),
       prompt:         z.string().describe("Text prompt describing the image to generate"),
@@ -29,38 +73,31 @@ server.registerTool(
     },
   },
   async (input) => {
-    const args: string[] = ["create", "image", "--model", input.model, "--prompt", input.prompt];
-    if (input.negativePrompt) args.push("--negative-prompt", input.negativePrompt);
-    if (input.width)          args.push("--width",           input.width);
-    if (input.height)         args.push("--height",          input.height);
-    if (input.steps)          args.push("--steps",           input.steps);
-    if (input.cfg)            args.push("--cfg",             input.cfg);
-    if (input.seed)           args.push("--seed",            input.seed);
-    if (input.output)         args.push("--output",          input.output);
-    if (input.modelsDir)      args.push("--models-dir",      input.modelsDir);
-
-    const outputPath = resolve(input.output ?? "output.png");
-
-    const proc = Bun.spawn(["bun", "run", "src/index.ts", ...args], {
-      stdout: "pipe",
-      stderr: "pipe",
-      cwd: CLI_DIR,
-    });
-
-    const [exitCode, stderr] = await Promise.all([
-      proc.exited,
-      new Response(proc.stderr).text(),
-    ]);
-
-    if (exitCode !== 0) {
-      return {
-        content: [{ type: "text", text: `Error: ${stderr.trim()}` }],
-        isError: true,
-      };
+    const modelsDir = getModelsDir(input.modelsDir);
+    const args: string[] = ["--models-dir", modelsDir, "--prompt", input.prompt];
+    if (input.model !== "z_image") {
+      if (input.negativePrompt) args.push("--negative-prompt", input.negativePrompt);
     }
+    if (input.width)  args.push("--width",  input.width);
+    if (input.height) args.push("--height", input.height);
+    if (input.steps)  args.push("--steps",  input.steps);
+    if (input.model !== "z_image" && input.cfg) args.push("--cfg", input.cfg);
+    if (input.seed)   args.push("--seed",   input.seed);
+    args.push("--output", input.output ?? "output.png");
 
+    const data: ParallaxJobData = {
+      action:     "create",
+      media:      "image",
+      model:      input.model,
+      script:     IMAGE_CREATE_SCRIPTS[input.model] ?? "",
+      args,
+      scriptBase: getScriptBase(),
+      uvPath:     getUvPath(),
+    };
+
+    const jobId = await submitJob(data);
     return {
-      content: [{ type: "text", text: outputPath }],
+      content: [{ type: "text", text: `job_id: ${jobId}\nstatus: queued\nmodel: ${input.model}` }],
     };
   },
 );
@@ -68,7 +105,7 @@ server.registerTool(
 server.registerTool(
   "create_video",
   {
-    description: "Generate a video using the Parallax pipeline (parallax create video)",
+    description: "Generate a video using the Parallax pipeline (parallax create video). Returns a job ID immediately — use get_job_status to poll for the output path.",
     inputSchema: {
       model:     z.string().describe("Model to use (e.g. ltx2, ltx23, wan21, wan22)"),
       prompt:    z.string().describe("Text prompt describing the video to generate"),
@@ -84,39 +121,34 @@ server.registerTool(
     },
   },
   async (input) => {
-    const args: string[] = ["create", "video", "--model", input.model, "--prompt", input.prompt];
-    if (input.input)     args.push("--input",      input.input);
-    if (input.width)     args.push("--width",      input.width);
-    if (input.height)    args.push("--height",     input.height);
-    if (input.length)    args.push("--length",     input.length);
-    if (input.steps)     args.push("--steps",      input.steps);
-    if (input.cfg)       args.push("--cfg",        input.cfg);
-    if (input.seed)      args.push("--seed",       input.seed);
-    if (input.output)    args.push("--output",     input.output);
-    if (input.modelsDir) args.push("--models-dir", input.modelsDir);
+    const modelsDir = getModelsDir(input.modelsDir);
+    const cfg = VIDEO_CREATE_SCRIPTS[input.model];
+    const useI2v = input.input !== undefined && cfg?.i2v !== undefined;
+    const script = cfg ? (useI2v ? cfg.i2v! : cfg.t2v) : "";
 
-    const outputPath = resolve(input.output ?? "output.mp4");
+    const args: string[] = ["--models-dir", modelsDir, "--prompt", input.prompt];
+    if (useI2v) args.push("--image", input.input!);
+    if (input.width)  args.push("--width",  input.width);
+    if (input.height) args.push("--height", input.height);
+    if (input.length) args.push("--length", input.length);
+    if (input.steps)  args.push("--steps",  input.steps);
+    if (input.cfg)    args.push("--cfg",    input.cfg);
+    if (input.seed)   args.push("--seed",   input.seed);
+    args.push("--output", input.output ?? "output.mp4");
 
-    const proc = Bun.spawn(["bun", "run", "src/index.ts", ...args], {
-      stdout: "pipe",
-      stderr: "pipe",
-      cwd: CLI_DIR,
-    });
+    const data: ParallaxJobData = {
+      action:     "create",
+      media:      "video",
+      model:      input.model,
+      script,
+      args,
+      scriptBase: getScriptBase(),
+      uvPath:     getUvPath(),
+    };
 
-    const [exitCode, stderr] = await Promise.all([
-      proc.exited,
-      new Response(proc.stderr).text(),
-    ]);
-
-    if (exitCode !== 0) {
-      return {
-        content: [{ type: "text", text: `Error: ${stderr.trim()}` }],
-        isError: true,
-      };
-    }
-
+    const jobId = await submitJob(data);
     return {
-      content: [{ type: "text", text: outputPath }],
+      content: [{ type: "text", text: `job_id: ${jobId}\nstatus: queued\nmodel: ${input.model}` }],
     };
   },
 );
@@ -124,7 +156,7 @@ server.registerTool(
 server.registerTool(
   "create_audio",
   {
-    description: "Generate audio using the Parallax pipeline (parallax create audio)",
+    description: "Generate audio using the Parallax pipeline (parallax create audio). Returns a job ID immediately — use get_job_status to poll for the output path.",
     inputSchema: {
       model:     z.string().describe("Model to use (e.g. ace_step)"),
       prompt:    z.string().describe("Text prompt describing the audio to generate"),
@@ -139,38 +171,29 @@ server.registerTool(
     },
   },
   async (input) => {
-    const args: string[] = ["create", "audio", "--model", input.model, "--prompt", input.prompt];
-    if (input.length)    args.push("--length",     input.length);
-    if (input.steps)     args.push("--steps",      input.steps);
-    if (input.cfg)       args.push("--cfg",        input.cfg);
-    if (input.bpm)       args.push("--bpm",        input.bpm);
-    if (input.lyrics)    args.push("--lyrics",     input.lyrics);
-    if (input.seed)      args.push("--seed",       input.seed);
-    if (input.output)    args.push("--output",     input.output);
-    if (input.modelsDir) args.push("--models-dir", input.modelsDir);
+    const modelsDir = getModelsDir(input.modelsDir);
+    const args: string[] = ["--models-dir", modelsDir, "--tags", input.prompt];
+    if (input.length) args.push("--duration", input.length);
+    if (input.steps)  args.push("--steps",    input.steps);
+    if (input.cfg)    args.push("--cfg",       input.cfg);
+    if (input.bpm)    args.push("--bpm",       input.bpm);
+    if (input.lyrics !== undefined) args.push("--lyrics", input.lyrics);
+    if (input.seed)   args.push("--seed",      input.seed);
+    args.push("--output", input.output ?? "output.wav");
 
-    const outputPath = resolve(input.output ?? "output.wav");
+    const data: ParallaxJobData = {
+      action:     "create",
+      media:      "audio",
+      model:      input.model,
+      script:     AUDIO_CREATE_SCRIPTS[input.model] ?? "",
+      args,
+      scriptBase: getScriptBase(),
+      uvPath:     getUvPath(),
+    };
 
-    const proc = Bun.spawn(["bun", "run", "src/index.ts", ...args], {
-      stdout: "pipe",
-      stderr: "pipe",
-      cwd: CLI_DIR,
-    });
-
-    const [exitCode, stderr] = await Promise.all([
-      proc.exited,
-      new Response(proc.stderr).text(),
-    ]);
-
-    if (exitCode !== 0) {
-      return {
-        content: [{ type: "text", text: `Error: ${stderr.trim()}` }],
-        isError: true,
-      };
-    }
-
+    const jobId = await submitJob(data);
     return {
-      content: [{ type: "text", text: outputPath }],
+      content: [{ type: "text", text: `job_id: ${jobId}\nstatus: queued\nmodel: ${input.model}` }],
     };
   },
 );
@@ -178,7 +201,7 @@ server.registerTool(
 server.registerTool(
   "edit_image",
   {
-    description: "Edit an image using the Parallax pipeline (parallax edit image)",
+    description: "Edit an image using the Parallax pipeline (parallax edit image). Returns a job ID immediately — use get_job_status to poll for the output path.",
     inputSchema: {
       model:        z.string().describe("Model to use (e.g. flux_klein, qwen)"),
       prompt:       z.string().describe("Text prompt describing the desired edits"),
@@ -197,41 +220,45 @@ server.registerTool(
     },
   },
   async (input) => {
-    const args: string[] = ["edit", "image", "--model", input.model, "--prompt", input.prompt, "--input", input.input];
-    if (input.subjectImage) args.push("--subject-image", input.subjectImage);
-    if (input.width)        args.push("--width",         input.width);
-    if (input.height)       args.push("--height",        input.height);
-    if (input.steps)        args.push("--steps",         input.steps);
-    if (input.cfg)          args.push("--cfg",           input.cfg);
-    if (input.seed)         args.push("--seed",          input.seed);
-    if (input.output)       args.push("--output",        input.output);
-    if (input.image2)       args.push("--image2",        input.image2);
-    if (input.image3)       args.push("--image3",        input.image3);
-    if (input.noLora)       args.push("--no-lora");
-    if (input.modelsDir)    args.push("--models-dir",    input.modelsDir);
+    const modelsDir = getModelsDir(input.modelsDir);
+    const outputPath = input.output ?? "output.png";
+    const args: string[] = ["--models-dir", modelsDir];
 
-    const outputPath = resolve(input.output ?? "output.png");
-
-    const proc = Bun.spawn(["bun", "run", "src/index.ts", ...args], {
-      stdout: "pipe",
-      stderr: "pipe",
-      cwd: CLI_DIR,
-    });
-
-    const [exitCode, stderr] = await Promise.all([
-      proc.exited,
-      new Response(proc.stderr).text(),
-    ]);
-
-    if (exitCode !== 0) {
-      return {
-        content: [{ type: "text", text: `Error: ${stderr.trim()}` }],
-        isError: true,
-      };
+    if (input.model === "qwen") {
+      args.push("--image", input.input, "--prompt", input.prompt);
+      if (input.steps !== undefined) args.push("--steps", input.steps);
+      if (input.cfg !== undefined)   args.push("--cfg",   input.cfg);
+      if (input.seed !== undefined)  args.push("--seed",  input.seed);
+      const prefix = outputPath.endsWith(".png") ? outputPath.slice(0, -4) : outputPath;
+      args.push("--output-prefix", prefix);
+      if (input.image2 !== undefined) args.push("--image2", input.image2);
+      if (input.image3 !== undefined) args.push("--image3", input.image3);
+      if (input.noLora) args.push("--no-lora");
+    } else {
+      args.push("--prompt", input.prompt, "--image", input.input);
+      if (input.width  !== undefined) args.push("--width",  input.width);
+      if (input.height !== undefined) args.push("--height", input.height);
+      if (input.steps  !== undefined) args.push("--steps",  input.steps);
+      if (input.seed   !== undefined) args.push("--seed",   input.seed);
+      args.push("--output", outputPath);
+      if (input.model === "flux_9b_kv" && input.subjectImage !== undefined) {
+        args.push("--subject-image", input.subjectImage);
+      }
     }
 
+    const data: ParallaxJobData = {
+      action:     "edit",
+      media:      "image",
+      model:      input.model,
+      script:     IMAGE_EDIT_SCRIPTS[input.model] ?? "",
+      args,
+      scriptBase: getScriptBase(),
+      uvPath:     getUvPath(),
+    };
+
+    const jobId = await submitJob(data);
     return {
-      content: [{ type: "text", text: outputPath }],
+      content: [{ type: "text", text: `job_id: ${jobId}\nstatus: queued\nmodel: ${input.model}` }],
     };
   },
 );
@@ -239,7 +266,7 @@ server.registerTool(
 server.registerTool(
   "upscale_image",
   {
-    description: "Upscale an image using the Parallax pipeline (parallax upscale image)",
+    description: "Upscale an image using the Parallax pipeline (parallax upscale image). Returns a job ID immediately — use get_job_status to poll for the output path.",
     inputSchema: {
       model:                   z.string().describe("Model to use (e.g. esrgan, latent_upscale)"),
       prompt:                  z.string().describe("Text prompt"),
@@ -259,42 +286,33 @@ server.registerTool(
     },
   },
   async (input) => {
-    const args: string[] = ["upscale", "image", "--model", input.model, "--prompt", input.prompt, "--input", input.input];
+    const modelsDir = getModelsDir(input.modelsDir);
+    const args: string[] = ["--models-dir", modelsDir, "--input", input.input, "--prompt", input.prompt];
     if (input.checkpoint)              args.push("--checkpoint",               input.checkpoint);
-    if (input.esrganCheckpoint)        args.push("--esrgan-checkpoint",        input.esrganCheckpoint);
-    if (input.latentUpscaleCheckpoint) args.push("--latent-upscale-checkpoint", input.latentUpscaleCheckpoint);
     if (input.negativePrompt)          args.push("--negative-prompt",          input.negativePrompt);
     if (input.width)                   args.push("--width",                    input.width);
     if (input.height)                  args.push("--height",                   input.height);
     if (input.steps)                   args.push("--steps",                    input.steps);
     if (input.cfg)                     args.push("--cfg",                      input.cfg);
     if (input.seed)                    args.push("--seed",                     input.seed);
-    if (input.output)                  args.push("--output",                   input.output);
-    if (input.outputBase)              args.push("--output-base",              input.outputBase);
-    if (input.modelsDir)               args.push("--models-dir",               input.modelsDir);
+    if (input.esrganCheckpoint)        args.push("--esrgan-checkpoint",        input.esrganCheckpoint);
+    if (input.latentUpscaleCheckpoint) args.push("--latent-upscale-checkpoint", input.latentUpscaleCheckpoint);
+    args.push("--output",      input.output     ?? "output.png");
+    args.push("--output-base", input.outputBase ?? "output_base.png");
 
-    const outputPath = resolve(input.output ?? "output.png");
+    const data: ParallaxJobData = {
+      action:     "upscale",
+      media:      "image",
+      model:      input.model,
+      script:     IMAGE_UPSCALE_SCRIPTS[input.model] ?? "",
+      args,
+      scriptBase: getScriptBase(),
+      uvPath:     getUvPath(),
+    };
 
-    const proc = Bun.spawn(["bun", "run", "src/index.ts", ...args], {
-      stdout: "pipe",
-      stderr: "pipe",
-      cwd: CLI_DIR,
-    });
-
-    const [exitCode, stderr] = await Promise.all([
-      proc.exited,
-      new Response(proc.stderr).text(),
-    ]);
-
-    if (exitCode !== 0) {
-      return {
-        content: [{ type: "text", text: `Error: ${stderr.trim()}` }],
-        isError: true,
-      };
-    }
-
+    const jobId = await submitJob(data);
     return {
-      content: [{ type: "text", text: outputPath }],
+      content: [{ type: "text", text: `job_id: ${jobId}\nstatus: queued\nmodel: ${input.model}` }],
     };
   },
 );
