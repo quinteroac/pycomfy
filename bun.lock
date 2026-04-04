@@ -16,6 +16,7 @@
       "dependencies": {
         "@clack/prompts": "^0.9.x",
         "@parallax/sdk": "workspace:*",
+        "bunqueue": "^2.6.113",
         "commander": "12.x",
       },
       "devDependencies": {

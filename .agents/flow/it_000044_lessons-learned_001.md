@@ -39,3 +39,19 @@
 **Pitfalls Encountered:** None. `bun run typecheck` passes cleanly with the existing `tsconfig.json` setup (already has `"types": ["bun-types"]` from US-002).
 
 **Useful Context for Future Agents:** `Bun.spawn` is the correct API for detached subprocesses in Bun — it mirrors Node's `child_process.spawn` with `detached: true`. The `detached` option combined with all stdio set to `"ignore"` produces a fully independent process that survives the parent exiting.
+
+## US-004 — Detached worker process (_run.ts)
+
+**Summary:** Created `packages/parallax_cli/src/_run.ts` — a detached Bun worker process that picks up a specific job by ID, runs the Python pipeline via `Bun.spawn` with `stdout: "pipe"` / `stderr: "pipe"`, streams NDJSON progress from stdout into `job.updateProgress(pct)`, and marks the job completed or failed via the `Bunqueue` routes API.
+
+**Key Decisions:**
+- Used `Bunqueue` (not `Queue` + `Worker`) because the AC requires a `routes` processor — `Bunqueue` is the only class with a `routes: Record<string, Processor>` option that handles completed/failed lifecycle events via `queue.once(...)`.
+- Added `bunqueue` as a direct dependency of `parallax_cli` (not just `parallax_sdk`) — each workspace package must declare its own dependencies in Bun workspaces; transitive dependencies are not automatically resolvable by TypeScript.
+- Imported `Job` type from `bunqueue/client` explicitly to avoid the `Parameter 'job' implicitly has an 'any' type` TS error in the route processor function.
+- stderr is consumed in a parallel async IIFE so it doesn't block stdout reading; collected text is appended to the thrown `Error` message on non-zero exit.
+
+**Pitfalls Encountered:**
+- Pre-existing `TS2345` error in `src/models/image.ts:135`: `opts.steps` (`string | undefined`) passed directly to `args.push()` expecting `string`. Fixed by adding an `!== undefined` guard (consistent with the `qwen` branch above it and AC09 requirement for clean typecheck).
+- `bun typecheck` delegates to `tsc --noEmit` which is strict — explicit type annotations on route processors are required.
+
+**Useful Context for Future Agents:** `Bunqueue` closes are async — call `await queue.close()` inside the `queue.once("completed", ...)` and `queue.once("failed", ...)` callbacks. The `Bunqueue` class in `bunqueue/client` exposes `on` / `once` for lifecycle events (`completed`, `failed`, `closed`, `drained`, etc.) directly on the `Bunqueue` instance (not on an internal `.worker` property). The worker auto-starts polling on construction — no explicit `.start()` call needed.

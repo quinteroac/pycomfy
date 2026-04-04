@@ -132,7 +132,7 @@ export function buildEditImageArgs(opts: EditImageOpts, modelsDir: string): stri
     args.push("--image", opts.input);
     args.push("--width", opts.width);
     args.push("--height", opts.height);
-    args.push("--steps", opts.steps);
+    if (opts.steps !== undefined) args.push("--steps", opts.steps);
     if (opts.seed !== undefined) args.push("--seed", opts.seed);
     args.push("--output", opts.output);
     if (opts.model === "flux_9b_kv" && opts.subjectImage !== undefined) {
