@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { submitJob } from "@parallax/sdk/submit";
+import { getJobStatus } from "@parallax/sdk";
 import type { ParallaxJobData } from "@parallax/sdk";
 
 const server = new McpServer({
@@ -313,6 +314,38 @@ server.registerTool(
     const jobId = await submitJob(data);
     return {
       content: [{ type: "text", text: `job_id: ${jobId}\nstatus: queued\nmodel: ${input.model}` }],
+    };
+  },
+);
+
+server.registerTool(
+  "get_job_status",
+  {
+    description: "Check the status of an inference job by its ID. Returns current state, progress, and output path when done.",
+    inputSchema: {
+      job_id: z.string().describe("The job ID returned by a create/edit/upscale tool"),
+    },
+  },
+  async (input) => {
+    const status = await getJobStatus(input.job_id);
+    if (!status) {
+      return {
+        isError: true,
+        content: [{ type: "text", text: `Job ${input.job_id} not found` }],
+      };
+    }
+    const payload = {
+      id:       status.id,
+      status:   status.status,
+      progress: status.progress,
+      output:   status.output,
+      error:    status.error,
+      model:    status.model,
+      action:   status.action,
+      media:    status.media,
+    };
+    return {
+      content: [{ type: "text", text: JSON.stringify(payload) }],
     };
   },
 );

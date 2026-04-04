@@ -7,6 +7,7 @@ export type ParallaxJobStatus = {
   progress: number;
   model: string | null;
   action: string | null;
+  media: string | null;
   output: string | null;
   error: string | null;
   startedAt: number | null;
@@ -35,6 +36,7 @@ export async function getJobStatus(id: string): Promise<ParallaxJobStatus | null
     progress: typeof job.progress === "number" ? job.progress : 0,
     model: data.model ?? null,
     action: data.action ?? null,
+    media: data.media ?? null,
     output: result?.outputPath ?? null,
     error: (job as any).failedReason ?? null,
     startedAt: job.processedOn ?? null,

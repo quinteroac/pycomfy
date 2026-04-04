@@ -21,3 +21,22 @@
 - `submitJob()` from `@parallax/sdk/submit` internally spawns `packages/parallax_cli/src/_run.ts <jobId>` as a detached process. The MCP calls it and returns immediately — the actual inference runs in the background worker.
 - The `ParallaxJobData` interface fields are: `action`, `media`, `model`, `script` (Python path relative to `scriptBase`), `args` (Python script args), `scriptBase`, `uvPath`.
 - `bun typecheck` passes cleanly on `parallax_mcp` with the new implementation.
+
+## US-002 — get_job_status tool
+
+**Summary:** Added `get_job_status` MCP tool to `parallax_mcp/src/index.ts`. The tool accepts `{ job_id: z.string() }`, calls `getJobStatus()` from `@parallax/sdk`, and returns a JSON-formatted text response with fields `id`, `status`, `progress`, `output`, `error`, `model`, `action`, `media`. Missing jobs return `isError: true` with "Job <id> not found". Also updated `ParallaxJobStatus` in the SDK to include the `media` field.
+
+**Key Decisions:**
+- `getJobStatus` was already implemented in `@parallax/sdk/src/status.ts` and exported from `@parallax/sdk`. Only needed to import it and register the tool.
+- Added `media: string | null` to `ParallaxJobStatus` type and extracted it from `job.data` alongside the existing `model` and `action` fields. This was the only SDK change required.
+- Used `isError: true` in the MCP return shape (standard MCP error convention) for the not-found case, matching AC03's exact requirement.
+- Test strategy follows the same source-level structural check pattern used by all other `parallax_mcp` tests — reading `index.ts` as a string and asserting presence of key identifiers.
+
+**Pitfalls Encountered:**
+- `ParallaxJobStatus` in the SDK was missing `media`, even though `ParallaxJobData` has it. The AC requires `media` in the MCP response, so the SDK type had to be updated before writing the tool.
+- `getJobStatus` needed to be imported as a named import from `@parallax/sdk` (not `@parallax/sdk/status`) because the sub-path export for `status` is not declared separately.
+
+**Useful Context for Future Agents:**
+- `getJobStatus(id)` returns `ParallaxJobStatus | null` (null = job not found). The MCP tool maps null → `isError: true`.
+- `ParallaxJobStatus` now includes all fields from `ParallaxJobData` relevant to callers: `model`, `action`, `media`. Fields like `script`, `args`, `scriptBase`, `uvPath` are intentionally not exposed.
+- The SDK's `getJobStatus` closes the queue connection after each call. Fine for one-shot MCP use, but inefficient for bulk polling.
