@@ -3,6 +3,7 @@
 // Non-interactive mode (--non-interactive or no TTY) uses --clients flag value or installs all.
 
 import { Command } from "commander";
+import { applyClientConfig, getMcpServerEntry, type ApplyResult } from "../mcp_config";
 
 export const SUPPORTED_CLIENTS = ["claude", "gemini", "github-copilot", "codex"] as const;
 export type SupportedClient = (typeof SUPPORTED_CLIENTS)[number];
@@ -63,9 +64,20 @@ async function runInteractive(): Promise<void> {
   }
 
   const clients = selected as SupportedClient[];
-  installClients(clients);
+  const results = installClients(clients);
+  const succeeded = results.filter((r) => r.success);
+  const failed = results.filter((r) => !r.success);
 
-  outro(`Done. Configured: ${clients.map((c) => CLIENT_LABELS[c]).join(", ")}`);
+  if (failed.length > 0) {
+    for (const r of failed) {
+      console.error(`  [error] ${CLIENT_LABELS[r.client]}: ${r.error}`);
+    }
+  }
+
+  outro(
+    `Done. Configured: ${succeeded.map((r) => CLIENT_LABELS[r.client]).join(", ")}` +
+      (failed.length > 0 ? ` (${failed.length} failed)` : ""),
+  );
 }
 
 async function runNonInteractive(opts: McpInstallOpts): Promise<void> {
@@ -78,18 +90,23 @@ async function runNonInteractive(opts: McpInstallOpts): Promise<void> {
         ))
     : [...SUPPORTED_CLIENTS];
 
-  installClients(clients);
+  const results = installClients(clients);
+  const succeeded = results.filter((r) => r.success);
+  const failed = results.filter((r) => !r.success);
+
+  if (failed.length > 0) {
+    for (const r of failed) {
+      console.error(`  [error] ${CLIENT_LABELS[r.client]}: ${r.error}`);
+    }
+  }
 
   console.log("[parallax] MCP clients configured:");
-  for (const client of clients) {
-    console.log(`  ${CLIENT_LABELS[client]}`);
+  for (const r of succeeded) {
+    console.log(`  ${CLIENT_LABELS[r.client]} → ${r.configPath}`);
   }
 }
 
-function installClients(clients: SupportedClient[]): void {
-  // Placeholder: each client config writer will be implemented per-client.
-  // For now we log the intent — the actual config file writes come in follow-up stories.
-  for (const client of clients) {
-    console.log(`[parallax] Configuring ${CLIENT_LABELS[client]}…`);
-  }
+function installClients(clients: SupportedClient[]): ApplyResult[] {
+  const serverEntry = getMcpServerEntry();
+  return clients.map((client) => applyClientConfig(client, serverEntry));
 }
