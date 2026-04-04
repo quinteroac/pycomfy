@@ -53,6 +53,56 @@ export interface EditImageOpts {
   noLora?: boolean;      // qwen only
 }
 
+export interface UpscaleImageOpts {
+  model: string;
+  prompt: string;
+  negativePrompt?: string;
+  checkpoint: string;
+  esrganCheckpoint?: string;      // esrgan only
+  latentUpscaleCheckpoint?: string; // latent_upscale only
+  width: string;
+  height: string;
+  steps: string;
+  cfg: string;
+  seed?: string;
+  output: string;
+  outputBase: string;
+}
+
+// Build the CLI args array for an `upscale image` invocation.
+//
+// Both esrgan and latent_upscale share most flags:
+//  --models-dir, --checkpoint, --prompt, --negative-prompt, --width, --height,
+//  --steps, --cfg, --seed, --output, --output-base
+// Model-specific:
+//  - esrgan: also passes --esrgan-checkpoint
+//  - latent_upscale: also passes --latent-upscale-checkpoint
+export function buildUpscaleImageArgs(opts: UpscaleImageOpts, modelsDir: string): string[] {
+  const args: string[] = [
+    "--models-dir", modelsDir,
+    "--checkpoint", opts.checkpoint,
+    "--prompt", opts.prompt,
+    "--width", opts.width,
+    "--height", opts.height,
+    "--steps", opts.steps,
+    "--cfg", opts.cfg,
+    "--output", opts.output,
+    "--output-base", opts.outputBase,
+  ];
+
+  if (opts.negativePrompt !== undefined) args.push("--negative-prompt", opts.negativePrompt);
+  if (opts.seed !== undefined) args.push("--seed", opts.seed);
+
+  if (opts.model === "esrgan" && opts.esrganCheckpoint !== undefined) {
+    args.push("--esrgan-checkpoint", opts.esrganCheckpoint);
+  }
+  if (opts.model === "latent_upscale" && opts.latentUpscaleCheckpoint !== undefined) {
+    args.push("--latent-upscale-checkpoint", opts.latentUpscaleCheckpoint);
+  }
+
+  return args;
+}
+
 // Build the CLI args array for an `edit image` invocation.
 //
 // Model-specific behaviours:
