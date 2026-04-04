@@ -39,6 +39,8 @@ import sys
 from fractions import Fraction
 from pathlib import Path
 
+from runtime.progress import progress
+
 
 def _save_frames_as_video(
     frames: list,
@@ -139,9 +141,11 @@ def main() -> int:
     from comfy_diffusion.pipelines.video.wan.wan22.t2v import manifest, run
 
     # Download models (idempotent — skips files already present).
+    progress("download", 0.0)
     print("Checking / downloading models …")
     download_models(manifest(), models_dir=models_dir)
     print("Models ready.")
+    progress("download", 1.0)
 
     if args.download_only:
         print("--download-only: exiting without inference.")
@@ -156,6 +160,7 @@ def main() -> int:
         return 1
 
     # Generate frames.
+    progress("model_load", 0.0)
     print(f"Generating {args.length} frames ({args.width}x{args.height}) …")
     frames = run(
         args.prompt,
@@ -169,9 +174,12 @@ def main() -> int:
         cfg=args.cfg,
     )
     print(f"Generated {len(frames)} frames.")
+    progress("sampling_done", 1.0, frames=len(frames))
 
     # Save output.
+    progress("encode", 0.0)
     _save_frames_as_video(frames, args.output, fps=args.fps)
+    progress("done", 1.0, output=args.output)
     print(f"Saved: {args.output}")
     return 0
 

@@ -55,3 +55,19 @@
 - `bun typecheck` delegates to `tsc --noEmit` which is strict — explicit type annotations on route processors are required.
 
 **Useful Context for Future Agents:** `Bunqueue` closes are async — call `await queue.close()` inside the `queue.once("completed", ...)` and `queue.once("failed", ...)` callbacks. The `Bunqueue` class in `bunqueue/client` exposes `on` / `once` for lifecycle events (`completed`, `failed`, `closed`, `drained`, etc.) directly on the `Bunqueue` instance (not on an internal `.worker` property). The worker auto-starts polling on construction — no explicit `.start()` call needed.
+
+## US-005 — Python ProgressReporter helper
+
+**Summary:** Created `packages/parallax_cli/runtime/progress.py` exporting `progress(step, pct, **kwargs)`. Updated `runtime/video/ltx/ltx2/t2v.py` and `runtime/video/wan/wan22/t2v.py` to emit structured JSON progress at logical milestones (download, model_load, sampling_done, encode, done). Added 6 pytest tests in `tests/test_progress_reporter.py`.
+
+**Key Decisions:**
+- `progress.py` is placed directly at `runtime/` root (not in a sub-package) so it's importable as `from runtime.progress import progress` from any pipeline script under `runtime/`.
+- Progress milestones are only added at observable boundaries in the runtime scripts — `run()` from the library is a black box that bundles model_load + sampling + VAE decode internally; no hooks into core logic are needed.
+- `sys.path.insert` in the test file adds `packages/parallax_cli/` so `runtime.progress` is importable without installing the package.
+- `print(..., flush=True)` is the sole implementation — no dependency on stdlib `logging` or third-party libs.
+
+**Pitfalls Encountered:**
+- The `run()` function in the pipeline library encapsulates model load, sampling, and VAE decode together — there's no way to emit per-step or per-frame progress without modifying core logic. The milestone names `model_load` and `sampling_done` bracket `run()` as a whole, which satisfies AC03 without violating AC05.
+- In `ltx2/t2v.py`, the original `print(f"decoded {len(frames)} frames")` line was replaced by `progress("sampling_done", ...)` — the output path is still the very last print per AC04.
+
+**Useful Context for Future Agents:** The `runtime/` directory under `packages/parallax_cli/` is on `sys.path` when scripts are invoked by the worker (`_run.ts`). Relative imports like `from runtime.progress import progress` work for all pipeline scripts in `runtime/**/*.py`. When writing tests for these Python scripts, add `packages/parallax_cli/` to `sys.path` so `runtime.*` is importable.

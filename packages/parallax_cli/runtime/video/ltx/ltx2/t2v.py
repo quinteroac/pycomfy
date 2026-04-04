@@ -26,6 +26,8 @@ from fractions import Fraction
 from pathlib import Path
 from typing import Any
 
+from runtime.progress import progress
+
 
 def _save_audio(waveform: Any, sample_rate: int, output_path: str) -> None:
     out = Path(output_path)
@@ -128,8 +130,11 @@ def main() -> int:
     from comfy_diffusion.downloader import download_models
     from comfy_diffusion.pipelines.video.ltx.ltx2.t2v import manifest, run
 
+    progress("download", 0.0)
     download_models(manifest(), models_dir=args.models_dir)
+    progress("download", 1.0)
 
+    progress("model_load", 0.0)
     result = run(
         models_dir=args.models_dir,
         prompt=args.prompt,
@@ -152,8 +157,9 @@ def main() -> int:
 
     frames = result["frames"]
     audio = result["audio"]
-    print(f"decoded {len(frames)} frames")
+    progress("sampling_done", 1.0, frames=len(frames))
 
+    progress("encode", 0.0)
     tmp_video = Path(args.output).with_suffix(".noaudio.mp4")
     _save_video(frames, str(tmp_video), fps=args.fps)
 
@@ -167,6 +173,7 @@ def main() -> int:
         print(f"warning: audio mux failed ({exc}); video saved to {tmp_video}", file=sys.stderr)
         tmp_video.rename(args.output)
 
+    progress("done", 1.0, output=args.output)
     print(args.output)
     return 0
 
