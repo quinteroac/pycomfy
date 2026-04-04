@@ -3,7 +3,7 @@
 
 import { Command } from "commander";
 import { readConfig } from "../config";
-import { spawnPipeline } from "../runner";
+import { spawnPipeline, runAsync } from "../runner";
 import { resolveModelsDir } from "../utils";
 import { getModels, getScript } from "../models/registry";
 import { buildUpscaleImageArgs, type UpscaleImageOpts } from "../models/image";
@@ -33,6 +33,7 @@ export function registerUpscale(program: Command): void {
     .option("--output <path>", "Output file path", "output.png")
     .option("--output-base <path>", "Intermediate base image before upscaling", "output_base.png")
     .option("--models-dir <path>", "Models directory (overrides PYCOMFY_MODELS_DIR)")
+    .option("--async", "Queue job and return a job ID immediately (non-blocking)")
     .addHelpText("after", modelsFooter("upscale", "image"))
     .action(async (opts) => {
       validateModel("upscale", "image", opts.model);
@@ -82,6 +83,10 @@ export function registerUpscale(program: Command): void {
         outputBase:              opts.outputBase,
       };
       const args = buildUpscaleImageArgs(upscaleOpts, modelsDir);
-      await spawnPipeline(script, args, readConfig());
+      if (opts.async) {
+        await runAsync("upscale", "image", opts.model, script, args, readConfig());
+      } else {
+        await spawnPipeline(script, args, readConfig());
+      }
     });
 }

@@ -4,7 +4,7 @@
 import { existsSync } from "fs";
 import { Command } from "commander";
 import { readConfig } from "../config";
-import { spawnPipeline } from "../runner";
+import { spawnPipeline, runAsync } from "../runner";
 import { resolveModelsDir } from "../utils";
 import { getModels, getScript } from "../models/registry";
 import { buildEditImageArgs, type EditImageOpts } from "../models/image";
@@ -33,6 +33,7 @@ export function registerEdit(program: Command): void {
     .option("--image3 <path>", "Third input image (qwen only)")
     .option("--no-lora", "Disable LoRA (qwen only)")
     .option("--models-dir <path>", "Models directory (overrides PYCOMFY_MODELS_DIR)")
+    .option("--async", "Queue job and return a job ID immediately (non-blocking)")
     .addHelpText("after", modelsFooter("edit", "image"))
     .action(async (opts) => {
       validateModel("edit", "image", opts.model);
@@ -69,7 +70,11 @@ export function registerEdit(program: Command): void {
         noLora:       !!opts.noLora,
       };
       const args = buildEditImageArgs(editOpts, modelsDir);
-      await spawnPipeline(script, args, readConfig());
+      if (opts.async) {
+        await runAsync("edit", "image", opts.model, script, args, readConfig());
+      } else {
+        await spawnPipeline(script, args, readConfig());
+      }
     });
 
   edit

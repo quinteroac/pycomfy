@@ -5,7 +5,7 @@
 import { existsSync } from "fs";
 import { Command } from "commander";
 import { readConfig } from "../config";
-import { spawnPipeline } from "../runner";
+import { spawnPipeline, runAsync } from "../runner";
 import { resolveModelsDir } from "../utils";
 import { getModels, getScript, getModelConfig, getModelDefaults, type ModelDefaults } from "../models/registry";
 import { buildArgs as buildImageArgs, type ImageOpts } from "../models/image";
@@ -60,6 +60,7 @@ export function registerCreate(program: Command): void {
     .option("--seed <n>", "Random seed for reproducibility")
     .option("--output <path>", "Output file path", "output.png")
     .option("--models-dir <path>", "Models directory (overrides PYCOMFY_MODELS_DIR)")
+    .option("--async", "Queue job and return a job ID immediately (non-blocking)")
     .addHelpText("after", modelsFooter("create", "image"))
     .addHelpText("after", buildDefaultsTable("image"))
     .action(async (opts) => {
@@ -80,7 +81,11 @@ export function registerCreate(program: Command): void {
         output:         opts.output,
       };
       const args = buildImageArgs(imageOpts, modelsDir);
-      await spawnPipeline(script, args, readConfig());
+      if (opts.async) {
+        await runAsync("create", "image", opts.model, script, args, readConfig());
+      } else {
+        await spawnPipeline(script, args, readConfig());
+      }
     });
 
   create
@@ -97,6 +102,7 @@ export function registerCreate(program: Command): void {
     .option("--seed <n>", "Random seed for reproducibility")
     .option("--output <path>", "Output file path", "output.mp4")
     .option("--models-dir <path>", "Models directory (overrides PYCOMFY_MODELS_DIR)")
+    .option("--async", "Queue job and return a job ID immediately (non-blocking)")
     .addHelpText("after", modelsFooter("create", "video"))
     .addHelpText("after", buildDefaultsTable("video"))
     .action(async (opts) => {
@@ -124,7 +130,11 @@ export function registerCreate(program: Command): void {
         output: opts.output,
       };
       const args = buildVideoArgs(videoOpts, modelsDir);
-      await spawnPipeline(script, args, readConfig());
+      if (opts.async) {
+        await runAsync("create", "video", opts.model, script, args, readConfig());
+      } else {
+        await spawnPipeline(script, args, readConfig());
+      }
     });
 
   create
@@ -144,6 +154,7 @@ export function registerCreate(program: Command): void {
     .option("--vae <path>", "VAE model component path (overrides PYCOMFY_ACE_VAE)")
     .option("--text-encoder-1 <path>", "Text encoder 1 path (overrides PYCOMFY_ACE_TEXT_ENCODER_1)")
     .option("--text-encoder-2 <path>", "Text encoder 2 path (overrides PYCOMFY_ACE_TEXT_ENCODER_2)")
+    .option("--async", "Queue job and return a job ID immediately (non-blocking)")
     .addHelpText("after", modelsFooter("create", "audio"))
     .addHelpText("after", buildDefaultsTable("audio"))
     .action(async (opts) => {
@@ -168,6 +179,10 @@ export function registerCreate(program: Command): void {
         textEncoder2: opts.textEncoder2,
       };
       const args = buildAudioArgs(audioOpts, modelsDir);
-      await spawnPipeline(script, args, readConfig());
+      if (opts.async) {
+        await runAsync("create", "audio", opts.model, script, args, readConfig());
+      } else {
+        await spawnPipeline(script, args, readConfig());
+      }
     });
 }

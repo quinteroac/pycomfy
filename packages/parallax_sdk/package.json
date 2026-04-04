@@ -3,6 +3,17 @@
   "version": "0.1.0",
   "type": "module",
   "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./submit": "./src/submit.ts",
+    "./jobs": "./src/jobs.ts",
+    "./queue": "./src/queue.ts",
+    "./status": "./src/status.ts",
+    "./list": "./src/list.ts",
+    "./cancel": "./src/cancel.ts",
+    "./health": "./src/health.ts",
+    "./types": "./src/types.ts"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit"
   },
