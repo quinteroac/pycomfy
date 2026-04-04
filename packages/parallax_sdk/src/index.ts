@@ -6,3 +6,4 @@ export * from "./queue";
 export * from "./submit";
 export * from "./status";
 export * from "./list";
+export * from "./cancel";

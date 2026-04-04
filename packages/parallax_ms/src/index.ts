@@ -1,6 +1,6 @@
 import { Elysia, t } from "elysia";
 import { Stream } from "@elysiajs/stream";
-import { submitJob, getJobStatus, listJobs } from "@parallax/sdk";
+import { submitJob, getJobStatus, listJobs, cancelJob } from "@parallax/sdk";
 import type { JobStatusValue } from "@parallax/sdk";
 import type { ParallaxJobData } from "@parallax/sdk";
 
@@ -129,6 +129,20 @@ export const app = new Elysia()
       return { error: "Job not found" };
     }
     return status;
+  })
+
+  // US-005: DELETE /jobs/:id — cancel a running or waiting job
+  .delete("/jobs/:id", async ({ params, set }) => {
+    const result = await cancelJob(params.id);
+    if (result === null) {
+      set.status = 404;
+      return { error: "Job not found" };
+    }
+    if (result === "terminal") {
+      set.status = 409;
+      return { error: "Job already completed" };
+    }
+    return { cancelled: true };
   })
 
   // AC01: POST /jobs/create/image

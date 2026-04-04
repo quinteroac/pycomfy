@@ -81,3 +81,23 @@
 - `listJobs()` is exported from `@parallax/sdk` and accepts `{ status?: JobStatusValue; limit?: number }`. The default limit of 50 is applied inside the function — callers don't need to pass it.
 - `queue.getJobsAsync({ state: ['waiting', 'active', 'completed', 'failed'] })` fetches all jobs across states in a single call; `queue.getJobCountsAsync()` returns `{ waiting, active, completed, failed, prioritized, delayed, paused }` — only the 4 main states are exposed in `JobListResult.counts`.
 - `JobSummary.model/action/media` come from `job.data` (typed as `ParallaxJobData`) — jobs submitted through `submitJob()` always have these fields populated.
+
+## US-005 — Cancel a job
+
+**Summary:** Implemented `DELETE /jobs/:id` in `packages/parallax_ms/src/index.ts` that cancels a running or waiting job. Added `cancelJob()` to `packages/parallax_sdk/src/cancel.ts`, exported it from the SDK index, and added 7 tests in `packages/parallax_ms/tests/cancel_job.test.ts`.
+
+**Key Decisions:**
+- **`cancelJob()` returns a discriminated value** (`true | null | "terminal"`) rather than throwing: `null` = not found (→ 404), `"terminal"` = already in a completed/failed state (→ 409), `true` = success (→ `{ cancelled: true }`). This keeps the SDK consistent with the null-for-not-found pattern from `getJobStatus`.
+- **`queue.removeAsync(id)` for cancellation**: bunqueue's `Queue` class does not expose a `cancel()` method. The user story's "calls `getQueue().cancel(jobId)`" is a conceptual description — the implementation uses `removeAsync(id)` which removes the job regardless of its current non-terminal state.
+- **State checked before removal**: `job.getState()` is called before `removeAsync()` to detect terminal states and return `"terminal"` instead of blindly removing.
+- **`DELETE` route placed after `GET /jobs/:id`** in the Elysia chain — Elysia matches by method first, so ordering by path specificity is less critical here than for GET routes.
+
+**Pitfalls Encountered:**
+- `bun typecheck` in `packages/parallax_ms` still reports pre-existing Elysia 1.4.x type errors unrelated to this implementation. The SDK typechecks cleanly.
+- bunqueue has no `cancel()` on the `Queue` class — confirmed by inspecting `packages/parallax_sdk/node_modules/bunqueue/dist/client/queue/queue.d.ts`.
+
+**Useful Context for Future Agents:**
+- `cancelJob(id)` is now exported from `@parallax/sdk` — use it in the CLI (`parallax job cancel <id>`) and MCP packages.
+- The `CancelJobOutcome` type (`true | null | "terminal"`) is exported from `cancel.ts` and re-exported via the SDK index.
+- Functional test pattern: mock `cancelJob` with a function that returns `true` for active/waiting IDs, `"terminal"` for done/failed IDs, and `null` for unknown IDs.
+- The `queue.close()` call is required after every queue operation — always include it in all branches (early returns and happy path).

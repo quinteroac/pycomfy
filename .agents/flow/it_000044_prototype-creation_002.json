@@ -46,12 +46,12 @@
     },
     {
       "use_case_id": "US-005",
-      "status": "pending",
-      "attempt_count": 0,
-      "last_agent_exit_code": null,
+      "status": "completed",
+      "attempt_count": 1,
+      "last_agent_exit_code": 0,
       "quality_checks": [],
       "last_error_summary": "",
-      "updated_at": "2026-04-04T20:06:43.984Z",
+      "updated_at": "2026-04-04T20:42:31.022Z",
       "audit_artifact_path": ".agents/flow/it_000044_audit.json",
       "refactor_report_path": ".agents/flow/it_000044_refactor-report.md"
     },
