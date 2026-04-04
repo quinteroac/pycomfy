@@ -1,9 +1,9 @@
-// jobs command: `parallax jobs list`
-// Displays a table of recent jobs with color-coded status.
+// jobs command: `parallax jobs list` and `parallax jobs watch <id>`
 
 import { Command } from "commander";
 import { listJobs } from "@parallax/sdk/list";
 import type { JobSummary, JobStatusValue } from "@parallax/sdk/list";
+import type { ParallaxJobData, ParallaxJobResult } from "@parallax/sdk/jobs";
 
 export const EMPTY_MESSAGE =
   "No jobs found. Run a command with --async to submit one.";
@@ -119,6 +119,81 @@ export function formatJobsTable(jobs: JobSummary[]): string {
   return [headerLine, separator, ...dataLines].join("\n");
 }
 
+// ── watch command helpers ────────────────────────────────────────────────────
+
+export const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+
+export function formatSpinnerLine(frame: number, step: string, progress: number): string {
+  const spinner = SPINNER_FRAMES[frame % SPINNER_FRAMES.length];
+  return `${spinner} ${step}… ${progress}%`;
+}
+
+export function formatDoneLine(outputPath: string): string {
+  return `✔ Done: ${outputPath}`;
+}
+
+export function formatFailLine(reason: string): string {
+  return `✖ Failed: ${reason}`;
+}
+
+export function formatNotFoundMessage(id: string): string {
+  return `Job ${id} not found`;
+}
+
+async function watchJobAction(id: string): Promise<void> {
+  const { Queue } = await import("bunqueue/client");
+  const os = (await import("os")).default;
+  const path = (await import("path")).default;
+
+  const dbPath = path.join(os.homedir(), ".config", "parallax", "jobs.db");
+  const queue = new Queue("parallax", { embedded: true, dataPath: dbPath });
+
+  const initialJob = await queue.getJob(id);
+  if (!initialJob) {
+    await queue.close();
+    process.stdout.write(formatNotFoundMessage(id) + "\n");
+    process.exit(1);
+    return;
+  }
+
+  let frame = 0;
+
+  while (true) {
+    const job = await queue.getJob(id);
+    if (!job) break;
+
+    const state = await job.getState();
+
+    if (state === "completed") {
+      process.stdout.write("\r\x1b[K");
+      const result = job.returnvalue as ParallaxJobResult | null;
+      const outputPath = result?.outputPath ?? "";
+      console.log(formatDoneLine(outputPath));
+      await queue.close();
+      return;
+    }
+
+    if (state === "failed") {
+      process.stdout.write("\r\x1b[K");
+      console.log(formatFailLine((job as any).failedReason ?? "unknown error"));
+      await queue.close();
+      process.exit(1);
+      return;
+    }
+
+    const progress = typeof job.progress === "number" ? job.progress : 0;
+    const data = job.data as Partial<ParallaxJobData>;
+    const step = data?.action ?? "processing";
+
+    process.stdout.write("\r" + formatSpinnerLine(frame, step, progress) + "  ");
+    frame++;
+
+    await new Promise<void>((resolve) => setTimeout(resolve, 500));
+  }
+
+  await queue.close();
+}
+
 export function registerJobs(program: Command): void {
   const jobs = program
     .command("jobs")
@@ -130,5 +205,12 @@ export function registerJobs(program: Command): void {
     .action(async () => {
       const result = await listJobs({ limit: 20 });
       console.log(formatJobsTable(result.jobs));
+    });
+
+  jobs
+    .command("watch <id>")
+    .description("Watch a job until it finishes")
+    .action(async (id: string) => {
+      await watchJobAction(id);
     });
 }

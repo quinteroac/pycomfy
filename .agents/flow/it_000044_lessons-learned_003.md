@@ -37,3 +37,22 @@
 - `listJobs({ limit: 20 })` already sorts newest-first and enforces the limit — the CLI does not need to re-sort or re-slice.
 - All ANSI color codes used: dim=`\x1b[2m`, cyan=`\x1b[36m`, green=`\x1b[32m`, red=`\x1b[31m`, reset=`\x1b[0m`.
 - The `tsconfig.json` for the CLI only includes `src/`, not `tests/` — test files are type-checked by bun test itself, not `tsc --noEmit`. This means typecheck in tests only catches obvious errors; full type safety is in `src/`.
+
+## US-003 — parallax jobs watch \<id\>
+
+**Summary:** Added `parallax jobs watch <id>` subcommand to the `jobs` group in `src/commands/jobs.ts`. It polls `getJob(id)` every 500ms, renders a Braille spinner with the job's action as the step label and numeric progress, then prints `✔ Done: <outputPath>` or `✖ Failed: <reason>` on terminal state. Non-existent job IDs print `Job <id> not found` and exit 1.
+
+**Key Decisions:**
+- Created a fresh `Queue` instance directly via `import("bunqueue/client")` inside `watchJobAction` (lazy import) rather than using the `getQueue()` singleton from `@parallax/sdk/queue`. This avoids the close-after-use singleton problem: other SDK functions (`listJobs`, `getJobStatus`, `cancelJob`) all call `queue.close()` after every operation, which leaves the singleton in a closed state for subsequent calls. For polling, a dedicated open-during-lifetime queue instance is essential.
+- `job.returnvalue` is typed as `ParallaxJobResult | null` (cast) — bunqueue stores it as the deserialized worker return value `{ outputPath }`. The existing `status.ts` uses `String(job.returnvalue)` which yields `[object Object]` — a pre-existing bug. The watch command casts correctly to `ParallaxJobResult`.
+- The step label shown in the spinner comes from `job.data.action` (e.g. `"create"`, `"edit"`), since bunqueue does not store the `PythonProgress.step` string separately. Changing `_run.ts` to call `updateProgress({ step, pct })` would require updating `status.ts` and was out of scope.
+- Pure helpers (`formatSpinnerLine`, `formatDoneLine`, `formatFailLine`, `formatNotFoundMessage`, `SPINNER_FRAMES`) are exported for testability, following the established CLI testing pattern.
+
+**Pitfalls Encountered:**
+- The `getQueue()` singleton close-after-use pattern is incompatible with polling. Using `getJobStatus()` in a loop would silently fail on the second poll because the queue is already closed and the singleton is not reset. Always create a dedicated Queue instance for watch-style long-lived consumers.
+- `job.failedReason` is not on the bunqueue `Job` type definition; required `(job as any).failedReason` cast to access it.
+
+**Useful Context for Future Agents:**
+- `@parallax/cli` already depends on `bunqueue` directly (in `package.json` dependencies), so importing `Queue` from `bunqueue/client` inside CLI code is safe and does not add a new dependency.
+- The `getQueue()` singleton in `@parallax/sdk/queue.ts` is NOT reset after `close()`. If you call `close()` on it and then call `getQueue()` again, you get the same closed instance. For any polling or long-lived queue consumer, bypass the singleton and construct `new Queue(...)` directly with the same `dbPath` configuration.
+- `ParallaxJobResult` from `@parallax/sdk/jobs` is `{ outputPath: string }`. Access `job.returnvalue as ParallaxJobResult` after a completed state check.

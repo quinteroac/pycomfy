@@ -1,6 +1,7 @@
 // Tests for US-002: parallax jobs list
-// Strategy: test pure helper functions (colorStatus, formatStarted, buildRows, formatJobsTable).
-// Integration of listJobs and the Commander action handler is validated via bun typecheck (AC05).
+// Tests for US-003: parallax jobs watch <id>
+// Strategy: test pure helper functions.
+// Integration of listJobs/watchJobAction and the Commander action handler is validated via bun typecheck.
 
 import { describe, it, expect } from "bun:test";
 import {
@@ -9,6 +10,11 @@ import {
   buildRows,
   formatJobsTable,
   EMPTY_MESSAGE,
+  SPINNER_FRAMES,
+  formatSpinnerLine,
+  formatDoneLine,
+  formatFailLine,
+  formatNotFoundMessage,
 } from "../../src/commands/jobs";
 import type { JobSummary } from "@parallax/sdk/list";
 
@@ -148,5 +154,84 @@ describe("formatStarted", () => {
   it("returns hours-ago for timestamps several hours old", () => {
     const result = formatStarted(Date.now() - 3 * 60 * 60_000);
     expect(result).toMatch(/^\d+h ago$/);
+  });
+});
+
+// ── US-003 watch helpers ──────────────────────────────────────────────────────
+
+// US-003-AC02: spinner line format
+describe("US-003-AC02: formatSpinnerLine", () => {
+  it("contains the step text", () => {
+    const line = formatSpinnerLine(0, "sampling", 45);
+    expect(line).toContain("sampling");
+  });
+
+  it("contains the percentage", () => {
+    const line = formatSpinnerLine(0, "sampling", 45);
+    expect(line).toContain("45%");
+  });
+
+  it("contains the ellipsis separator", () => {
+    const line = formatSpinnerLine(0, "sampling", 45);
+    expect(line).toContain("…");
+  });
+
+  it("starts with a spinner frame character", () => {
+    const line = formatSpinnerLine(0, "sampling", 45);
+    expect(SPINNER_FRAMES).toContain(line[0]);
+  });
+
+  it("cycles through spinner frames", () => {
+    const first = formatSpinnerLine(0, "x", 0);
+    const last = formatSpinnerLine(SPINNER_FRAMES.length - 1, "x", 0);
+    expect(first[0]).toBe(SPINNER_FRAMES[0]);
+    expect(last[0]).toBe(SPINNER_FRAMES[SPINNER_FRAMES.length - 1]);
+  });
+
+  it("wraps frame index when it exceeds frame count", () => {
+    const a = formatSpinnerLine(0, "x", 0);
+    const b = formatSpinnerLine(SPINNER_FRAMES.length, "x", 0);
+    expect(a[0]).toBe(b[0]);
+  });
+});
+
+// US-003-AC03: done message
+describe("US-003-AC03: formatDoneLine", () => {
+  it("starts with the checkmark ✔", () => {
+    expect(formatDoneLine("/output/file.png")).toContain("✔");
+  });
+
+  it("contains the output path", () => {
+    expect(formatDoneLine("/output/file.png")).toContain("/output/file.png");
+  });
+
+  it("matches exact format 'Done: <path>'", () => {
+    expect(formatDoneLine("/out.mp4")).toBe("✔ Done: /out.mp4");
+  });
+});
+
+// US-003-AC04: fail message
+describe("US-003-AC04: formatFailLine", () => {
+  it("starts with the cross ✖", () => {
+    expect(formatFailLine("OOM error")).toContain("✖");
+  });
+
+  it("contains the failed reason", () => {
+    expect(formatFailLine("OOM error")).toContain("OOM error");
+  });
+
+  it("matches exact format 'Failed: <reason>'", () => {
+    expect(formatFailLine("OOM error")).toBe("✖ Failed: OOM error");
+  });
+});
+
+// US-003-AC05: not found message
+describe("US-003-AC05: formatNotFoundMessage", () => {
+  it("contains the job id", () => {
+    expect(formatNotFoundMessage("abc-123")).toContain("abc-123");
+  });
+
+  it("matches exact format 'Job <id> not found'", () => {
+    expect(formatNotFoundMessage("abc-123")).toBe("Job abc-123 not found");
   });
 });
