@@ -63,3 +63,21 @@
 - `stream.wait(ms)` is a utility on the `Stream` instance — use inside the callback instead of `new Promise(r => setTimeout(r, ms))`.
 - Test pattern for streaming: mock `getJobStatus` with call counter, read full body via `resp.text()` (waits for stream closure), assert on accumulated SSE text.
 - The `Stream` callback is NOT awaited by the constructor — the async function runs in the background; `close()` signals the controller to end.
+
+## US-004 — List jobs
+
+**Summary:** Implemented `GET /jobs` in `packages/parallax_ms/src/index.ts` with optional `?status=` query param. Added `listJobs()` to `packages/parallax_sdk/src/list.ts`, exported from the SDK index, and added 10 tests in `packages/parallax_ms/tests/list_jobs.test.ts`.
+
+**Key Decisions:**
+- **`listJobs()` in SDK**: Follows the same pattern as `getJobStatus()` — uses `getQueue()`, calls async bunqueue methods, closes queue after operations. Uses `queue.getJobsAsync()` with a state array for all-states or single-state queries, plus `queue.getJobCountsAsync()` for counts. Both are called in parallel with `Promise.all`.
+- **State resolution via `job.getState()`**: `getJobsAsync()` returns Job objects; their current state is resolved via `await job.getState()` (same approach as `getJobStatus`). The `mapState()` function is duplicated from `status.ts` — they could be extracted to a shared helper in a future refactor.
+- **Elysia `t.Union([t.Literal(...)])` for enum query params**: Used `t.Optional(t.Union([t.Literal("waiting"), ...]))` for the `status` query param validation. This pattern works correctly in Elysia 1.4.x.
+- **`JobStatusValue` type exported from SDK**: Created a shared `JobStatusValue` type alias (`"waiting" | "active" | "completed" | "failed"`) exported from `list.ts` so `parallax_ms` can import it and avoid re-declaring the union.
+
+**Pitfalls Encountered:**
+- **`mock()` return type inference for `jobs: []`**: When declaring `mock(async () => ({ jobs: [], ... }))`, TypeScript infers `jobs` as `never[]`, causing `TS2322` when `mockResolvedValueOnce` tries to assign objects to it. Fix: add explicit return type annotation `Promise<JobListResult>` to the mock factory function.
+
+**Useful Context for Future Agents:**
+- `listJobs()` is exported from `@parallax/sdk` and accepts `{ status?: JobStatusValue; limit?: number }`. The default limit of 50 is applied inside the function — callers don't need to pass it.
+- `queue.getJobsAsync({ state: ['waiting', 'active', 'completed', 'failed'] })` fetches all jobs across states in a single call; `queue.getJobCountsAsync()` returns `{ waiting, active, completed, failed, prioritized, delayed, paused }` — only the 4 main states are exposed in `JobListResult.counts`.
+- `JobSummary.model/action/media` come from `job.data` (typed as `ParallaxJobData`) — jobs submitted through `submitJob()` always have these fields populated.

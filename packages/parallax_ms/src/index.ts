@@ -1,6 +1,7 @@
 import { Elysia, t } from "elysia";
 import { Stream } from "@elysiajs/stream";
-import { submitJob, getJobStatus } from "@parallax/sdk";
+import { submitJob, getJobStatus, listJobs } from "@parallax/sdk";
+import type { JobStatusValue } from "@parallax/sdk";
 import type { ParallaxJobData } from "@parallax/sdk";
 
 // Script registry — mirrors parallax_cli/src/models/registry.ts
@@ -53,6 +54,27 @@ export const app = new Elysia()
       return { error: error.message };
     }
   })
+
+  // US-004: GET /jobs — list recent jobs with counts
+  .get(
+    "/jobs",
+    async ({ query }) => {
+      const status = query.status as JobStatusValue | undefined;
+      return listJobs({ status });
+    },
+    {
+      query: t.Object({
+        status: t.Optional(
+          t.Union([
+            t.Literal("waiting"),
+            t.Literal("active"),
+            t.Literal("completed"),
+            t.Literal("failed"),
+          ]),
+        ),
+      }),
+    },
+  )
 
   // US-003: GET /jobs/:id/stream — Server-Sent Events until job completion
   .get("/jobs/:id/stream", async ({ params, set }) => {
