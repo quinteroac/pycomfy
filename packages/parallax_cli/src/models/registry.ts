@@ -1,6 +1,39 @@
 // Centralized model registry — single source of truth for all model metadata.
 // Adding a new model requires editing only this file.
 
+// US-001: per-model default parameter values, sourced from each pipeline's run() signature.
+// Fields are optional; absent means the parameter is not applicable for that model.
+export interface ModelDefaults {
+  width?: number;
+  height?: number;
+  length?: number;
+  fps?: number;
+  steps?: number;
+  cfg?: number;
+}
+
+// Keyed as MODEL_DEFAULTS[media][model].
+const MODEL_DEFAULTS: Record<string, Record<string, ModelDefaults>> = {
+  image: {
+    sdxl:    { width: 1024, height: 1024, steps: 25, cfg: 7.5 },
+    anima:   { width: 1024, height: 1024, steps: 30, cfg: 4.0 },
+    z_image: { width: 1024, height: 1024, steps: 4 },
+  },
+  video: {
+    ltx2:  { width: 1280, height: 720,  length: 97, fps: 24, steps: 20, cfg: 4.0 },
+    ltx23: { width: 768,  height: 512,  length: 97, fps: 25,             cfg: 1.0 },
+    wan21: { width: 832,  height: 480,  length: 33, fps: 16, steps: 30, cfg: 6.0 },
+    wan22: { width: 832,  height: 480,  length: 81,          steps: 4,  cfg: 1.0 },
+  },
+  audio: {
+    ace_step: { length: 120, steps: 8, cfg: 1.0 },
+  },
+};
+
+export function getModelDefaults(media: string, model: string): ModelDefaults | undefined {
+  return MODEL_DEFAULTS[media]?.[model];
+}
+
 export const MODELS: Record<string, string[]> = {
   "create image": ["sdxl", "anima", "z_image", "flux_klein", "qwen"],
   "create video": ["ltx2", "ltx23", "wan21", "wan22"],
