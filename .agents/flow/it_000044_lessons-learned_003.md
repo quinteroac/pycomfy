@@ -49,3 +49,22 @@
 - The pattern for mocking server-side dependencies in CLI tests is: inject fake modules into `sys.modules` via an `autouse` fixture, and patch `cli._async._call_submit_job` (not `server.submit.submit_job`) for controlling job IDs.
 - `cli/_async.py` is the single place for async submission logic. If the JobData schema or submit_job signature changes, only `cli/_async.py` needs updating.
 - The `_call_submit_job()` function is intentionally a thin wrapper (not inlined) — its sole purpose is to be patchable in tests.
+
+## US-003 — `parallax jobs` subcommand group
+
+**Summary:** The `parallax jobs` subcommand group (`list`, `status`, `watch`, `cancel`, `open`) was already fully implemented in `cli/commands/jobs.py` (registered in `cli/main.py`). The work for this story was writing comprehensive tests in `tests/test_cli_us003_it044.py` covering all five acceptance criteria.
+
+**Key Decisions:**
+- All tests patch the thin queue wrappers (`_call_list_jobs`, `_call_get_job`, `_call_cancel_job`) in `cli.commands.jobs` — these are isolated from the async `server.queue` so tests never need `aiosqlite` or a real SQLite DB.
+- `subprocess.run` is patched directly for `open` command tests to avoid invoking `xdg-open`/`open` in CI.
+- `sys.platform` is patched to test platform-specific opener logic (`xdg-open` on Linux, `open` on macOS).
+- Rich table output truncates long strings (the `+00:00` timezone suffix in ISO timestamps may be ellipsised). Tests check date-portion substrings, not full timestamps.
+
+**Pitfalls Encountered:**
+1. **Rich truncates table cells**: `2026-04-05T12:00:00+00:00` is rendered as `2026-04-05T12:00:00…` in the terminal table. Asserting the full ISO string fails; checking `"2026-04-05"` passes.
+2. **`time.sleep` must be patched for `watch` polling tests**: The `watch` command calls `time.sleep(1.0)` between polls; without patching it the test waits real seconds for each iteration.
+
+**Useful Context for Future Agents:**
+- `cli.commands.jobs` contains standalone thin wrappers (`_call_list_jobs`, `_call_get_job`, `_call_cancel_job`) that call `asyncio.run()` internally — they are the correct patch targets for any test of the jobs commands, avoiding all async complexity.
+- The `cancel` command checks the job exists first via `_call_get_job` before calling `_call_cancel_job`; tests for "already terminal" must mock both (get returns a row, cancel returns False).
+- `watch` polls until `status in {"completed", "failed", "cancelled"}`. It exits 0 for `completed` and `cancelled`, exits 1 for `failed`.
