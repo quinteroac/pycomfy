@@ -39,3 +39,21 @@
 - `_reset_singleton()` in `server/queue.py` must be called at the start of each test that uses `get_queue()` to avoid test pollution from the module-level singleton.
 - DB path parent directories are created automatically (`mkdir(parents=True, exist_ok=True)`) — no pre-setup needed in consumers.
 - `result` column stores JSON-serialised dicts via `json.dumps`; callers must `json.loads` to deserialise.
+
+## US-003 — submit_job() helper
+
+**Summary:** Created `server/submit.py` exporting `submit_job(data: JobData) -> str`. The function runs `get_queue()` + `queue.enqueue()` via `asyncio.run()` in an inner coroutine, then spawns `server/worker.py` via `subprocess.Popen(..., start_new_session=True)`. 13 tests written in `tests/test_server_submit_us003.py` covering all four ACs; all pass in ~70ms.
+
+**Key Decisions:**
+- `get_queue` is imported at module level (not lazily), enabling `patch("server.submit.get_queue", ...)` in tests without any `sys.path` tricks. This is acceptable because `queue.py` has no torch/comfy imports — the lazy-import rule applies only to torch and comfy.* modules.
+- Used `asyncio.run()` to bridge from the synchronous `submit_job()` signature to the async `get_queue()` / `enqueue()` API. This is correct for standalone/CLI use but will raise if called from within a running event loop (e.g. inside a FastAPI `async def` route). Future iterations should consider making `submit_job` async or wrapping with `asyncio.get_event_loop().run_until_complete()` for mixed contexts.
+- The inner `_enqueue()` async helper keeps the event loop scoped to a single call, ensuring `asyncio.run()` always gets a fresh loop.
+
+**Pitfalls Encountered:**
+- Patching `get_queue` with `return_value=coroutine_object` via `unittest.mock.patch` does not work as expected: `return_value` is a regular attribute on the `MagicMock`, so calling the mock returns the coroutine, but `await mock()` awaits the mock (not the coroutine). The fix is `patch("server.submit.get_queue", new=AsyncMock(return_value=mock_queue))` — this makes `get_queue` itself an `AsyncMock`, so `await get_queue()` correctly returns `mock_queue`.
+- Return annotation check `sig.return_annotation is str` fails when the module uses `from __future__ import annotations` (PEP 563 — annotations become strings). Use `typing.get_type_hints(fn)["return"]` instead.
+
+**Useful Context for Future Agents:**
+- `AsyncMock(return_value=X)` is the canonical way to mock an `async def` function that returns `X` when awaited.
+- `subprocess.Popen` call args are captured as `(args_list, kwargs)` via `mock_popen.call_args`; the command list is `args_list[0]`.
+- `asyncio.run()` cannot be called from within an already-running event loop. If `submit_job` is to be used inside FastAPI routes, the route should be `async def` and call `await asyncio.to_thread(submit_job, data)`, or `submit_job` should be refactored to be async.
