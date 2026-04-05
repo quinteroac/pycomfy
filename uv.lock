@@ -391,6 +391,7 @@ source = { editable = "." }
 dependencies = [
     { name = "pillow" },
     { name = "psutil" },
+    { name = "typer" },
 ]
 
 [package.optional-dependencies]
@@ -516,6 +517,7 @@ requires-dist = [
     { name = "tqdm", marker = "extra == 'comfyui'", specifier = ">=4.67.3" },
     { name = "tqdm", marker = "extra == 'downloader'", specifier = ">=4.67" },
     { name = "transformers", marker = "extra == 'comfyui'", specifier = ">=4.50.3" },
+    { name = "typer", specifier = ">=0.24.1" },
     { name = "yarl", marker = "extra == 'comfyui'", specifier = ">=1.18.0" },
 ]
 provides-extras = ["cpu", "cuda", "video", "audio", "downloader", "all", "comfyui", "server"]

@@ -21,6 +21,7 @@ urls = { Homepage = "https://github.com/quinteroac/comfy-diffusion", Repository 
 dependencies = [
     "pillow>=12.1.1",
     "psutil",
+    "typer>=0.24.1",
 ]
 
 [project.optional-dependencies]
@@ -91,8 +92,11 @@ server = [
 [dependency-groups]
 dev = ["pytest>=8.0", "ruff>=0.4", "mypy>=1.10"]
 
+[project.scripts]
+parallax = "cli.main:main"
+
 [tool.setuptools.packages.find]
-include = ["comfy_diffusion*"]
+include = ["comfy_diffusion*", "cli*"]
 
 [tool.setuptools.package-data]
 comfy_diffusion = [
