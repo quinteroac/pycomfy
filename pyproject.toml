@@ -94,10 +94,10 @@ server = [
 dev = ["pytest>=8.0", "ruff>=0.4", "mypy>=1.10"]
 
 [project.scripts]
-parallax = "cli.main:main"
+parallax = "cli.main:app"
 
 [tool.setuptools.packages.find]
-include = ["comfy_diffusion*", "cli*"]
+include = ["comfy_diffusion*", "cli*", "parallax*"]
 
 [tool.setuptools.package-data]
 comfy_diffusion = [

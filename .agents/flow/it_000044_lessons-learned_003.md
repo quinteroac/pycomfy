@@ -68,3 +68,20 @@
 - `cli.commands.jobs` contains standalone thin wrappers (`_call_list_jobs`, `_call_get_job`, `_call_cancel_job`) that call `asyncio.run()` internally — they are the correct patch targets for any test of the jobs commands, avoiding all async complexity.
 - The `cancel` command checks the job exists first via `_call_get_job` before calling `_call_cancel_job`; tests for "already terminal" must mock both (get returns a row, cancel returns False).
 - `watch` polls until `status in {"completed", "failed", "cancelled"}`. It exits 0 for `completed` and `cancelled`, exits 1 for `failed`.
+
+## US-004 — `python -m parallax` entry point
+
+**Summary:** Created a `parallax/` package at repo root with `__init__.py` and `__main__.py` to enable `python -m parallax` invocation. Updated `pyproject.toml` to point the `parallax` script entry point to `cli.main:app` (was `cli.main:main`). Ran `uv sync` to reinstall the package with the new entry point.
+
+**Key Decisions:**
+- A thin `parallax/` package (two files: `__init__.py` + `__main__.py`) is the cleanest way to support `python -m parallax` while keeping the real CLI logic in `cli/`. It simply imports and calls `app` from `cli.main`.
+- The entry point was changed from `cli.main:main` to `cli.main:app` as the Typer `app` instance is directly callable. The `main()` wrapper function is still present in `cli/main.py` but is no longer the entry point.
+- Added `parallax*` to `[tool.setuptools.packages.find] include` so the package is picked up on install.
+
+**Pitfalls Encountered:**
+- None significant. The `pyproject.toml` entry point and `uv sync` flow worked cleanly. Both `uv run parallax --help` and `uv run python -m parallax --help` printed the Typer help tree without issues.
+
+**Useful Context for Future Agents:**
+- `python -m parallax` resolves through `parallax/__main__.py` → `cli.main:app`. Any change to the CLI app structure should keep this delegation intact.
+- The `cli/__main__.py` (`python -m cli`) entry point is still present and also functional.
+- Tests use `subprocess.run(["uv", "run", ...])` to verify the real installed entry points — this is the correct approach for integration-level AC verification without mocking.
