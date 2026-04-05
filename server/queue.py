@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import aiosqlite
 
-from server.jobs import JobData
+from server.jobs import JobData, PythonProgress
 
 _DB_PATH = Path.home() / ".config" / "parallax" / "jobs.db"
 
@@ -19,10 +19,13 @@ CREATE TABLE IF NOT EXISTS jobs (
     status     TEXT,
     data       TEXT,
     result     TEXT,
+    progress   TEXT,
     created_at TEXT,
     updated_at TEXT
 )
 """
+
+_MIGRATE_ADD_PROGRESS = "ALTER TABLE jobs ADD COLUMN progress TEXT"
 
 _instance: "JobQueue | None" = None
 
@@ -75,6 +78,13 @@ class JobQueue:
             rows = await cursor.fetchall()
         return [_row_to_dict(r) for r in rows]
 
+    async def update_progress(self, job_id: str, progress: "PythonProgress") -> None:
+        await self._db.execute(
+            "UPDATE jobs SET progress = ?, updated_at = ? WHERE id = ?",
+            (progress.model_dump_json(), _now(), job_id),
+        )
+        await self._db.commit()
+
     async def cancel(self, job_id: str) -> bool:
         async with self._db.execute(
             "SELECT status FROM jobs WHERE id = ?", (job_id,)
@@ -105,6 +115,11 @@ async def get_queue(db_path: Path | None = None) -> "JobQueue":
         db.row_factory = aiosqlite.Row
         await db.execute(_CREATE_TABLE)
         await db.commit()
+        try:
+            await db.execute(_MIGRATE_ADD_PROGRESS)
+            await db.commit()
+        except Exception:
+            pass  # column already exists
         _instance = JobQueue(db)
     return _instance
 

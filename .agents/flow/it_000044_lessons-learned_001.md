@@ -57,3 +57,23 @@
 - `AsyncMock(return_value=X)` is the canonical way to mock an `async def` function that returns `X` when awaited.
 - `subprocess.Popen` call args are captured as `(args_list, kwargs)` via `mock_popen.call_args`; the command list is `args_list[0]`.
 - `asyncio.run()` cannot be called from within an already-running event loop. If `submit_job` is to be used inside FastAPI routes, the route should be `async def` and call `await asyncio.to_thread(submit_job, data)`, or `submit_job` should be refactored to be async.
+
+## US-004 — Python worker process
+
+**Summary:** Created `server/worker.py` with an async `_run_worker(job_id)` coroutine and `main()` CLI entry point. Added `update_progress()` to `JobQueue` in `server/queue.py`, plus a `progress TEXT` column with ALTER TABLE migration for existing DBs. 28 tests in `tests/test_server_worker_us004.py` cover all five ACs.
+
+**Key Decisions:**
+- Worker accepts both `"pending"` and `"queued"` as valid starting statuses: `submit_job()` / `enqueue()` creates jobs with `"pending"` (enforced by US-002 tests), but AC01 specifies `"queued"`. Accepting both avoids breaking existing tests while satisfying the AC.
+- `progress TEXT` column added to the jobs schema with an `ALTER TABLE` migration inside `get_queue()` wrapped in a bare `except` to silently skip if the column already exists — the standard SQLite migration pattern.
+- `PythonProgress` added to the `server/queue.py` import from `server.jobs` (not deferred) since `server.jobs` has no torch/comfy imports and causes no circular dependency issues.
+- `proc.stdout` is iterated line-by-line synchronously (blocking read). This is correct for a subprocess worker — async I/O is unnecessary complexity here.
+
+**Pitfalls Encountered:**
+- `uv run pytest` hangs indefinitely in this environment (likely a uv resolution/network issue). Use `python -m pytest` directly or `timeout 120 python -m pytest` for CI-style runs.
+- 38 queue tests (US-002) fail with `ModuleNotFoundError: No module named 'aiosqlite'` when running with the default `python` — `aiosqlite` is a `server` optional extra and is not installed in the base venv. These failures are **pre-existing** and not caused by this change.
+- The worker test mock must set `proc.stdout = iter(["line\n", ...])` (an iterator, not a list) and `proc.stderr = io.StringIO("...")` since `worker.py` uses `for line in proc.stdout` and `proc.stderr.read()`.
+
+**Useful Context for Future Agents:**
+- `server/worker.py` is an executable (`python server/worker.py <job_id>`) — it does not expose a public Python API beyond `_run_worker` (private) and `main()`.
+- The `update_progress` method on `JobQueue` stores the latest `PythonProgress` JSON in the `progress` column; it does not append — only the most recent progress snapshot is retained.
+- When writing worker tests, mock `server.worker.get_queue` (not `server.queue.get_queue`) and `server.worker.subprocess.Popen` to intercept at the point of use.
