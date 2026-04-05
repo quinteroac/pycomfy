@@ -6,10 +6,12 @@ import json
 import shutil
 import sys
 from pathlib import Path
+from typing import AsyncGenerator
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import StreamingResponse
 
-from server.jobs import JobData
+from server.jobs import JobData, PythonProgress
 from server.queue import get_queue
 from server.schemas import (
     CreateAudioRequest,
@@ -63,6 +65,45 @@ def get_job_status(job_id: str) -> JobStatusResponse:
         updated_at=row["updated_at"],
         result=result,
     )
+
+
+@app.get("/jobs/{job_id}/stream")
+async def stream_job_progress(job_id: str) -> StreamingResponse:
+    queue = await get_queue()
+    row = await queue.get(job_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="job not found")
+
+    async def event_generator() -> AsyncGenerator[str, None]:
+        last_progress_json: str | None = None
+        while True:
+            current = await queue.get(job_id)
+            if current is None:
+                break
+
+            progress_json = current.get("progress")
+            status = current["status"]
+
+            if progress_json and progress_json != last_progress_json:
+                last_progress_json = progress_json
+                yield f"data: {progress_json}\n\n"
+
+            if status == "completed":
+                final = PythonProgress(step="done", pct=1.0)
+                yield f"data: {final.model_dump_json()}\n\n"
+                break
+            elif status == "failed":
+                error_msg: str | None = None
+                if current.get("result"):
+                    result_data = json.loads(current["result"])
+                    error_msg = result_data.get("error")
+                final = PythonProgress(step="error", pct=0.0, error=error_msg)
+                yield f"data: {final.model_dump_json()}\n\n"
+                break
+
+            await asyncio.sleep(0.5)
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 @app.post("/jobs/create/image", response_model=JobResponse)

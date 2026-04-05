@@ -41,3 +41,25 @@
 - `server/schemas.py` now exports: `JobResult`, `JobStatusResponse`, `JobResponse`, and all request models. Import from there for response types.
 - Status mapping: DB `"pending"` → API `"queued"`; `"running"`, `"completed"`, `"failed"`, `"cancelled"` pass through unchanged.
 - The `result` field in the DB row is a JSON string when set. Always call `json.loads()` before constructing `JobResult`.
+
+## US-003 — SSE progress stream
+
+**Summary:** Implemented `GET /jobs/{job_id}/stream` as an async FastAPI endpoint returning a `StreamingResponse` with `media_type="text/event-stream"`. The endpoint polls the DB for progress updates and emits `data: <json>\n\n` SSE events until the job reaches `"completed"` or `"failed"`, then emits a final `step: "done"` or `step: "error"` event and closes. 16 tests cover all ACs.
+
+**Key Decisions:**
+- Made the route `async def` (not sync with `asyncio.run()`) so it can yield from an async generator directly into `StreamingResponse`.
+- The initial 404 check (`await queue.get(job_id)` before the generator) ensures the response is a proper 404 HTTPException, not an empty stream.
+- Duplicate progress events are suppressed by comparing `progress_json` to `last_progress_json` — only changed values are emitted.
+- `PythonProgress` imported from `server.jobs` (already had the model); `StreamingResponse` imported from `fastapi.responses`.
+- `asyncio.sleep(0.5)` is the polling interval; tests bypass it by making the mock queue immediately return terminal status (or by mocking `asyncio.sleep` with `AsyncMock`).
+
+**Pitfalls Encountered:**
+- Route ordering: `/jobs/{job_id}/stream` must not conflict with `/jobs/{job_id}`. In FastAPI/Starlette, `{job_id}` only matches a single path segment, so there is no ambiguity. The stream route was added after `get_job_status` without issues.
+- The mock queue's `get()` is called **twice** per completed job: once before the generator starts (the existence check in the route handler) and once inside the generator loop. `side_effect` lists must include at least 2 entries for terminal-status tests.
+
+**Useful Context for Future Agents:**
+- Tests run via `/home/victor/AI/pycomfy/.venv/bin/python3 -m pytest` — not `uv run pytest`.
+- Mock `server.app.get_queue` (not `server.queue.get_queue`) — it's imported directly into `app.py`'s namespace.
+- `AsyncMock` works correctly for both `get_queue` (which returns a queue object) and `queue.get` (which returns row dicts). Use `side_effect=` with a list to simulate multiple polling calls.
+- When the job is in a terminal state immediately, `asyncio.sleep` is never reached, so no need to mock it for those test cases.
+- `starlette.testclient.TestClient` (sync) can consume SSE responses via `client.get()` when the generator terminates: `response.text` contains the full SSE body.
