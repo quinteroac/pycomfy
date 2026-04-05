@@ -5,6 +5,7 @@ import asyncio
 import json
 import shutil
 import sys
+from importlib.metadata import version as _pkg_version
 from pathlib import Path
 from typing import AsyncGenerator
 
@@ -30,6 +31,10 @@ app = FastAPI(title="comfy-diffusion server")
 
 _REPO_ROOT = str(Path(__file__).resolve().parents[1])
 
+
+@app.get("/health")
+def health() -> dict:
+    return {"status": "ok", "version": _pkg_version("comfy-diffusion")}
 
 def _uv_path() -> str:
     found = shutil.which("uv")

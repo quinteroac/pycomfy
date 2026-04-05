@@ -84,3 +84,19 @@
 - `server/schemas.py` now exports `JobListItem` in addition to all previous models.
 - When adding new list/query endpoints that need the queue, follow the `asyncio.run(_inner())` pattern used by all sync routes in `app.py`.
 - `queue.list_jobs(limit=50)` is already implemented in `server/queue.py` — no DB changes were required.
+
+## US-005 — Health endpoint
+
+**Summary:** Added `GET /health` to `server/app.py`. Returns `{"status": "ok", "version": "<pkg_version>"}` using `importlib.metadata.version("comfy-diffusion")`. No DB dependency. 4 tests in `tests/test_server_routes_us005_it044.py`, all passing.
+
+**Key Decisions:**
+- Used `importlib.metadata.version` (stdlib, no extra deps) to read the package version at call time.
+- Route registered before all `/jobs/*` routes so it doesn't conflict.
+- No schema model needed — simple `dict` return type suffices.
+
+**Pitfalls Encountered:**
+- None. This was a minimal, self-contained endpoint with no DB or model-loading dependency.
+
+**Useful Context for Future Agents:**
+- `_pkg_version` is imported at module top as `from importlib.metadata import version as _pkg_version` — mock it as `server.app._pkg_version` in tests.
+- Tests run via `/home/victor/AI/pycomfy/.venv/bin/python3 -m pytest` — not `uv run pytest`.
