@@ -53,3 +53,24 @@
 **Useful Context for Future Agents:**
 - `ParallaxJobStatus` (from `packages/parallax_sdk/src/status.ts`) uses camelCase (`createdAt`, `startedAt`, `finishedAt`, `output`) — always map to snake_case in MCP text responses to match the established API contract.
 - The `get_job_status` handler never propagates `isError: true`; all failure states (failed job, not found) are returned as plain JSON text. Only the inference tools (`create_image`, etc.) use `isError: true` for invalid model names.
+
+## US-004 — MCP server entry point
+
+**Summary:** Created `mcp/__init__.py`, `mcp/main.py`, and `mcp/__main__.py` to expose a Python-native FastMCP server runnable via `uv run parallax-mcp`. Added `fastmcp` as a core dependency and registered the `parallax-mcp` script entry point in `pyproject.toml`. Added `mcp*` to `[tool.setuptools.packages.find] include`.
+
+**Key Decisions:**
+- The `mcp/` directory MUST have `__init__.py` to appear in the editable install's `MAPPING` dict and be importable as `mcp.main`. Without `__init__.py`, the namespace package approach was tried but failed because Python's PathFinder finds the installed `mcp` SDK (in `.venv/site-packages/mcp/__init__.py`) before our namespace package.
+- `mcp/__init__.py` extends `__path__` to include the SDK's `mcp/` directory from site-packages, then re-exports everything from the SDK's `mcp/__init__.py`. This lets `from mcp import McpError` work (required by fastmcp) even though our `mcp/` shadows the SDK's `mcp/`.
+- Server name is `"parallax-mcp"` and version comes from `importlib.metadata.version("comfy-diffusion")`, ensuring it always matches `pyproject.toml`.
+- `mcp.run(transport="stdio")` is the canonical fastmcp call for stdio mode.
+
+**Pitfalls Encountered:**
+- **Naming conflict**: The `mcp` package name conflicts with the installed `mcp` SDK (Anthropic's MCP library), which `fastmcp` depends on. When `mcp/__init__.py` exists, our directory takes precedence over the SDK in sys.path (because `''` is at index 0 in sys.path when running from the repo root). The fix: extend `__path__` in `mcp/__init__.py` to include the SDK's directory, then re-export all SDK symbols.
+- **Namespace package approach fails**: Without `__init__.py`, our `mcp/` becomes a namespace package candidate. However, Python's PathFinder finds the SDK's `mcp/__init__.py` (regular package) first in site-packages and namespace packages lose to regular packages. So `from mcp.main import main` fails.
+- **`_EditableFinder` ordering**: The setuptools editable install appends `_EditableFinder` to `sys.meta_path` AFTER `PathFinder`. This means for any package also in site-packages, PathFinder wins. The `mcp` SDK is in site-packages, so without our own `mcp/__init__.py` in the repo root, the SDK wins and `mcp.main` is not found.
+
+**Useful Context for Future Agents:**
+- `mcp/__init__.py` must be kept in sync with the installed `mcp` SDK's `__init__.py` exports. If `fastmcp` is upgraded and the `mcp` SDK adds new top-level exports, they must be added to `mcp/__init__.py` too.
+- `sys.path` ordering in this repo: `''` (cwd=repo root) comes before `.venv/site-packages` when running `uv run python`. This means any file in the repo root's immediate subdirectories takes precedence over installed packages of the same name.
+- The `__path__` extension trick (adding site-packages sub-directory to a local package's `__path__`) is the cleanest way to extend an installed namespace without forking it.
+- The `fastmcp` dependency is now a core (non-optional) dependency in `pyproject.toml`. It brings in `starlette`, `uvicorn`, and other web-server dependencies.

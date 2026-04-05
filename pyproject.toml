@@ -19,6 +19,7 @@ classifiers = [
 ]
 urls = { Homepage = "https://github.com/quinteroac/comfy-diffusion", Repository = "https://github.com/quinteroac/comfy-diffusion", Issues = "https://github.com/quinteroac/comfy-diffusion/issues" }
 dependencies = [
+    "fastmcp>=3.2.0",
     "pillow>=12.1.1",
     "psutil",
     "rich>=13.0",
@@ -95,9 +96,10 @@ dev = ["pytest>=8.0", "ruff>=0.4", "mypy>=1.10"]
 
 [project.scripts]
 parallax = "cli.main:app"
+parallax-mcp = "mcp.main:main"
 
 [tool.setuptools.packages.find]
-include = ["comfy_diffusion*", "cli*", "parallax*"]
+include = ["comfy_diffusion*", "cli*", "parallax*", "mcp*"]
 
 [tool.setuptools.package-data]
 comfy_diffusion = [
