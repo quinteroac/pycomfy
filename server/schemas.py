@@ -6,6 +6,11 @@ from typing import Optional
 from pydantic import BaseModel
 
 
+class JobResult(BaseModel):
+    output_path: Optional[str] = None
+    error: Optional[str] = None
+
+
 class CreateImageRequest(BaseModel):
     model: str
     prompt: str
@@ -50,6 +55,14 @@ class UpscaleImageRequest(BaseModel):
     model: str
     prompt: str
     input: str
+
+
+class JobStatusResponse(BaseModel):
+    id: str
+    status: str
+    created_at: str
+    updated_at: str
+    result: Optional[JobResult] = None
 
 
 class JobResponse(BaseModel):
