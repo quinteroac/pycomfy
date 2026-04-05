@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -11,7 +12,12 @@ if TYPE_CHECKING:
 
 from server.jobs import JobData, PythonProgress
 
-_DB_PATH = Path.home() / ".config" / "parallax" / "jobs.db"
+_DB_PATH = Path(
+    os.environ.get(
+        "PARALLAX_DB_PATH",
+        str(Path.home() / ".config" / "parallax" / "jobs.db"),
+    )
+)
 
 _CREATE_TABLE = """
 CREATE TABLE IF NOT EXISTS jobs (
@@ -47,7 +53,7 @@ class JobQueue:
         now = _now()
         await self._db.execute(
             "INSERT INTO jobs (id, status, data, result, created_at, updated_at) VALUES (?, ?, ?, NULL, ?, ?)",
-            (job_id, "pending", data.model_dump_json(), now, now),
+            (job_id, "queued", data.model_dump_json(), now, now),
         )
         await self._db.commit()
         return job_id

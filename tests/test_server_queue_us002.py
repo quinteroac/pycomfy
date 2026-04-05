@@ -204,7 +204,7 @@ class TestAC04JobQueueMethods:
         q = _tmp_queue(tmp_path)
         job_id = _run(q.enqueue(_sample_job_data()))
         row = _run(q.get(job_id))
-        assert row["status"] == "pending"
+        assert row["status"] == "queued"
 
     def test_enqueue_stores_data_json(self, tmp_path):
         import json

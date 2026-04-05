@@ -9,7 +9,7 @@ from pathlib import Path
 from server.jobs import JobData, PythonProgress
 from server.queue import get_queue
 
-_PROCESSABLE_STATUSES = {"pending", "queued"}
+_PROCESSABLE_STATUSES = {"queued"}
 
 
 async def _run_worker(job_id: str) -> None:

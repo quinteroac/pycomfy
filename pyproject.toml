@@ -92,7 +92,7 @@ server = [
 ]
 
 [dependency-groups]
-dev = ["pytest>=8.0", "ruff>=0.4", "mypy>=1.10"]
+dev = ["pytest>=8.0", "ruff>=0.4", "mypy>=1.10", "aiosqlite>=0.22.1"]
 
 [project.scripts]
 parallax = "cli.main:app"

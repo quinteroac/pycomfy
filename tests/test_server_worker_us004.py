@@ -86,14 +86,6 @@ class TestAC01JobQueued:
             _run(_run_worker("test-job-id"))
         # no exception raised
 
-    def test_worker_accepts_pending_status(self):
-        """submit_job creates jobs with 'pending'; worker should accept it too."""
-        q = _make_mock_queue(job_status="pending")
-        proc = _make_proc([])
-        with _patch_queue(q), _patch_popen(proc):
-            from server.worker import _run_worker
-            _run(_run_worker("test-job-id"))
-
     def test_worker_exits_nonzero_when_job_not_found(self):
         q = MagicMock()
         q.get = AsyncMock(return_value=None)

@@ -572,6 +572,7 @@ video = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "aiosqlite" },
     { name = "mypy" },
     { name = "pytest" },
     { name = "ruff" },
@@ -648,6 +649,7 @@ provides-extras = ["cpu", "cuda", "video", "audio", "downloader", "all", "comfyu
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "aiosqlite", specifier = ">=0.22.1" },
     { name = "mypy", specifier = ">=1.10" },
     { name = "pytest", specifier = ">=8.0" },
     { name = "ruff", specifier = ">=0.4" },
