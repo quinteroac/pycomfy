@@ -5,6 +5,7 @@ import { readFileSync } from "fs";
 import { join } from "path";
 
 const SRC = readFileSync(join(import.meta.dir, "../src/index.ts"), "utf-8");
+const REGISTRY = readFileSync(join(import.meta.dir, "../../parallax_cli/src/models/registry.ts"), "utf-8");
 
 // ── AC01: create_audio calls submitJob ────────────────────────────────────────
 
@@ -99,7 +100,7 @@ describe("US-001 schema: create_audio fields", () => {
 
 describe("US-001 script registry: AUDIO_CREATE_SCRIPTS", () => {
   it("contains ace_step script path", () => {
-    expect(SRC).toContain("runtime/audio/ace/t2a.py");
+    expect(REGISTRY).toContain("runtime/audio/ace/t2a.py");
   });
 
   it("remaps --prompt to --tags for audio scripts", () => {

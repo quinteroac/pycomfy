@@ -5,6 +5,7 @@ import { readFileSync } from "fs";
 import { join } from "path";
 
 const SRC = readFileSync(join(import.meta.dir, "../src/index.ts"), "utf-8");
+const REGISTRY = readFileSync(join(import.meta.dir, "../../parallax_cli/src/models/registry.ts"), "utf-8");
 
 // ── AC01: upscale_image calls submitJob ───────────────────────────────────────
 
@@ -119,11 +120,11 @@ describe("US-001 schema: upscale_image fields", () => {
 
 describe("US-001 script registry: IMAGE_UPSCALE_SCRIPTS", () => {
   it("contains esrgan script path", () => {
-    expect(SRC).toContain("runtime/image/edit/sd/esrgan_upscale.py");
+    expect(REGISTRY).toContain("runtime/image/edit/sd/esrgan_upscale.py");
   });
 
   it("contains latent_upscale script path", () => {
-    expect(SRC).toContain("runtime/image/edit/sd/latent_upscale.py");
+    expect(REGISTRY).toContain("runtime/image/edit/sd/latent_upscale.py");
   });
 
   it("passes --esrgan-checkpoint flag", () => {

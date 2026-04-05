@@ -5,6 +5,7 @@ import { readFileSync } from "fs";
 import { join } from "path";
 
 const SRC = readFileSync(join(import.meta.dir, "../src/index.ts"), "utf-8");
+const REGISTRY = readFileSync(join(import.meta.dir, "../../parallax_cli/src/models/registry.ts"), "utf-8");
 
 // ── AC01: create_video calls submitJob ────────────────────────────────────────
 
@@ -103,15 +104,15 @@ describe("US-001 schema: create_video fields", () => {
 
 describe("US-001 script registry: VIDEO_CREATE_SCRIPTS", () => {
   it("contains ltx2 t2v script path", () => {
-    expect(SRC).toContain("runtime/video/ltx/ltx2/t2v.py");
+    expect(REGISTRY).toContain("runtime/video/ltx/ltx2/t2v.py");
   });
 
   it("contains ltx2 i2v script path", () => {
-    expect(SRC).toContain("runtime/video/ltx/ltx2/i2v.py");
+    expect(REGISTRY).toContain("runtime/video/ltx/ltx2/i2v.py");
   });
 
   it("contains wan21 t2v script path", () => {
-    expect(SRC).toContain("runtime/video/wan/wan21/t2v.py");
+    expect(REGISTRY).toContain("runtime/video/wan/wan21/t2v.py");
   });
 
   it("passes --image for i2v mode", () => {

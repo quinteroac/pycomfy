@@ -5,6 +5,7 @@ import { readFileSync } from "fs";
 import { join } from "path";
 
 const SRC = readFileSync(join(import.meta.dir, "../src/index.ts"), "utf-8");
+const REGISTRY = readFileSync(join(import.meta.dir, "../../parallax_cli/src/models/registry.ts"), "utf-8");
 
 // ── AC01: edit_image calls submitJob ─────────────────────────────────────────
 
@@ -115,11 +116,11 @@ describe("US-001 schema: edit_image fields", () => {
 
 describe("US-001 script registry: IMAGE_EDIT_SCRIPTS", () => {
   it("contains flux_9b_kv script path", () => {
-    expect(SRC).toContain("runtime/image/edit/flux/9b_kv.py");
+    expect(REGISTRY).toContain("runtime/image/edit/flux/9b_kv.py");
   });
 
   it("contains qwen edit_2511 script path", () => {
-    expect(SRC).toContain("runtime/image/edit/qwen/edit_2511.py");
+    expect(REGISTRY).toContain("runtime/image/edit/qwen/edit_2511.py");
   });
 
   it("handles qwen model with --output-prefix", () => {

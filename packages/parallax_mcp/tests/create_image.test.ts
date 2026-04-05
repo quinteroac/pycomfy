@@ -5,6 +5,7 @@ import { readFileSync } from "fs";
 import { join } from "path";
 
 const SRC = readFileSync(join(import.meta.dir, "../src/index.ts"), "utf-8");
+const REGISTRY = readFileSync(join(import.meta.dir, "../../parallax_cli/src/models/registry.ts"), "utf-8");
 
 // ── AC01: create_image calls submitJob from @parallax/sdk/submit ──────────────
 
@@ -107,15 +108,15 @@ describe("US-001 schema: create_image fields", () => {
 
 describe("US-001 script registry: IMAGE_CREATE_SCRIPTS", () => {
   it("contains sdxl script path", () => {
-    expect(SRC).toContain("runtime/image/generation/sdxl/t2i.py");
+    expect(REGISTRY).toContain("runtime/image/generation/sdxl/t2i.py");
   });
 
   it("contains anima script path", () => {
-    expect(SRC).toContain("runtime/image/generation/anima/t2i.py");
+    expect(REGISTRY).toContain("runtime/image/generation/anima/t2i.py");
   });
 
   it("contains z_image script path", () => {
-    expect(SRC).toContain("runtime/image/generation/z_image/turbo.py");
+    expect(REGISTRY).toContain("runtime/image/generation/z_image/turbo.py");
   });
 });
 
