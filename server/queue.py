@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -33,26 +33,28 @@ CREATE TABLE IF NOT EXISTS jobs (
 
 _MIGRATE_ADD_PROGRESS = "ALTER TABLE jobs ADD COLUMN progress TEXT"
 
-_instance: "JobQueue | None" = None
+_instance: JobQueue | None = None
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
-def _row_to_dict(row: "aiosqlite.Row") -> dict:
+def _row_to_dict(row: aiosqlite.Row) -> dict:
     return dict(row)
 
 
 class JobQueue:
-    def __init__(self, db: "aiosqlite.Connection") -> None:
+    def __init__(self, db: aiosqlite.Connection) -> None:
         self._db = db
 
     async def enqueue(self, data: JobData) -> str:
         job_id = str(uuid.uuid4())
         now = _now()
         await self._db.execute(
-            "INSERT INTO jobs (id, status, data, result, created_at, updated_at) VALUES (?, ?, ?, NULL, ?, ?)",
+            "INSERT INTO jobs"
+            " (id, status, data, result, created_at, updated_at)"
+            " VALUES (?, ?, ?, NULL, ?, ?)",
             (job_id, "queued", data.model_dump_json(), now, now),
         )
         await self._db.commit()
@@ -84,7 +86,7 @@ class JobQueue:
             rows = await cursor.fetchall()
         return [_row_to_dict(r) for r in rows]
 
-    async def update_progress(self, job_id: str, progress: "PythonProgress") -> None:
+    async def update_progress(self, job_id: str, progress: PythonProgress) -> None:
         await self._db.execute(
             "UPDATE jobs SET progress = ?, updated_at = ? WHERE id = ?",
             (progress.model_dump_json(), _now(), job_id),
@@ -109,7 +111,7 @@ class JobQueue:
         return True
 
 
-async def get_queue(db_path: Path | None = None) -> "JobQueue":
+async def get_queue(db_path: Path | None = None) -> JobQueue:
     """Return the shared async JobQueue singleton, initialising it on first call."""
     global _instance
     if _instance is None:
