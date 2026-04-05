@@ -77,3 +77,21 @@
 - `server/worker.py` is an executable (`python server/worker.py <job_id>`) — it does not expose a public Python API beyond `_run_worker` (private) and `main()`.
 - The `update_progress` method on `JobQueue` stores the latest `PythonProgress` JSON in the `progress` column; it does not append — only the most recent progress snapshot is retained.
 - When writing worker tests, mock `server.worker.get_queue` (not `server.queue.get_queue`) and `server.worker.subprocess.Popen` to intercept at the point of use.
+
+## US-005 — ProgressReporter helper
+
+**Summary:** Created `comfy_diffusion/progress.py` exporting `ProgressReporter` with `update(step, pct, **kwargs)` and `done(output_path)`. Outputs NDJSON lines matching the `PythonProgress` schema. 17 tests in `tests/test_progress_us005.py` cover all four ACs.
+
+**Key Decisions:**
+- Implemented without importing Pydantic or `server.jobs` — `comfy_diffusion/` must not depend on `server/`. JSON is built directly as a plain dict and serialised with `json.dumps`.
+- Only recognised optional fields (`frame`, `total`, `output`, `error`) are forwarded from `**kwargs`; unknown kwargs are silently ignored to match PythonProgress's fixed schema.
+- `ProgressReporter` is NOT re-exported at the `comfy_diffusion` package level — follows the project's rule that only `check_runtime`, `apply_lora`, and vae functions are re-exported.
+- `print(..., flush=True)` ensures lines appear immediately even when stdout is buffered (important for worker subprocess line-by-line reading).
+
+**Pitfalls Encountered:**
+- No pitfalls; implementation was straightforward. The schema was already defined in `server/jobs.py` — match it structurally, don't import it.
+
+**Useful Context for Future Agents:**
+- `ProgressReporter` is consumed via `from comfy_diffusion.progress import ProgressReporter`.
+- Pipelines that want structured progress can instantiate one reporter, call `reporter.update(...)` between steps, and call `reporter.done(output_path)` at completion.
+- The `done()` method always emits `step="done"` — callers that parse the NDJSON stream can use this as a sentinel.
