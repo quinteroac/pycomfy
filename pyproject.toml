@@ -84,6 +84,9 @@ comfyui = [
     "transformers>=4.50.3",
     "yarl>=1.18.0",
 ]
+server = [
+    "aiosqlite>=0.22.1",
+]
 
 [dependency-groups]
 dev = ["pytest>=8.0", "ruff>=0.4", "mypy>=1.10"]
