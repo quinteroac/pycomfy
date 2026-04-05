@@ -21,6 +21,7 @@ urls = { Homepage = "https://github.com/quinteroac/comfy-diffusion", Repository 
 dependencies = [
     "pillow>=12.1.1",
     "psutil",
+    "rich>=13.0",
     "typer>=0.24.1",
 ]
 

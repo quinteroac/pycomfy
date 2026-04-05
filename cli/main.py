@@ -10,6 +10,7 @@ import typer
 
 from cli.commands.create import app as create_app
 from cli.commands.edit import app as edit_app
+from cli.commands.jobs import app as jobs_app
 from cli.commands.upscale import app as upscale_app
 
 app = typer.Typer(
@@ -20,6 +21,7 @@ app = typer.Typer(
 
 app.add_typer(create_app, name="create")
 app.add_typer(edit_app,   name="edit")
+app.add_typer(jobs_app,   name="jobs")
 app.add_typer(upscale_app, name="upscale")
 
 
