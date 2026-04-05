@@ -400,42 +400,6 @@ class TestSyncModeFailure:
         assert result.exit_code == 1
 
 
-# ===========================================================================
-# AC02 — --async exits cleanly (job queue not yet available)
-# ===========================================================================
-
-class TestAsyncModeNotYetAvailable:
-    """--async flag exits 1 with informative message (queue not yet available)."""
-
-    def test_create_image_async_exits_1(self, runner, tmp_path, models_dir):
-        app = _import_app()
-        result = runner.invoke(app, [
-            "create", "image",
-            "--model", "sdxl",
-            "--prompt", "test",
-            "--async",
-            "--models-dir", models_dir,
-        ])
-        assert result.exit_code == 1
-
-    def test_create_video_async_exits_1(self, runner, tmp_path, models_dir):
-        app = _import_app()
-        result = runner.invoke(app, [
-            "create", "video",
-            "--model", "wan21",
-            "--prompt", "test",
-            "--async",
-            "--models-dir", models_dir,
-        ])
-        assert result.exit_code == 1
-
-    def test_create_audio_async_exits_1(self, runner, tmp_path, models_dir):
-        app = _import_app()
-        result = runner.invoke(app, [
-            "create", "audio",
-            "--model", "ace_step",
-            "--prompt", "test",
-            "--async",
-            "--models-dir", models_dir,
-        ])
-        assert result.exit_code == 1
+# TestAsyncModeNotYetAvailable has been removed.
+# --async is now fully implemented in US-002 (it_000044).
+# See tests/test_cli_us002_it044.py for --async tests.

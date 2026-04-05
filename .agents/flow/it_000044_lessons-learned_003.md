@@ -26,3 +26,26 @@
 - The `PYCOMFY_MODELS_DIR` env var is the fallback for `--models-dir`. `resolve_models_dir()` in `_io.py` handles both.
 - `latent_upscale` upscale image command uses `sample()` from `comfy_diffusion.sampling` with `denoise=0.5` for the hi-res fix pass — this is intentional (50% denoise for refinement, not full generation).
 - `typer.Option(...)` (with `...` as default) marks an option as required even when it appears after optional parameters in the function signature.
+
+## US-002 — `--async` flag on generation commands
+
+**Summary:** Replaced the "not yet available" stub in all five generation commands with a working `--async` implementation. Created `cli/_async.py` with `run_async()` and `_call_submit_job()`. The `--async` flag now calls `submit_job()` from `server/submit.py` and prints `Job <job_id> queued\n  → parallax jobs watch <job_id>`.
+
+**Key Decisions:**
+- Created `cli/_async.py` as a dedicated helper module to keep async logic DRY across all five commands. It contains `run_async()` (builds `JobData`, calls `submit_job()`, prints output) and `_call_submit_job()` (thin wrapper enabling test mocking).
+- Kept `server.jobs.JobData` and `server.submit.submit_job` as lazy imports inside function bodies — `cli/_async.py` does NOT import them at module top level. This is critical because `pydantic` is not installed in the test environment, so top-level imports of `server.jobs` would break module loading.
+- The `_call_submit_job()` wrapper is the patchable surface: `patch("cli._async._call_submit_job", return_value=job_id)`. Without it, tests would need to patch `server.submit.submit_job`, which fails because `server.submit` transitively imports `server.jobs` (pydantic), and pydantic isn't installed.
+- `JobData` creation also requires pydantic; tests mock it via `sys.modules` injection of a fake `server.jobs` module with `JobData = MagicMock(...)` in an `autouse` fixture.
+- Removed the now-obsolete `TestAsyncModeNotYetAvailable` class from `test_cli_us001_it044.py` since it tested the old "not yet available" stub.
+
+**Pitfalls Encountered:**
+1. **pydantic not installed in test env**: `server.jobs` requires pydantic which isn't available under `uv run pytest`. Any top-level import of `server.jobs` in `cli/_async.py` causes immediate `ModuleNotFoundError` at CLI module load time.
+2. **`patch()` imports the target module**: When you call `patch("server.submit.submit_job")`, unittest.mock tries to import `server.submit`, which imports `server.jobs`, which needs pydantic → fails. Patching at `cli._async._call_submit_job` avoids this entirely since `cli._async` has no pydantic deps.
+3. **`patch("cli._async.submit_job")` with top-level import**: If `submit_job` were imported at module level in `cli/_async.py`, patching `cli._async.submit_job` would work ONLY after the module is loaded. Adding `import cli._async` before `patch()` is required in that case, but the pydantic issue still bites at load time.
+4. **Fake server.jobs module injection**: The `autouse` fixture uses `sys.modules` injection to provide `server.jobs.JobData` as a `MagicMock`. This must run before the command invokes `from server.jobs import JobData`.
+
+**Useful Context for Future Agents:**
+- The test environment does NOT have pydantic installed. Any code path in `cli/` that imports from `server.*` must use lazy imports (inside function bodies), never top-level.
+- The pattern for mocking server-side dependencies in CLI tests is: inject fake modules into `sys.modules` via an `autouse` fixture, and patch `cli._async._call_submit_job` (not `server.submit.submit_job`) for controlling job IDs.
+- `cli/_async.py` is the single place for async submission logic. If the JobData schema or submit_job signature changes, only `cli/_async.py` needs updating.
+- The `_call_submit_job()` function is intentionally a thin wrapper (not inlined) — its sole purpose is to be patchable in tests.

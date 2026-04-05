@@ -81,8 +81,24 @@ def create_image(
         raise typer.Exit(code=1)
 
     if async_mode:
-        typer.echo("Error: --async mode requires a job queue (not yet available).", err=True)
-        raise typer.Exit(code=1)
+        from cli._async import run_async
+        run_async(
+            action="create",
+            media="image",
+            model=model,
+            args={
+                "prompt": prompt,
+                "negative_prompt": negative_prompt,
+                "width": width,
+                "height": height,
+                "steps": steps,
+                "cfg": cfg,
+                "seed": seed,
+                "output": output,
+                "models_dir": models_dir,
+            },
+        )
+        return
 
     mdir = resolve_models_dir(models_dir)
 
@@ -191,8 +207,26 @@ def create_video(
         raise typer.Exit(code=1)
 
     if async_mode:
-        typer.echo("Error: --async mode requires a job queue (not yet available).", err=True)
-        raise typer.Exit(code=1)
+        from cli._async import run_async
+        run_async(
+            action="create",
+            media="video",
+            model=model,
+            args={
+                "prompt": prompt,
+                "input": input,
+                "width": width,
+                "height": height,
+                "length": length,
+                "fps": fps,
+                "steps": steps,
+                "cfg": cfg,
+                "seed": seed,
+                "output": output,
+                "models_dir": models_dir,
+            },
+        )
+        return
 
     if input is not None:
         from pathlib import Path as _Path
@@ -375,11 +409,26 @@ def create_audio(
         raise typer.Exit(code=1)
 
     if async_mode:
-        typer.echo("Error: --async mode requires a job queue (not yet available).", err=True)
-        raise typer.Exit(code=1)
+        from cli._async import run_async
+        run_async(
+            action="create",
+            media="audio",
+            model=model,
+            args={
+                "prompt": prompt,
+                "length": length,
+                "steps": steps,
+                "cfg": cfg,
+                "bpm": bpm,
+                "lyrics": lyrics,
+                "seed": seed,
+                "output": output,
+                "models_dir": models_dir,
+            },
+        )
+        return
 
     mdir = resolve_models_dir(models_dir)
-
     dur = length if length is not None else float(_d("audio", model, "length", 120))
     s   = steps  or int(_d("audio", model, "steps", 8))
     c   = cfg    if cfg is not None else float(_d("audio", model, "cfg", 1.0))

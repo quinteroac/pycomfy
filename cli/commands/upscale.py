@@ -78,8 +78,29 @@ def upscale_image(
         raise typer.Exit(code=1)
 
     if async_mode:
-        typer.echo("Error: --async mode requires a job queue (not yet available).", err=True)
-        raise typer.Exit(code=1)
+        from cli._async import run_async
+        run_async(
+            action="upscale",
+            media="image",
+            model=model,
+            args={
+                "prompt": prompt,
+                "input": input,
+                "output": output,
+                "output_base": output_base,
+                "checkpoint": checkpoint,
+                "esrgan_checkpoint": esrgan_checkpoint,
+                "latent_upscale_checkpoint": latent_upscale_checkpoint,
+                "negative_prompt": negative_prompt,
+                "width": width,
+                "height": height,
+                "steps": steps,
+                "cfg": cfg,
+                "seed": seed,
+                "models_dir": models_dir,
+            },
+        )
+        return
 
     if not Path(input).is_file():
         typer.echo(f"Error: input file not found: {input}", err=True)

@@ -73,8 +73,28 @@ def edit_image(
         raise typer.Exit(code=1)
 
     if async_mode:
-        typer.echo("Error: --async mode requires a job queue (not yet available).", err=True)
-        raise typer.Exit(code=1)
+        from cli._async import run_async
+        run_async(
+            action="edit",
+            media="image",
+            model=model,
+            args={
+                "prompt": prompt,
+                "input": input,
+                "width": width,
+                "height": height,
+                "steps": steps,
+                "cfg": cfg,
+                "seed": seed,
+                "output": output,
+                "models_dir": models_dir,
+                "subject_image": subject_image,
+                "image2": image2,
+                "image3": image3,
+                "no_lora": no_lora,
+            },
+        )
+        return
 
     from pathlib import Path as _Path
     if not _Path(input).is_file():
