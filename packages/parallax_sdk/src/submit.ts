@@ -1,4 +1,4 @@
-import { getQueue } from "./queue";
+import { getQueue, closeQueue } from "./queue";
 import type { ParallaxJobData } from "./jobs";
 
 export async function submitJob(data: ParallaxJobData): Promise<string> {
@@ -7,18 +7,10 @@ export async function submitJob(data: ParallaxJobData): Promise<string> {
   const job = await queue.add("pipeline", data, {
     attempts: 1,
     timeout: 30 * 60 * 1000,
+    durable: true,
   });
 
   const jobId = String(job.id);
-
-  Bun.spawn(["bun", "packages/parallax_cli/src/_run.ts", jobId], {
-    stdin: "ignore",
-    stdout: "ignore",
-    stderr: "ignore",
-    detached: true,
-  });
-
-  await queue.close();
-
+  await closeQueue();
   return jobId;
 }

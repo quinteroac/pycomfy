@@ -18,7 +18,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "bunqueue": "^2.6.113"
+    "bunqueue": "2.6.113",
+    "msgpackr": "*"
   },
   "devDependencies": {
     "bun-types": "latest",

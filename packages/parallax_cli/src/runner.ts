@@ -71,5 +71,6 @@ export async function runAsync(
   );
 
   console.log(formatAsyncMessage(jobId));
+  // durable:true guarantees the job is already on disk — exit immediately.
   process.exit(0);
 }

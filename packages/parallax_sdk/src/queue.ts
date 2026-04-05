@@ -16,3 +16,10 @@ export function getQueue(): Queue {
   }
   return instance;
 }
+
+export async function closeQueue(): Promise<void> {
+  if (instance) {
+    await instance.close();
+    instance = null;
+  }
+}

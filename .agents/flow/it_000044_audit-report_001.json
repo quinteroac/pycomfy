@@ -1,0 +1,66 @@
+{
+  "iteration": "000044",
+  "prd_index": 1,
+  "generated_at": "2026-04-04T21:21:35.931Z",
+  "executiveSummary": "The implementation for PRD-001 (persistent job queue with bunqueue + SQLite) is largely complete. All five user stories are implemented with working TypeScript types, a lazy-singleton queue, a submitJob() helper, a detached _run.ts worker, and a Python ProgressReporter. Two compliance gaps were found: (1) FR-5 is violated because bunqueue is declared with a caret-floating version (^2.6.113) instead of a pinned exact version; (2) US-005-AC03 and US-005-AC04 are partially compliant — wan22/t2v.py prints 'Saved: <path>' instead of the bare output path, and neither pipeline emits a 'sampling_start' or per-step/per-frame progress event (only 'sampling_done' is emitted). All TypeScript modules typecheck cleanly and FR-2/FR-3/FR-4 are fully satisfied.",
+  "verificationByFR": [
+    {
+      "frId": "FR-1",
+      "assessment": "comply",
+      "notes": "bunqueue operates in embedded SQLite mode; the database file is created automatically on first access via the dataPath option."
+    },
+    {
+      "frId": "FR-2",
+      "assessment": "comply",
+      "notes": "submitJob() spawns the worker with stdin/stdout/stderr all set to 'ignore' and detached: true, preventing stdio inheritance."
+    },
+    {
+      "frId": "FR-3",
+      "assessment": "comply",
+      "notes": "_run.ts wraps JSON.parse in a try/catch and silently continues on parse errors, so non-JSON stdout lines are ignored."
+    },
+    {
+      "frId": "FR-4",
+      "assessment": "comply",
+      "notes": "packages/parallax_sdk/src/index.ts re-exports jobs.ts, queue.ts, and submit.ts via 'export * from' statements."
+    },
+    {
+      "frId": "FR-5",
+      "assessment": "does_not_comply",
+      "notes": "packages/parallax_sdk/package.json declares 'bunqueue': '^2.6.113'. The caret (^) allows patch and minor updates, violating the requirement for an exact pinned version with no ^ or ~ prefix."
+    }
+  ],
+  "verificationByUS": [
+    {
+      "usId": "US-001",
+      "assessment": "comply",
+      "notes": "jobs.ts exports ParallaxJobData (action, media, model, script, args, scriptBase, uvPath), ParallaxJobResult (outputPath), and PythonProgress (step, pct, optional frame/total/output/error). All types are re-exported from index.ts. Typecheck passes."
+    },
+    {
+      "usId": "US-002",
+      "assessment": "comply",
+      "notes": "queue.ts exports getQueue() as a lazy singleton backed by ~/.config/parallax/jobs.db with embedded: true and no processor. bunqueue is a declared dependency. Typecheck passes."
+    },
+    {
+      "usId": "US-003",
+      "assessment": "comply",
+      "notes": "submit.ts exports submitJob(data: ParallaxJobData): Promise<string>. Enqueues with name 'pipeline', attempts: 1, timeout: 30*60*1000. Spawns detached bun process with all stdio ignored. Closes queue before returning. Typecheck passes."
+    },
+    {
+      "usId": "US-004",
+      "assessment": "comply",
+      "notes": "_run.ts reads argv[2] as jobId, creates a Bunqueue with a 'pipeline' route processor, spawns the Python process with stdout/stderr piped, reads NDJSON progress lines and calls job.updateProgress(), returns {outputPath} on success, throws 'Pipeline failed (exit <code>)' with stderr detail on failure, closes queue via completed/failed events. Typecheck passes."
+    },
+    {
+      "usId": "US-005",
+      "assessment": "partially_comply",
+      "notes": "progress.py is correct and both pipelines import and call it. However: (1) AC-03 specifies milestones including 'sampling start' and 'per-frame/per-step' progress; both pipelines only emit 'sampling_done' — no start or incremental sampling events are reported. (2) AC-04 requires the final output path to be printed as the last line; ltx2/t2v.py correctly prints the raw path, but wan22/t2v.py prints 'Saved: <path>' instead of the bare path, breaking backward compatibility for sync consumers."
+    }
+  ],
+  "minorObservations": [
+    "In _run.ts, the jobId read from process.argv[2] is validated but not used to select a specific job — the queue auto-processes all pending 'pipeline' jobs. In a multi-worker scenario this could lead to job stealing. Consider using a direct job fetch by ID if bunqueue supports it.",
+    "queue.ts in parallax_sdk exports 'type { Queue as Bunqueue }' but getQueue() return type is typed as Queue, not Bunqueue. Minor inconsistency in naming but not a functional issue.",
+    "ltx2/t2v.py is missing a 'model_load' completion event (only the start at pct=0.0 is emitted with no 1.0 counterpart), while wan22/t2v.py similarly has only model_load start. This makes progress reporting incomplete during model loading."
+  ],
+  "conclusionsAndRecommendations": "The prototype satisfies 4 out of 5 FRs and 4 out of 5 USs fully. The two actionable fixes are: (1) Remove the ^ prefix from the bunqueue version in packages/parallax_sdk/package.json to pin it exactly (e.g. '2.6.113'). (2) Fix wan22/t2v.py to print the bare output path as its final stdout line (change 'print(f\"Saved: {args.output}\")' to 'print(args.output)'). Optionally, add a 'sampling_start' progress call before the sampling loop and incremental per-step/per-frame calls inside each pipeline's sampling callback to fully satisfy US-005-AC03. These are low-risk surgical changes suitable for the Refactor phase."
+}

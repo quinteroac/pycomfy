@@ -20,9 +20,14 @@ if (!jobId) {
 
 const dbPath = path.join(os.homedir(), ".config", "parallax", "jobs.db");
 
+// Resolved once the route handler finishes (success or failure).
+let settle!: () => void;
+const settled = new Promise<void>(r => { settle = r; });
+
 const queue = new Bunqueue<ParallaxJobData, ParallaxJobResult>("parallax", {
   routes: {
     pipeline: async (job: Job<ParallaxJobData>) => {
+      try {
       const { uvPath = "uv", scriptBase, script, args } = job.data;
 
       const proc = Bun.spawn(
@@ -97,17 +102,16 @@ const queue = new Bunqueue<ParallaxJobData, ParallaxJobResult>("parallax", {
       }
 
       return { outputPath };
+      } finally {
+        settle();
+      }
     },
   },
   embedded: true,
   dataPath: dbPath,
 });
 
-// Close the queue once the job finishes (completed or failed)
-queue.once("completed", async () => {
-  await queue.close();
-});
-
-queue.once("failed", async () => {
-  await queue.close();
-});
+// Wait for the route handler to finish (success or failure), then exit.
+await settled;
+await queue.close();
+process.exit(0);

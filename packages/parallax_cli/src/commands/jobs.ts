@@ -86,8 +86,17 @@ export function buildRows(jobs: JobSummary[]): TableRow[] {
     model: job.model || "—",
     progress: `${job.progress}%`,
     started: formatStarted(job.createdAt),
-    duration: "—",
+    duration: formatDuration(job.duration),
   }));
+}
+
+export function formatDuration(durationMs: number | null): string {
+  if (durationMs === null) return "—";
+  const sec = Math.round(durationMs / 1000);
+  if (sec < 60) return `${sec}s`;
+  const min = Math.floor(sec / 60);
+  const remSec = sec % 60;
+  return remSec > 0 ? `${min}m ${remSec}s` : `${min}m`;
 }
 
 // Build and return the formatted table string (no ANSI in column widths calculation).
@@ -144,22 +153,21 @@ export function formatNotFoundMessage(id: string): string {
 }
 
 async function watchJobAction(id: string): Promise<void> {
-  const { Queue } = await import("bunqueue/client");
-  const os = (await import("os")).default;
-  const path = (await import("path")).default;
+  const { getQueue } = await import("@parallax/sdk/queue");
+  const { spinner, log } = await import("@clack/prompts");
 
-  const dbPath = path.join(os.homedir(), ".config", "parallax", "jobs.db");
-  const queue = new Queue("parallax", { embedded: true, dataPath: dbPath });
+  const queue = getQueue();
 
   const initialJob = await queue.getJob(id);
   if (!initialJob) {
     await queue.close();
-    process.stdout.write(formatNotFoundMessage(id) + "\n");
+    log.warn(formatNotFoundMessage(id));
     process.exit(1);
     return;
   }
 
-  let frame = 0;
+  const s = spinner();
+  s.start("Watching job…");
 
   while (true) {
     const job = await queue.getJob(id);
@@ -168,17 +176,17 @@ async function watchJobAction(id: string): Promise<void> {
     const state = await job.getState();
 
     if (state === "completed") {
-      process.stdout.write("\r\x1b[K");
       const result = job.returnvalue as ParallaxJobResult | null;
       const outputPath = result?.outputPath ?? "";
-      console.log(formatDoneLine(outputPath));
+      s.stop("");
+      log.message(formatDoneLine(outputPath));
       await queue.close();
       return;
     }
 
     if (state === "failed") {
-      process.stdout.write("\r\x1b[K");
-      console.log(formatFailLine((job as any).failedReason ?? "unknown error"));
+      s.stop("");
+      log.message(formatFailLine((job as any).failedReason ?? "unknown error"));
       await queue.close();
       process.exit(1);
       return;
@@ -188,8 +196,7 @@ async function watchJobAction(id: string): Promise<void> {
     const data = job.data as Partial<ParallaxJobData>;
     const step = data?.action ?? "processing";
 
-    process.stdout.write("\r" + formatSpinnerLine(frame, step, progress) + "  ");
-    frame++;
+    s.message(`${step}… ${progress}%`);
 
     await new Promise<void>((resolve) => setTimeout(resolve, 500));
   }
@@ -315,8 +322,9 @@ export function registerJobs(program: Command): void {
     .command("list")
     .description("Show recent jobs (newest first, max 20)")
     .action(async () => {
+      const { log } = await import("@clack/prompts");
       const result = await listJobs({ limit: 20 });
-      console.log(formatJobsTable(result.jobs));
+      log.message(formatJobsTable(result.jobs));
     });
 
   jobs

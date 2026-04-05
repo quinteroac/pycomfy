@@ -45,9 +45,11 @@ export const MODELS: Record<string, string[]> = {
 };
 
 export const IMAGE_SCRIPTS: Partial<Record<string, string>> = {
-  sdxl:    "runtime/image/generation/sdxl/t2i.py",
-  anima:   "runtime/image/generation/anima/t2i.py",
-  z_image: "runtime/image/generation/z_image/turbo.py",
+  sdxl:       "runtime/image/generation/sdxl/t2i.py",
+  anima:      "runtime/image/generation/anima/t2i.py",
+  z_image:    "runtime/image/generation/z_image/turbo.py",
+  flux_klein: "runtime/image/generation/flux/4b_distilled.py",
+  qwen:       "runtime/image/generation/qwen/layered_t2l.py",
 };
 
 export const EDIT_IMAGE_SCRIPTS: Partial<Record<string, string>> = {

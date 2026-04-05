@@ -35,6 +35,7 @@ function makeJob(overrides: Partial<JobSummary> = {}): JobSummary {
     action: "create",
     media: "image",
     createdAt: Date.now() - 5000,
+    duration: null,
     ...overrides,
   };
 }

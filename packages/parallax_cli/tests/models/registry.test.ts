@@ -158,7 +158,8 @@ describe("US-004-AC01: registry exports data constants", () => {
     expect(IMAGE_SCRIPTS["sdxl"]).toBe("runtime/image/generation/sdxl/t2i.py");
     expect(IMAGE_SCRIPTS["anima"]).toBe("runtime/image/generation/anima/t2i.py");
     expect(IMAGE_SCRIPTS["z_image"]).toBe("runtime/image/generation/z_image/turbo.py");
-    expect(IMAGE_SCRIPTS["flux_klein"]).toBeUndefined();
+    expect(IMAGE_SCRIPTS["flux_klein"]).toBe("runtime/image/generation/flux/4b_distilled.py");
+    expect(IMAGE_SCRIPTS["qwen"]).toBe("runtime/image/generation/qwen/layered_t2l.py");
   });
 
   it("VIDEO_MODEL_CONFIG maps known video models to config objects", () => {
@@ -205,8 +206,8 @@ describe("US-004-AC02: getScript(action, media, model)", () => {
     expect(getScript("create", "image", "sdxl")).toBe("runtime/image/generation/sdxl/t2i.py");
   });
 
-  it("returns undefined for an image model without a script (not yet implemented)", () => {
-    expect(getScript("create", "image", "flux_klein")).toBeUndefined();
+  it("returns script path for flux_klein (create image)", () => {
+    expect(getScript("create", "image", "flux_klein")).toBe("runtime/image/generation/flux/4b_distilled.py");
   });
 
   it("returns t2v script path for a known video model", () => {

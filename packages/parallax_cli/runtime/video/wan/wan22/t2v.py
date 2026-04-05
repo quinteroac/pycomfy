@@ -180,7 +180,7 @@ def main() -> int:
     progress("encode", 0.0)
     _save_frames_as_video(frames, args.output, fps=args.fps)
     progress("done", 1.0, output=args.output)
-    print(f"Saved: {args.output}")
+    print(args.output)
     return 0
 
 

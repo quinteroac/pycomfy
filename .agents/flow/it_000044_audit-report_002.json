@@ -1,0 +1,83 @@
+{
+  "iteration": "000044",
+  "prd_index": "002",
+  "generated_at": "2026-04-04T21:24:25.906Z",
+
+  "executive_summary": "The parallax_ms microservice implementation satisfies most of the PRD goals for iteration 000044 (PRD-002): all six HTTP endpoint groups are implemented (create image/video/audio, edit image, upscale image, job status, SSE streaming, list jobs, cancel, health enrichment), Elysia native schema validation is used throughout, and @parallax/sdk is correctly consumed. Three functional requirements are not met: the server does not honour the PORT environment variable (FR-2), CORS via @elysiajs/cors is absent (FR-3), and the script-path resolution duplicates the registry tables from parallax_cli instead of importing the shared getScript() function (FR-6). Additionally the generic 500 error handler is absent (FR-4 partial), and GET /jobs/:id omits the 'createdAt' field required by US-002-AC01.",
+
+  "verification_by_fr": [
+    {
+      "frId": "FR-1",
+      "assessment": "comply",
+      "notes": "All five POST endpoints and the /jobs GET use Elysia t.Object schema validation. No manual if(!body.field) guards are present."
+    },
+    {
+      "frId": "FR-2",
+      "assessment": "does_not_comply",
+      "notes": "The server calls app.listen(3000) with a hardcoded value. There is no reference to process.env.PORT anywhere in parallax_ms/src/index.ts."
+    },
+    {
+      "frId": "FR-3",
+      "assessment": "does_not_comply",
+      "notes": "@elysiajs/cors is not installed (absent from package.json dependencies) and is not applied to the Elysia app instance."
+    },
+    {
+      "frId": "FR-4",
+      "assessment": "partially_comply",
+      "notes": "The .onError({ code: 'VALIDATION' }) handler converts schema errors to 400 responses. However, there is no catch-all for unhandled runtime errors; an unexpected throw in a route handler will surface as a raw 500 without the required { error: 'Internal server error' } body."
+    },
+    {
+      "frId": "FR-5",
+      "assessment": "comply",
+      "notes": "parallax_ms/package.json declares \"@parallax/sdk\": \"workspace:*\" in its dependencies section."
+    },
+    {
+      "frId": "FR-6",
+      "assessment": "does_not_comply",
+      "notes": "parallax_ms/src/index.ts defines its own copies of IMAGE_CREATE_SCRIPTS, IMAGE_EDIT_SCRIPTS, IMAGE_UPSCALE_SCRIPTS, VIDEO_CREATE_SCRIPTS, and AUDIO_CREATE_SCRIPTS. These duplicate (and in the case of IMAGE_SCRIPTS, extend) the constants in parallax_cli/src/models/registry.ts. The shared getScript() / getModelConfig() functions exported by registry.ts are never imported or called."
+    }
+  ],
+
+  "verification_by_us": [
+    {
+      "usId": "US-001",
+      "assessment": "comply",
+      "notes": "All five POST endpoints are present and validated with t.Object. Each calls submitJob() from @parallax/sdk and returns { job_id, status: 'queued' }. Required-field validation returns 400 via Elysia's VALIDATION error code."
+    },
+    {
+      "usId": "US-002",
+      "assessment": "partially_comply",
+      "notes": "GET /jobs/:id returns 404 on missing jobs. However the ParallaxJobStatus type and the getJobStatus() return value do not include a 'createdAt' field (job.timestamp), which is explicitly required by AC01. All other fields (id, status, progress, output, error, startedAt, finishedAt) are present."
+    },
+    {
+      "usId": "US-003",
+      "assessment": "comply",
+      "notes": "GET /jobs/:id/stream sets Content-Type: text/event-stream, emits progress events every 500ms, and emits completed/failed events with appropriate data before closing. Returns 404 if job not found before opening the stream. @elysiajs/stream is listed as a dependency."
+    },
+    {
+      "usId": "US-004",
+      "assessment": "comply",
+      "notes": "GET /jobs returns { jobs: JobSummary[], counts: {...} } with all required JobSummary fields. Defaults to 50 most-recent jobs. Supports ?status= query param with Elysia validation."
+    },
+    {
+      "usId": "US-005",
+      "assessment": "comply",
+      "notes": "DELETE /jobs/:id returns 404 for unknown jobs, 409 for terminal-state jobs, and { cancelled: true } on success. The cancel logic delegates to cancelJob() from @parallax/sdk."
+    },
+    {
+      "usId": "US-006",
+      "assessment": "comply",
+      "notes": "GET /health returns { status: 'ok', queue: { waiting, active, completed, failed } } via getQueueStats(). HTTP 200 is preserved."
+    }
+  ],
+
+  "minor_observations": [
+    "bun typecheck (tsc --noEmit) fails with multiple TypeScript errors originating from elysia@1.4.28 type definitions in node_modules. These appear to be a version-compatibility issue between elysia and the installed TypeScript version rather than application-code errors. US-002/004/005/006 all list 'bun typecheck passes' as an AC; this must be resolved.",
+    "DELETE /jobs/:id returns the same message 'Job already completed' for both 'completed' and 'failed' terminal states. While the PRD uses that exact wording, a more accurate message for failed jobs (e.g. 'Job already finished') would improve consumer diagnostics.",
+    "POST /jobs/create/image includes flux_klein and qwen in its local script table, which are absent from parallax_cli's IMAGE_SCRIPTS. If registry.ts is treated as the single source of truth, these entries may be orphaned or inconsistent when the registry is updated.",
+    "submitJob() in @parallax/sdk spawns a bun subprocess using a relative path (packages/parallax_cli/src/_run.ts). This path is resolved relative to process.cwd(), which may fail if the server is started from a non-repo-root directory.",
+    "No CORS configuration means browser-based clients will be blocked by the same-origin policy in development, directly violating FR-3."
+  ],
+
+  "conclusions_and_recommendations": "The microservice correctly implements the core API surface and will work for non-browser consumers. Three blockers must be addressed before the PRD can be considered fully satisfied: (1) Add process.env.PORT support to app.listen() to satisfy FR-2. (2) Install @elysiajs/cors and apply .use(cors()) to the Elysia app to satisfy FR-3. (3) Replace the local script-registry copies in parallax_ms/src/index.ts with imports of getScript() and getModelConfig() from @parallax/cli (or a shared workspace package) to satisfy FR-6. Additionally: add a catch-all .onError handler that returns { error: 'Internal server error' } with status 500 (FR-4), and add 'createdAt: job.timestamp' to the getJobStatus() return value (US-002-AC01). Resolve the Elysia / TypeScript version incompatibility so that bun typecheck passes (impacts US-002/004/005/006 ACs)."
+}

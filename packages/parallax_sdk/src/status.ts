@@ -1,4 +1,4 @@
-import { getQueue } from "./queue";
+import { getQueue, closeQueue } from "./queue";
 import type { ParallaxJobData } from "./jobs";
 
 export type ParallaxJobStatus = {
@@ -10,6 +10,7 @@ export type ParallaxJobStatus = {
   media: string | null;
   output: string | null;
   error: string | null;
+  createdAt: number;
   startedAt: number | null;
   finishedAt: number | null;
 };
@@ -24,7 +25,7 @@ function mapState(state: string): "waiting" | "active" | "completed" | "failed" 
 export async function getJobStatus(id: string): Promise<ParallaxJobStatus | null> {
   const queue = getQueue();
   const job = await queue.getJob(id);
-  await queue.close();
+  await closeQueue();
   if (!job) return null;
 
   const state = await job.getState();
@@ -39,6 +40,7 @@ export async function getJobStatus(id: string): Promise<ParallaxJobStatus | null
     media: data.media ?? null,
     output: result?.outputPath ?? null,
     error: (job as any).failedReason ?? null,
+    createdAt: job.timestamp,
     startedAt: job.processedOn ?? null,
     finishedAt: job.finishedOn ?? null,
   };

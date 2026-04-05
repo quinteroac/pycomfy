@@ -1,0 +1,62 @@
+{
+  "iteration": "000044",
+  "prd_index": "004",
+  "generated_at": "2026-04-04T21:33:09.589Z",
+  "executive_summary": "The parallax_mcp async refactor is substantially complete. All five inference tools have been converted to non-blocking mode via submitJob(), Bun.spawn has been eliminated, the two new tools (get_job_status, wait_for_job) are implemented correctly, tool descriptions follow the async pattern, bun typecheck passes, and queue handles are properly closed. Two functional requirements are not met: FR-4 (model validation) is absent — invalid models are silently accepted and submitted with an empty script path — and FR-5 (script path resolution via getScript() from @parallax/cli/models/registry) is not implemented; instead, the MCP duplicates the script registry inline, introducing drift risk. Notably, the MCP's inline maps include flux_klein and qwen create-image scripts that are absent from the canonical registry, confirming the divergence is already present.",
+  "verification_by_fr": [
+    {
+      "frId": "FR-1",
+      "assessment": "comply",
+      "notes": "@parallax/sdk is listed as workspace:* in parallax_mcp/package.json dependencies."
+    },
+    {
+      "frId": "FR-2",
+      "assessment": "comply",
+      "notes": "get_job_status uses the SDK getJobStatus() wrapper which calls queue.close() internally. wait_for_job calls getQueue() directly and closes it in a finally block. No leaks found."
+    },
+    {
+      "frId": "FR-3",
+      "assessment": "comply",
+      "notes": "No CLI_DIR constant or Bun.spawn calls exist anywhere in parallax_mcp/src/index.ts."
+    },
+    {
+      "frId": "FR-4",
+      "assessment": "does_not_comply",
+      "notes": "No model validation is performed. When an unknown model is passed, IMAGE_CREATE_SCRIPTS[model] ?? '' resolves to an empty string and the job is submitted silently. Neither validateModel() nor getModels() from @parallax/cli/models/registry is called. @parallax/cli is not even listed as a dependency."
+    },
+    {
+      "frId": "FR-5",
+      "assessment": "does_not_comply",
+      "notes": "Script path resolution is implemented via inline maps (IMAGE_CREATE_SCRIPTS, IMAGE_EDIT_SCRIPTS, etc.) duplicated from the CLI. getScript() from @parallax/cli/models/registry is not used. The MCP maps include flux_klein and qwen create-image entries that are absent from the canonical IMAGE_SCRIPTS in the registry, confirming divergence. @parallax/cli is not a declared dependency of @parallax/mcp."
+    }
+  ],
+  "verification_by_us": [
+    {
+      "usId": "US-001",
+      "assessment": "comply",
+      "notes": "All five tools (create_image, create_video, create_audio, edit_image, upscale_image) call submitJob() from @parallax/sdk/submit, return job_id/status/model text immediately, descriptions are updated, Bun.spawn is removed, and typecheck passes. AC-06 (manual timing with Claude) cannot be verified statically but all automated criteria are met."
+    },
+    {
+      "usId": "US-002",
+      "assessment": "comply",
+      "notes": "get_job_status is registered with { job_id: z.string() }, returns all required fields (id, status, progress, output, error, model, action, media) as JSON text, returns isError:true with 'Job <id> not found' for missing jobs, and typecheck passes."
+    },
+    {
+      "usId": "US-003",
+      "assessment": "comply",
+      "notes": "wait_for_job has correct input schema with timeout_seconds defaulting to 600. Polls getQueue().getJob() every 2 seconds. Returns completed/failed/timeout responses in the exact required format. Queue is closed in a finally block. typecheck passes."
+    },
+    {
+      "usId": "US-004",
+      "assessment": "comply",
+      "notes": "All five inference tool descriptions end with 'Returns a job_id. Use get_job_status to poll or wait_for_job to block until done.' get_job_status and wait_for_job descriptions match the required text exactly. typecheck passes."
+    }
+  ],
+  "minor_observations": [
+    "The wait_for_job handler uses `(job as any).failedReason` to access the failure reason — this is a type cast that bypasses BullMQ's typed API. Consider typing via BullMQ's Job type.",
+    "IMAGE_CREATE_SCRIPTS in the MCP includes flux_klein and qwen mappings that are not present in the canonical IMAGE_SCRIPTS export from @parallax/cli/models/registry. This creates a maintenance risk: if paths change in the CLI registry, the MCP won't be updated automatically.",
+    "The getScriptBase() / getUvPath() helper functions duplicate logic that the CLI's runner.ts also owns. These should eventually be moved to @parallax/sdk or a shared utility.",
+    "US-001-AC06 (manual timing verification with Claude) is not verifiable by static analysis and must be accepted as a manual gate."
+  ],
+  "conclusions_and_recommendations": "The core async refactor is successfully implemented and all user stories comply. The two failing FRs (FR-4 and FR-5) represent a design gap: the MCP was refactored to use @parallax/sdk for job submission but was not connected to @parallax/cli for model validation and script resolution. Recommendations: (1) Add @parallax/cli as a workspace:* dependency in parallax_mcp/package.json; (2) Replace inline script maps with getScript() from @parallax/cli/models/registry; (3) Add model validation before submitJob() using getModels() from the same registry — if the model is not in the list, return isError:true immediately; (4) Ensure the flux_klein and qwen create-image entries missing from registry.ts IMAGE_SCRIPTS are added there so they become canonical."
+}

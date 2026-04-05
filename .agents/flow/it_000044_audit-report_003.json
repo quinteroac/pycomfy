@@ -1,0 +1,67 @@
+{
+  "iteration": "000044",
+  "prd_index": 3,
+  "executiveSummary": "PRD 003 introduces the `--async` flag on all generation commands and a `parallax jobs` subcommand with list, watch, status, cancel, and open sub-commands. The implementation is broadly compliant: all six user stories are functionally satisfied, the --async flag is present on all five target commands, and typecheck passes. Two compliance gaps exist: FR-4 requires `@clack/prompts` spinner/log APIs in `jobs list` and `jobs watch`, but both use `console.log`/`process.stdout.write` directly; and `watchJobAction` bypasses `getQueue()` from `@parallax/sdk` (FR-2), instantiating `Queue` from `bunqueue/client` directly. Both gaps are minor: the functional behaviour is correct, but they deviate from architectural conventions set in the PRD.",
+  "verificationByFR": [
+    {
+      "frId": "FR-1",
+      "assessment": "comply",
+      "notes": "All sub-commands (list, watch, status, cancel, open) are implemented in `packages/parallax_cli/src/commands/jobs.ts`. `registerJobs(program)` is called in `src/index.ts` under the `jobs` parent command."
+    },
+    {
+      "frId": "FR-2",
+      "assessment": "partially_comply",
+      "notes": "`listJobs`, `getJobStatus`, `cancelJob`, and `submitJob` (all in `@parallax/sdk`) call `getQueue()` and invoke `queue.close()` correctly. However, `watchJobAction` in `jobs.ts` bypasses `getQueue()` from `@parallax/sdk` and directly instantiates `Queue` from `bunqueue/client` with a hard-coded db path. The queue is still closed before exit, so no SQLite handle leak occurs, but the SDK abstraction is violated."
+    },
+    {
+      "frId": "FR-3",
+      "assessment": "comply",
+      "notes": "`--async` is registered with `.option(\"--async\", ...)` on all five target commands (create image, create video, create audio, edit image, upscale image), making it visible in `--help` output."
+    },
+    {
+      "frId": "FR-4",
+      "assessment": "does_not_comply",
+      "notes": "`jobs list` action uses `console.log(formatJobsTable(...))` and `jobs watch` uses `process.stdout.write` / `console.log` directly. Neither uses the `@clack/prompts` spinner or log API. `@clack/prompts` is only used in `install.ts` and `mcp.ts`."
+    }
+  ],
+  "verificationByUS": [
+    {
+      "usId": "US-001",
+      "assessment": "comply",
+      "notes": "All five commands accept `--async` (AC01). When set, `runAsync()` calls `submitJob()` from `@parallax/sdk/submit` (AC02). Output format `Job <id> queued\\n  → parallax jobs watch <id>` is correct in `formatAsyncMessage()` (AC03). Without `--async`, `spawnPipeline()` is called unchanged (AC04). `bun typecheck` passes (AC05). AC06 requires manual run-time verification."
+    },
+    {
+      "usId": "US-002",
+      "assessment": "comply",
+      "notes": "Table has all required columns: ID, Status, Action, Model, Progress, Started, Duration (AC01). Status is ANSI color-coded per spec (AC02). `listJobs({ limit: 20 })` is used (AC03). Empty state message matches spec (AC04). Typecheck passes (AC05). AC06 requires visual terminal check."
+    },
+    {
+      "usId": "US-003",
+      "assessment": "comply",
+      "notes": "Polls `queue.getJob(id)` every 500 ms (AC01). Spinner shows step and percentage (AC02). Completed prints `✔ Done: <outputPath>` (AC03). Failed prints `✖ Failed: <failedReason>` with exit 1 (AC04). Not-found prints `Job <id> not found` with exit 1 (AC05). Typecheck passes (AC06). AC07 requires visual verification."
+    },
+    {
+      "usId": "US-004",
+      "assessment": "comply",
+      "notes": "One-shot structured block includes id, status, progress, model, action, output/error, startedAt, finishedAt (AC01). `--json` flag outputs valid JSON single object (AC02). Exit codes: 1 on failed, 1 on not found, 0 otherwise (AC03). Typecheck passes (AC04)."
+    },
+    {
+      "usId": "US-005",
+      "assessment": "comply",
+      "notes": "`cancelJobAction` calls `cancelJob(id)` (which internally calls `queue.removeAsync`) and prints `✔ Job <id> cancelled` (AC01). Not-found prints message and exits 1 (AC02). Already-terminal prints `Job <id> is already <status> — nothing to cancel` and exits 0 (AC03). Typecheck passes (AC04). Note: AC01 references `getQueue().cancel()` but `bunqueue` exposes `queue.removeAsync()` as the cancellation API — functionally equivalent."
+    },
+    {
+      "usId": "US-006",
+      "assessment": "comply",
+      "notes": "Opens `outputPath` via `Bun.spawn([\"open\", ...])` on macOS and `Bun.spawn([\"xdg-open\", ...])` on Linux (AC01). Not-completed message and exit 1 implemented (AC02). Not-found message and exit 1 implemented (AC03). Typecheck passes (AC04)."
+    }
+  ],
+  "minorObservations": [
+    "`watchJobAction` directly imports `Queue` from `bunqueue/client` and hard-codes the db path `~/.config/parallax/jobs.db` instead of reusing the singleton from `@parallax/sdk/queue`. If the db path changes in the SDK, `watch` will silently diverge.",
+    "FR-4 gap: `jobs list` and `jobs watch` use raw `console.log`/`process.stdout.write` instead of `@clack/prompts`. This makes the UX inconsistent with `install` and `mcp` commands which use `@clack/prompts` for structured terminal output.",
+    "`cancelJob` uses `queue.removeAsync(id)` as the cancellation mechanism. The PRD AC01 refers to `getQueue().cancel(jobId)`, but `bunqueue` does not expose a `.cancel()` method. This is a naming discrepancy, not a functional bug.",
+    "Duration column in `jobs list` always shows `—` (hard-coded). The PRD does not specify how duration should be calculated, but the column is present per AC01.",
+    "Tests in `jobs.test.ts` cover pure helper functions only. Integration paths (action handlers, Commander wiring, actual queue calls) are not tested at the unit level."
+  ],
+  "conclusionsAndRecommendations": "The prototype is functionally complete and all user stories comply. Two refactor items are recommended: (1) Replace `console.log` / `process.stdout.write` in `jobs list` and `jobs watch` with `@clack/prompts` APIs (`spinner`, `log.success`, `log.error`) to satisfy FR-4 and maintain UX consistency. (2) Refactor `watchJobAction` to use `getQueue()` from `@parallax/sdk/queue` instead of directly instantiating `Queue` from `bunqueue/client`, to satisfy FR-2 and avoid the db-path divergence risk. Both changes are low risk and self-contained. The Duration column should also be computed from `job.finishedOn - job.processedOn` where available, as always showing `—` is misleading for completed jobs."
+}

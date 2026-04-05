@@ -1,42 +1,14 @@
 import { Elysia, t } from "elysia";
+import { cors } from "@elysiajs/cors";
 import { Stream } from "@elysiajs/stream";
+import { join } from "path";
 import { submitJob, getJobStatus, listJobs, cancelJob, getQueueStats } from "@parallax/sdk";
 import type { JobStatusValue } from "@parallax/sdk";
 import type { ParallaxJobData } from "@parallax/sdk";
-
-// Script registry — mirrors parallax_cli/src/models/registry.ts
-const IMAGE_CREATE_SCRIPTS: Record<string, string> = {
-  sdxl:       "runtime/image/generation/sdxl/t2i.py",
-  anima:      "runtime/image/generation/anima/t2i.py",
-  z_image:    "runtime/image/generation/z_image/turbo.py",
-  flux_klein: "runtime/image/generation/flux/4b_distilled.py",
-  qwen:       "runtime/image/generation/qwen/layered_t2l.py",
-};
-
-const IMAGE_EDIT_SCRIPTS: Record<string, string> = {
-  flux_4b_base:      "runtime/image/edit/flux/4b_base.py",
-  flux_4b_distilled: "runtime/image/edit/flux/4b_distilled.py",
-  flux_9b_base:      "runtime/image/edit/flux/9b_base.py",
-  flux_9b_distilled: "runtime/image/edit/flux/9b_distilled.py",
-  flux_9b_kv:        "runtime/image/edit/flux/9b_kv.py",
-  qwen:              "runtime/image/edit/qwen/edit_2511.py",
-};
-
-const IMAGE_UPSCALE_SCRIPTS: Record<string, string> = {
-  esrgan:         "runtime/image/edit/sd/esrgan_upscale.py",
-  latent_upscale: "runtime/image/edit/sd/latent_upscale.py",
-};
-
-const VIDEO_CREATE_SCRIPTS: Record<string, { t2v: string; i2v?: string }> = {
-  ltx2:  { t2v: "runtime/video/ltx/ltx2/t2v.py",  i2v: "runtime/video/ltx/ltx2/i2v.py"  },
-  ltx23: { t2v: "runtime/video/ltx/ltx23/t2v.py", i2v: "runtime/video/ltx/ltx23/i2v.py" },
-  wan21: { t2v: "runtime/video/wan/wan21/t2v.py",  i2v: "runtime/video/wan/wan21/i2v.py"  },
-  wan22: { t2v: "runtime/video/wan/wan22/t2v.py",  i2v: "runtime/video/wan/wan22/i2v.py"  },
-};
-
-const AUDIO_CREATE_SCRIPTS: Record<string, string> = {
-  ace_step: "runtime/audio/ace/t2a.py",
-};
+import {
+  getScript,
+  getModelConfig,
+} from "../../parallax_cli/src/models/registry";
 
 function getScriptBase(): string {
   return process.env.PARALLAX_RUNTIME_DIR ?? process.env.PARALLAX_REPO_ROOT ?? process.cwd();
@@ -47,6 +19,7 @@ function getUvPath(): string {
 }
 
 export const app = new Elysia()
+  .use(cors())
   .get("/health", async () => {
     const queue = await getQueueStats();
     return { status: "ok", queue };
@@ -56,6 +29,8 @@ export const app = new Elysia()
       set.status = 400;
       return { error: error.message };
     }
+    set.status = 500;
+    return { error: "Internal server error" };
   })
 
   // US-004: GET /jobs — list recent jobs with counts
@@ -162,7 +137,7 @@ export const app = new Elysia()
         action:     "create",
         media:      "image",
         model:      body.model,
-        script:     IMAGE_CREATE_SCRIPTS[body.model] ?? "",
+        script:     getScript("create", "image", body.model) ?? "",
         args,
         scriptBase: getScriptBase(),
         uvPath:     getUvPath(),
@@ -187,7 +162,7 @@ export const app = new Elysia()
   .post(
     "/jobs/create/video",
     async ({ body }) => {
-      const cfg = VIDEO_CREATE_SCRIPTS[body.model];
+      const cfg = getModelConfig("video", body.model);
       const useI2v = body.input !== undefined && cfg?.i2v !== undefined;
       const script = cfg ? (useI2v ? cfg.i2v! : cfg.t2v) : "";
 
@@ -239,7 +214,7 @@ export const app = new Elysia()
         action:     "create",
         media:      "audio",
         model:      body.model,
-        script:     AUDIO_CREATE_SCRIPTS[body.model] ?? "",
+        script:     getScript("create", "audio", body.model) ?? "",
         args,
         scriptBase: getScriptBase(),
         uvPath:     getUvPath(),
@@ -274,7 +249,7 @@ export const app = new Elysia()
         action:     "edit",
         media:      "image",
         model:      body.model,
-        script:     IMAGE_EDIT_SCRIPTS[body.model] ?? "",
+        script:     getScript("edit", "image", body.model) ?? "",
         args,
         scriptBase: getScriptBase(),
         uvPath:     getUvPath(),
@@ -304,7 +279,7 @@ export const app = new Elysia()
         action:     "upscale",
         media:      "image",
         model:      body.model,
-        script:     IMAGE_UPSCALE_SCRIPTS[body.model] ?? "",
+        script:     getScript("upscale", "image", body.model) ?? "",
         args,
         scriptBase: getScriptBase(),
         uvPath:     getUvPath(),
@@ -323,6 +298,15 @@ export const app = new Elysia()
   );
 
 if (import.meta.main) {
-  app.listen(3000);
+  // Spawn the serial inference worker daemon (one job at a time).
+  const workerScript = join(import.meta.dir, "../../parallax_cli/src/_worker.ts");
+  const worker = Bun.spawn(["bun", workerScript], {
+    stdin: "ignore",
+    stdout: Bun.file("/tmp/parallax-worker.log"),
+    stderr: Bun.file("/tmp/parallax-worker.err"),
+  });
+  worker.unref();
+
+  app.listen(Number(process.env.PORT ?? 3000));
   console.log(`parallax_ms running at ${app.server?.hostname}:${app.server?.port}`);
 }

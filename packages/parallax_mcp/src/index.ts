@@ -4,45 +4,12 @@ import { z } from "zod";
 import { submitJob } from "@parallax/sdk/submit";
 import { getJobStatus, getQueue } from "@parallax/sdk";
 import type { ParallaxJobData } from "@parallax/sdk";
+import { getScript, getModels, getModelConfig } from "@parallax/cli/src/models/registry";
 
 const server = new McpServer({
   name: "parallax-mcp",
   version: "0.1.0",
 });
-
-// Script registries — mirrors parallax_cli/src/models/registry.ts
-const IMAGE_CREATE_SCRIPTS: Record<string, string> = {
-  sdxl:       "runtime/image/generation/sdxl/t2i.py",
-  anima:      "runtime/image/generation/anima/t2i.py",
-  z_image:    "runtime/image/generation/z_image/turbo.py",
-  flux_klein: "runtime/image/generation/flux/4b_distilled.py",
-  qwen:       "runtime/image/generation/qwen/layered_t2l.py",
-};
-
-const IMAGE_EDIT_SCRIPTS: Record<string, string> = {
-  flux_4b_base:      "runtime/image/edit/flux/4b_base.py",
-  flux_4b_distilled: "runtime/image/edit/flux/4b_distilled.py",
-  flux_9b_base:      "runtime/image/edit/flux/9b_base.py",
-  flux_9b_distilled: "runtime/image/edit/flux/9b_distilled.py",
-  flux_9b_kv:        "runtime/image/edit/flux/9b_kv.py",
-  qwen:              "runtime/image/edit/qwen/edit_2511.py",
-};
-
-const IMAGE_UPSCALE_SCRIPTS: Record<string, string> = {
-  esrgan:         "runtime/image/edit/sd/esrgan_upscale.py",
-  latent_upscale: "runtime/image/edit/sd/latent_upscale.py",
-};
-
-const VIDEO_CREATE_SCRIPTS: Record<string, { t2v: string; i2v?: string }> = {
-  ltx2:  { t2v: "runtime/video/ltx/ltx2/t2v.py",  i2v: "runtime/video/ltx/ltx2/i2v.py"  },
-  ltx23: { t2v: "runtime/video/ltx/ltx23/t2v.py", i2v: "runtime/video/ltx/ltx23/i2v.py" },
-  wan21: { t2v: "runtime/video/wan/wan21/t2v.py",  i2v: "runtime/video/wan/wan21/i2v.py"  },
-  wan22: { t2v: "runtime/video/wan/wan22/t2v.py",  i2v: "runtime/video/wan/wan22/i2v.py"  },
-};
-
-const AUDIO_CREATE_SCRIPTS: Record<string, string> = {
-  ace_step: "runtime/audio/ace/t2a.py",
-};
 
 function getScriptBase(): string {
   return process.env.PARALLAX_RUNTIME_DIR ?? process.env.PARALLAX_REPO_ROOT ?? process.cwd();
@@ -74,6 +41,14 @@ server.registerTool(
     },
   },
   async (input) => {
+    const validModels = getModels("create", "image");
+    if (!validModels.includes(input.model)) {
+      return {
+        isError: true,
+        content: [{ type: "text", text: `Unknown model '${input.model}'. Valid models: ${validModels.join(", ")}` }],
+      };
+    }
+
     const modelsDir = getModelsDir(input.modelsDir);
     const args: string[] = ["--models-dir", modelsDir, "--prompt", input.prompt];
     if (input.model !== "z_image") {
@@ -90,7 +65,7 @@ server.registerTool(
       action:     "create",
       media:      "image",
       model:      input.model,
-      script:     IMAGE_CREATE_SCRIPTS[input.model] ?? "",
+      script:     getScript("create", "image", input.model) ?? "",
       args,
       scriptBase: getScriptBase(),
       uvPath:     getUvPath(),
@@ -122,10 +97,18 @@ server.registerTool(
     },
   },
   async (input) => {
+    const validModels = getModels("create", "video");
+    if (!validModels.includes(input.model)) {
+      return {
+        isError: true,
+        content: [{ type: "text", text: `Unknown model '${input.model}'. Valid models: ${validModels.join(", ")}` }],
+      };
+    }
+
     const modelsDir = getModelsDir(input.modelsDir);
-    const cfg = VIDEO_CREATE_SCRIPTS[input.model];
-    const useI2v = input.input !== undefined && cfg?.i2v !== undefined;
-    const script = cfg ? (useI2v ? cfg.i2v! : cfg.t2v) : "";
+    const modelConfig = getModelConfig("video", input.model);
+    const useI2v = input.input !== undefined && modelConfig?.i2v !== undefined;
+    const script = modelConfig ? (useI2v ? modelConfig.i2v! : modelConfig.t2v) : "";
 
     const args: string[] = ["--models-dir", modelsDir, "--prompt", input.prompt];
     if (useI2v) args.push("--image", input.input!);
@@ -172,6 +155,14 @@ server.registerTool(
     },
   },
   async (input) => {
+    const validModels = getModels("create", "audio");
+    if (!validModels.includes(input.model)) {
+      return {
+        isError: true,
+        content: [{ type: "text", text: `Unknown model '${input.model}'. Valid models: ${validModels.join(", ")}` }],
+      };
+    }
+
     const modelsDir = getModelsDir(input.modelsDir);
     const args: string[] = ["--models-dir", modelsDir, "--tags", input.prompt];
     if (input.length) args.push("--duration", input.length);
@@ -186,7 +177,7 @@ server.registerTool(
       action:     "create",
       media:      "audio",
       model:      input.model,
-      script:     AUDIO_CREATE_SCRIPTS[input.model] ?? "",
+      script:     getScript("create", "audio", input.model) ?? "",
       args,
       scriptBase: getScriptBase(),
       uvPath:     getUvPath(),
@@ -221,6 +212,14 @@ server.registerTool(
     },
   },
   async (input) => {
+    const validModels = getModels("edit", "image");
+    if (!validModels.includes(input.model)) {
+      return {
+        isError: true,
+        content: [{ type: "text", text: `Unknown model '${input.model}'. Valid models: ${validModels.join(", ")}` }],
+      };
+    }
+
     const modelsDir = getModelsDir(input.modelsDir);
     const outputPath = input.output ?? "output.png";
     const args: string[] = ["--models-dir", modelsDir];
@@ -251,7 +250,7 @@ server.registerTool(
       action:     "edit",
       media:      "image",
       model:      input.model,
-      script:     IMAGE_EDIT_SCRIPTS[input.model] ?? "",
+      script:     getScript("edit", "image", input.model) ?? "",
       args,
       scriptBase: getScriptBase(),
       uvPath:     getUvPath(),
@@ -287,6 +286,14 @@ server.registerTool(
     },
   },
   async (input) => {
+    const validModels = getModels("upscale", "image");
+    if (!validModels.includes(input.model)) {
+      return {
+        isError: true,
+        content: [{ type: "text", text: `Unknown model '${input.model}'. Valid models: ${validModels.join(", ")}` }],
+      };
+    }
+
     const modelsDir = getModelsDir(input.modelsDir);
     const args: string[] = ["--models-dir", modelsDir, "--input", input.input, "--prompt", input.prompt];
     if (input.checkpoint)              args.push("--checkpoint",               input.checkpoint);
@@ -305,7 +312,7 @@ server.registerTool(
       action:     "upscale",
       media:      "image",
       model:      input.model,
-      script:     IMAGE_UPSCALE_SCRIPTS[input.model] ?? "",
+      script:     getScript("upscale", "image", input.model) ?? "",
       args,
       scriptBase: getScriptBase(),
       uvPath:     getUvPath(),
