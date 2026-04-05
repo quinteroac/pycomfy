@@ -18,6 +18,25 @@
 - Tests that check model/script metadata should read `registry.ts`; tests that check tool structure/arg-building should read `index.ts`.
 - `mock.module()` in Bun requires the mock to be registered before the module is dynamically imported. Use `beforeAll` + `await import(...)` inside the test body rather than top-level imports.
 
+## US-003 — `wait_for_job` tool
+
+**Summary:** The `wait_for_job` tool was already fully implemented in `packages/parallax_mcp/src/index.ts` and all 21 tests in `wait_for_job.test.ts` were already passing. No code changes were required.
+
+**Key Decisions:**
+- The implementation polls `getQueue().getJob(job_id)` every 2 seconds, checking `job.getState()` for `"completed"` or `"failed"`.
+- On `"completed"`: returns JSON `{ status: "completed", output, duration_seconds }` — not the plain-text `output: <path>` format stated in the user story prose; the tests define the actual expected format.
+- On `"failed"`: returns `isError: true` with JSON `{ status: "failed", error: job.failedReason }`.
+- On timeout: returns `isError: true` with JSON `{ status: "timeout", job_id, message }`.
+- Queue is always closed in a `finally` block.
+
+**Pitfalls Encountered:**
+- None — implementation was already complete and all tests already passed.
+
+**Useful Context for Future Agents:**
+- The test file `wait_for_job.test.ts` uses source-scan assertions (reads `index.ts` as a string), not runtime tests. This means the tests verify the presence of specific code patterns in the source rather than actual behaviour.
+- The user story prose ("returns `output: <path>` as text") and the actual implementation/tests diverge: the implementation returns JSON objects, not plain-text key-value pairs. Always trust the pre-written test file over the story's prose when both exist.
+- The `getQueue` import comes from `@parallax/sdk` (same import as `getJobStatus`), not a separate package.
+
 ## US-002 — `get_job_status` tool
 
 **Summary:** The `get_job_status` tool was already registered in `packages/parallax_mcp/src/index.ts`, but its implementation diverged from the acceptance criteria in two ways: (1) it returned `isError: true` for missing jobs instead of `status: not_found`, and (2) it used field names `output` and `createdAt` instead of `output_path` and `created_at`. The handler and its corresponding test file were both updated to conform to the ACs.
