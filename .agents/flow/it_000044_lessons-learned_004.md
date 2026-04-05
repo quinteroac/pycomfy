@@ -17,3 +17,20 @@
 - Script paths for all models live exclusively in `packages/parallax_cli/src/models/registry.ts` — `index.ts` never contains hardcoded paths.
 - Tests that check model/script metadata should read `registry.ts`; tests that check tool structure/arg-building should read `index.ts`.
 - `mock.module()` in Bun requires the mock to be registered before the module is dynamically imported. Use `beforeAll` + `await import(...)` inside the test body rather than top-level imports.
+
+## US-002 — `get_job_status` tool
+
+**Summary:** The `get_job_status` tool was already registered in `packages/parallax_mcp/src/index.ts`, but its implementation diverged from the acceptance criteria in two ways: (1) it returned `isError: true` for missing jobs instead of `status: not_found`, and (2) it used field names `output` and `createdAt` instead of `output_path` and `created_at`. The handler and its corresponding test file were both updated to conform to the ACs.
+
+**Key Decisions:**
+- AC03 mandates a non-error response for missing jobs: the handler now returns `{ status: "not_found" }` via a normal content response (no `isError` flag).
+- AC02 response shape: `{ status, model, created_at }` always; `output_path` added only when `status === "completed"`; `error` added only when `status === "failed"`. Extra fields (`id`, `progress`, `action`, `media`) were removed from the response as they are not in the AC.
+- Runtime-behaviour tests inline the same response-building logic as the handler (pure functions, no Redis mock needed) to cover AC02 and AC03 without spinning up a queue.
+
+**Pitfalls Encountered:**
+- The SRC-scan test for `output_path` originally checked for `"output_path:"` (object literal syntax) but the implementation uses `payload.output_path = ...` (bracket assignment), so the check needed to be relaxed to `"output_path"`.
+- The old AC03 tests (`isError: true`, `not found`) were checking the wrong behaviour — these had to be fully replaced, not merely extended.
+
+**Useful Context for Future Agents:**
+- `ParallaxJobStatus` (from `packages/parallax_sdk/src/status.ts`) uses camelCase (`createdAt`, `startedAt`, `finishedAt`, `output`) — always map to snake_case in MCP text responses to match the established API contract.
+- The `get_job_status` handler never propagates `isError: true`; all failure states (failed job, not found) are returned as plain JSON text. Only the inference tools (`create_image`, etc.) use `isError: true` for invalid model names.

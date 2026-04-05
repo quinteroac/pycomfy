@@ -337,20 +337,20 @@ server.registerTool(
     const status = await getJobStatus(input.job_id);
     if (!status) {
       return {
-        isError: true,
-        content: [{ type: "text", text: `Job ${input.job_id} not found` }],
+        content: [{ type: "text", text: JSON.stringify({ status: "not_found" }) }],
       };
     }
-    const payload = {
-      id:       status.id,
-      status:   status.status,
-      progress: status.progress,
-      output:   status.output,
-      error:    status.error,
-      model:    status.model,
-      action:   status.action,
-      media:    status.media,
+    const payload: Record<string, unknown> = {
+      status:     status.status,
+      model:      status.model,
+      created_at: status.createdAt,
     };
+    if (status.status === "completed") {
+      payload.output_path = status.output;
+    }
+    if (status.status === "failed") {
+      payload.error = status.error;
+    }
     return {
       content: [{ type: "text", text: JSON.stringify(payload) }],
     };
