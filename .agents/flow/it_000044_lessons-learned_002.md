@@ -63,3 +63,24 @@
 - `AsyncMock` works correctly for both `get_queue` (which returns a queue object) and `queue.get` (which returns row dicts). Use `side_effect=` with a list to simulate multiple polling calls.
 - When the job is in a terminal state immediately, `asyncio.sleep` is never reached, so no need to mock it for those test cases.
 - `starlette.testclient.TestClient` (sync) can consume SSE responses via `client.get()` when the generator terminates: `response.text` contains the full SSE body.
+
+## US-004 — Job list and cancel
+
+**Summary:** Implemented `GET /jobs` (returns 50 most recent jobs as `JobListItem` array) and `DELETE /jobs/{job_id}` (cancels queued jobs or returns 409). Added `JobListItem` Pydantic model to `server/schemas.py`, added two route handlers to `server/app.py`, and wrote 25 tests in `tests/test_server_routes_us004_it044.py`. All 25 tests pass.
+
+**Key Decisions:**
+- `GET /jobs` reuses the existing `queue.list_jobs(limit=50)` method already present in `server/queue.py`.
+- `DELETE /jobs/{job_id}` reads the job status directly via `queue.get()` and calls `queue.update_status(job_id, "cancelled")` rather than using `queue.cancel()`, because the existing `cancel()` method allows cancelling running jobs (only blocks on "done"/"failed"/"cancelled"), which would violate AC03.
+- Route ordering: `GET /jobs` is registered before `GET /jobs/{job_id}` to avoid the literal path being shadowed by the parameterized one. FastAPI handles this correctly regardless, but explicit ordering is cleaner.
+- Status mapping: DB `"pending"` → API `"queued"` applied in both `GET /jobs` and the existing `GET /jobs/{job_id}` route for consistency.
+- Added `JobListItem` (id, status, created_at, updated_at) to `schemas.py` — deliberately separate from `JobStatusResponse` (which also carries `result`).
+
+**Pitfalls Encountered:**
+- `queue.cancel()` in `server/queue.py` only blocks cancellation for `("done", "failed", "cancelled")` — it would also cancel "running" jobs, violating AC03. Always check the exact cancellation guard logic before delegating to a helper method.
+- The `get_queue` singleton is called twice in `cancel_job` (once for the `get` check, once for `update_status`). The `side_effect` mock function returns the same mock queue object on each call, which works cleanly.
+
+**Useful Context for Future Agents:**
+- Tests run via `/home/victor/AI/pycomfy/.venv/bin/python3 -m pytest` — not `uv run pytest`.
+- `server/schemas.py` now exports `JobListItem` in addition to all previous models.
+- When adding new list/query endpoints that need the queue, follow the `asyncio.run(_inner())` pattern used by all sync routes in `app.py`.
+- `queue.list_jobs(limit=50)` is already implemented in `server/queue.py` — no DB changes were required.

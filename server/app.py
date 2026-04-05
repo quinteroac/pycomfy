@@ -18,6 +18,7 @@ from server.schemas import (
     CreateImageRequest,
     CreateVideoRequest,
     EditImageRequest,
+    JobListItem,
     JobResponse,
     JobResult,
     JobStatusResponse,
@@ -38,6 +39,49 @@ def _uv_path() -> str:
 def _make_args(req_dict: dict) -> dict:
     """Return a flat args dict from the request, dropping None values and 'model'."""
     return {k: v for k, v in req_dict.items() if v is not None and k != "model"}
+
+
+@app.get("/jobs", response_model=list[JobListItem])
+def list_jobs() -> list[JobListItem]:
+    async def _list() -> list[dict]:
+        queue = await get_queue()
+        return await queue.list_jobs(limit=50)
+
+    rows = asyncio.run(_list())
+
+    def _map_status(s: str) -> str:
+        return "queued" if s == "pending" else s
+
+    return [
+        JobListItem(
+            id=r["id"],
+            status=_map_status(r["status"]),
+            created_at=r["created_at"],
+            updated_at=r["updated_at"],
+        )
+        for r in rows
+    ]
+
+
+@app.delete("/jobs/{job_id}")
+def cancel_job(job_id: str) -> dict:
+    async def _get() -> dict | None:
+        queue = await get_queue()
+        return await queue.get(job_id)
+
+    row = asyncio.run(_get())
+    if row is None:
+        raise HTTPException(status_code=404, detail="job not found")
+
+    if row["status"] != "pending":
+        raise HTTPException(status_code=409, detail="job is already running or completed")
+
+    async def _cancel() -> None:
+        queue = await get_queue()
+        await queue.update_status(job_id, "cancelled")
+
+    asyncio.run(_cancel())
+    return {"cancelled": True}
 
 
 @app.get("/jobs/{job_id}", response_model=JobStatusResponse)

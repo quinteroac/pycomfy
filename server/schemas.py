@@ -68,3 +68,10 @@ class JobStatusResponse(BaseModel):
 class JobResponse(BaseModel):
     job_id: str
     status: str
+
+
+class JobListItem(BaseModel):
+    id: str
+    status: str
+    created_at: str
+    updated_at: str
