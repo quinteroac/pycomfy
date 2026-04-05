@@ -1,19 +1,19 @@
 {
   "goals": [
-    "Refactor all five inference tools to return a job ID within 200ms instead of blocking until completion.",
-    "Add `get_job_status` tool for single-shot status checks.",
-    "Add `wait_for_job` tool that polls internally and resolves only when the job reaches a terminal state (with a configurable timeout).",
-    "Remove the subprocess-spawning pattern from `parallax_mcp` — all execution goes through the shared job layer."
+    "Implement a Python MCP server under `mcp/` using `fastmcp`.",
+    "Migrate all five inference tools to return a job ID within 200ms instead of blocking.",
+    "Add `get_job_status` and `wait_for_job` tools.",
+    "Register the server as a `uv run` entry point in `pyproject.toml`."
   ],
   "userStories": [
     {
       "id": "US-001",
       "title": "Non-blocking inference tools",
-      "description": "As an AI agent using the MCP server, I want `create_image`, `create_video`, `create_audio`, `edit_image`, and `upscale_image` to return a job ID immediately so that I can avoid tool timeouts on long-running operations and continue with other reasoning while inference runs.",
+      "description": "As an AI agent using the MCP server, I want `create_image`, `create_video`, `create_audio`, `edit_image`, and `upscale_image` to return a job ID immediately so that I can avoid tool timeouts on long-running operations and continue reasoning while inference runs.",
       "acceptanceCriteria": [
         {
           "id": "US-001-AC01",
-          "text": "All five tools call `submitJob()` from `@parallax/sdk/submit` instead of spawning `parallax_cli` as a subprocess."
+          "text": "All five tools call `submit_job()` from `server/submit.py` instead of blocking."
         },
         {
           "id": "US-001-AC02",
@@ -21,100 +21,80 @@
         },
         {
           "id": "US-001-AC03",
-          "text": "The tool descriptions in `registerTool` are updated to mention that they return a job ID, not the output path directly."
+          "text": "The tool `description` fields mention that they return a job ID and that `wait_for_job` should be used to get the output path."
         },
         {
           "id": "US-001-AC04",
-          "text": "The `Bun.spawn` subprocess pattern is fully removed from `parallax_mcp/src/index.ts`."
-        },
-        {
-          "id": "US-001-AC05",
-          "text": "`bun typecheck` passes on `parallax_mcp`."
-        },
-        {
-          "id": "US-001-AC06",
-          "text": "Manually verified: calling `create_video` via Claude returns a job ID in under 1 second."
+          "text": "A unit test verifies that each tool returns a string containing `job_id:` in under 500ms (with a mock queue)."
         }
       ]
     },
     {
       "id": "US-002",
-      "title": "get_job_status tool",
-      "description": "As an AI agent, I want to call `get_job_status` with a job ID and receive the current state, progress percentage, and output path (when done) so that I can check whether inference has finished before taking further actions.",
+      "title": "`get_job_status` tool",
+      "description": "As an AI agent, I want to call `get_job_status(job_id)` so that I can check whether a job is still running, completed, or failed without blocking my reasoning loop.",
       "acceptanceCriteria": [
         {
           "id": "US-002-AC01",
-          "text": "`get_job_status` is registered with input schema `{ job_id: z.string() }`."
+          "text": "`get_job_status` accepts `job_id: str` as its only parameter."
         },
         {
           "id": "US-002-AC02",
-          "text": "Returns a JSON-formatted text response with fields: `id`, `status`, `progress`, `output` (null or string), `error` (null or string), `model`, `action`, `media`."
+          "text": "Returns a text response with fields: `status`, `model`, `created_at`, and `output_path` (if completed) or `error` (if failed)."
         },
         {
           "id": "US-002-AC03",
-          "text": "When `job_id` does not exist, returns `isError: true` with message `Job <id> not found`."
-        },
-        {
-          "id": "US-002-AC04",
-          "text": "`bun typecheck` passes."
+          "text": "Returns `status: not_found` (not an error/exception) when the job ID does not exist in the queue."
         }
       ]
     },
     {
       "id": "US-003",
-      "title": "wait_for_job tool",
-      "description": "As an AI agent, I want to call `wait_for_job` with a job ID and optional timeout so that I can block until inference finishes and get the output path in one tool call — useful when the agent wants a synchronous-style result but without causing MCP transport timeouts.",
+      "title": "`wait_for_job` tool",
+      "description": "As an AI agent, I want to call `wait_for_job(job_id, timeout_seconds)` so that I can block my current tool call until the job finishes and get the output path directly.",
       "acceptanceCriteria": [
         {
           "id": "US-003-AC01",
-          "text": "`wait_for_job` is registered with input schema `{ job_id: z.string(), timeout_seconds: z.number().optional().default(600) }`."
+          "text": "`wait_for_job` accepts `job_id: str` and `timeout_seconds: int` (default 600)."
         },
         {
           "id": "US-003-AC02",
-          "text": "Polls `getQueue().getJob(id)` every 2 seconds until the job reaches `completed` or `failed`, or the timeout is exceeded."
+          "text": "Polls the job queue every 2 seconds until the job status is `\"completed\"` or `\"failed\"`."
         },
         {
           "id": "US-003-AC03",
-          "text": "On `completed`: returns `{ status: \"completed\", output: \"<path>\", duration_seconds: N }`."
+          "text": "On `\"completed\"`: returns `output: <path>` as text response."
         },
         {
           "id": "US-003-AC04",
-          "text": "On `failed`: returns `isError: true` with `{ status: \"failed\", error: \"<reason>\" }`."
+          "text": "On `\"failed\"`: returns `error: <message>` as text response."
         },
         {
           "id": "US-003-AC05",
-          "text": "On timeout: returns `isError: true` with `{ status: \"timeout\", job_id: \"<id>\", message: \"Job did not complete within <N> seconds. Use get_job_status to check later.\" }`."
-        },
-        {
-          "id": "US-003-AC06",
-          "text": "Closes the queue connection before returning."
-        },
-        {
-          "id": "US-003-AC07",
-          "text": "`bun typecheck` passes."
+          "text": "On timeout: returns `error: timeout after <N>s` as text response (does not raise)."
         }
       ]
     },
     {
       "id": "US-004",
-      "title": "Update tool descriptions for agent discoverability",
-      "description": "As an AI agent discovering MCP tools, I want the tool descriptions to reflect the async pattern so that I know to call `get_job_status` or `wait_for_job` after submitting a job.",
+      "title": "MCP server entry point",
+      "description": "As a developer configuring Claude Desktop or another MCP client, I want to point the client at `uv run parallax-mcp` so that the Python MCP server starts as a stdio process without needing a separate Bun install.",
       "acceptanceCriteria": [
         {
           "id": "US-004-AC01",
-          "text": "Each inference tool description ends with: `Returns a job_id. Use get_job_status to poll or wait_for_job to block until done.`"
+          "text": "`mcp/__main__.py` exists and starts the `fastmcp` server in stdio mode."
         },
         {
           "id": "US-004-AC02",
-          "text": "`get_job_status` description reads: `Check the current status and progress of a submitted inference job. Returns status, progress percentage (0-100), and output path when completed.`"
+          "text": "`pyproject.toml` registers a `parallax-mcp` script entry point pointing to `mcp.main:main`."
         },
         {
           "id": "US-004-AC03",
-          "text": "`wait_for_job` description reads: `Block until a submitted inference job completes. Polls internally every 2 seconds. Default timeout: 600 seconds. Returns output path on success.`"
+          "text": "`uv run parallax-mcp` starts without error (no GPU required — tools return early with mock job IDs in test mode)."
         },
         {
           "id": "US-004-AC04",
-          "text": "`bun typecheck` passes."
+          "text": "The server name reported to MCP clients is `\"parallax-mcp\"` with version matching `pyproject.toml`."
         }
       ]
     }
@@ -122,23 +102,27 @@
   "functionalRequirements": [
     {
       "id": "FR-1",
-      "description": "`@parallax/sdk` must be added as a `workspace:*` dependency in `parallax_mcp/package.json`."
+      "description": "MCP server is implemented with `fastmcp`; `mcp/` directory at repo root contains `main.py`, `tools/`, and `__main__.py`."
     },
     {
       "id": "FR-2",
-      "description": "`getQueue().close()` must be called after every tool handler that calls `getQueue()` — do not leave SQLite handles open across tool calls."
+      "description": "All tools import `submit_job` and `get_queue` from `server/submit.py` and `server/queue.py` — no direct `comfy.*` imports in `mcp/`."
     },
     {
       "id": "FR-3",
-      "description": "The `CLI_DIR` constant and all `Bun.spawn([\"bun\", \"run\", \"src/index.ts\", ...args])` calls must be removed."
+      "description": "Tool input schemas are defined as Pydantic models or typed function signatures (fastmcp auto-generates the JSON schema)."
     },
     {
       "id": "FR-4",
-      "description": "All model validation (does the model exist for the given action/media?) must use `validateModel()` from `@parallax/cli/models/registry` or equivalent — do not silently submit jobs with invalid models."
+      "description": "The MCP server runs as a stdio process (`fastmcp` stdio transport) — not HTTP."
     },
     {
       "id": "FR-5",
-      "description": "Script path resolution for `ParallaxJobData.script` must use `getScript()` from the model registry — same logic as the CLI."
+      "description": "`wait_for_job` uses `asyncio.sleep(2)` between polls — never busy-waits."
+    },
+    {
+      "id": "FR-6",
+      "description": "All tool docstrings are present and descriptive (fastmcp uses them as tool descriptions)."
     }
   ]
 }

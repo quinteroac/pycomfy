@@ -1,9 +1,10 @@
 {
   "goals": [
-    "Expose HTTP endpoints for submitting all five inference operations (create image/video/audio, edit image, upscale image).",
+    "Expose REST endpoints for submitting all five inference operations (create image/video/audio, edit image, upscale image).",
     "Provide a job status endpoint for polling.",
-    "Provide an SSE endpoint per job for real-time progress streaming without polling.",
-    "Provide job list and cancel endpoints for job management."
+    "Provide a Server-Sent Events (SSE) endpoint per job for real-time progress streaming.",
+    "Provide job list and cancel endpoints.",
+    "Mount the gateway router on the existing FastAPI app in `server/main.py`."
   ],
   "userStories": [
     {
@@ -13,158 +14,107 @@
       "acceptanceCriteria": [
         {
           "id": "US-001-AC01",
-          "text": "`POST /jobs/create/image` accepts a JSON body matching `GenerateImageRequest` from `@parallax/sdk` plus a required `model: string` field."
+          "text": "`POST /jobs/create/image` accepts a JSON body with at minimum: `model: str`, `prompt: str`, and optional generation fields; returns `{\"job_id\": \"<id>\", \"status\": \"queued\"}` within 200ms."
         },
         {
           "id": "US-001-AC02",
-          "text": "`POST /jobs/create/video` accepts a JSON body matching `GenerateVideoRequest` plus `model: string` and optional `input: string` (image path for i2v)."
+          "text": "`POST /jobs/create/video` accepts a JSON body with `model: str`, `prompt: str`, and optional `input: str` (image path for i2v)."
         },
         {
           "id": "US-001-AC03",
-          "text": "`POST /jobs/create/audio` accepts a JSON body matching `GenerateAudioRequest` plus `model: string`."
+          "text": "`POST /jobs/create/audio` accepts a JSON body with `model: str`, `prompt: str`, and optional audio fields."
         },
         {
           "id": "US-001-AC04",
-          "text": "`POST /jobs/edit/image` accepts a JSON body matching `EditImageRequest` plus `model: string`."
+          "text": "`POST /jobs/edit/image` accepts a JSON body with `model: str`, `prompt: str`, `input: str` (input image path)."
         },
         {
           "id": "US-001-AC05",
-          "text": "`POST /jobs/upscale/image` accepts `{ image_path: string, model: string, output?: string }`."
+          "text": "`POST /jobs/upscale/image` accepts a JSON body with `model: str`, `prompt: str`, `input: str`."
         },
         {
           "id": "US-001-AC06",
-          "text": "All five endpoints call `submitJob()` from `@parallax/sdk/submit` and return `{ job_id: string, status: \"queued\" }` within 200ms."
+          "text": "All five endpoints call `submit_job()` from `server/submit.py` and return the job ID in < 200ms."
         },
         {
           "id": "US-001-AC07",
-          "text": "Returns `400` with a descriptive error body when required fields are missing."
-        },
-        {
-          "id": "US-001-AC08",
-          "text": "Visually verified: `curl -X POST http://localhost:3000/jobs/create/image -d '{\"model\":\"sdxl\",\"prompt\":\"a cat\"}' -H 'Content-Type: application/json'` returns `{ job_id, status: \"queued\" }`."
+          "text": "All request bodies are validated by Pydantic models defined in `server/schemas.py`."
         }
       ]
     },
     {
       "id": "US-002",
-      "title": "Get job status by ID",
-      "description": "As a consumer, I want to `GET /jobs/:id` and receive the current state of a job so that I can poll status without an open SSE connection.",
+      "title": "Job status polling",
+      "description": "As a consumer, I want to call `GET /jobs/{job_id}` so that I can check the current status of a job without holding a streaming connection.",
       "acceptanceCriteria": [
         {
           "id": "US-002-AC01",
-          "text": "`GET /jobs/:id` returns a JSON object with: `id`, `status` (`waiting|active|completed|failed`), `progress` (0–100 number), `output` (string or null), `error` (string or null), `createdAt` (epoch ms), `startedAt` (epoch ms or null), `finishedAt` (epoch ms or null)."
+          "text": "`GET /jobs/{job_id}` returns a JSON object with fields: `id`, `status`, `created_at`, `updated_at`, and `result` (null or `JobResult`)."
         },
         {
           "id": "US-002-AC02",
-          "text": "Returns `404` with `{ error: \"Job not found\" }` when the ID does not exist."
+          "text": "Returns HTTP 404 with `{\"detail\": \"job not found\"}` when the job ID does not exist."
         },
         {
           "id": "US-002-AC03",
-          "text": "`bun typecheck` passes."
+          "text": "Status values match: `\"queued\"`, `\"running\"`, `\"completed\"`, `\"failed\"`, `\"cancelled\"`."
         }
       ]
     },
     {
       "id": "US-003",
-      "title": "Stream job progress via SSE",
-      "description": "As a consumer, I want to `GET /jobs/:id/stream` and receive Server-Sent Events until the job completes or fails so that I get real-time progress without polling.",
+      "title": "SSE progress stream",
+      "description": "As a consumer, I want to connect to `GET /jobs/{job_id}/stream` and receive real-time progress events so that I can display a live progress bar without polling.",
       "acceptanceCriteria": [
         {
           "id": "US-003-AC01",
-          "text": "`GET /jobs/:id/stream` returns a `text/event-stream` response."
+          "text": "`GET /jobs/{job_id}/stream` returns a `text/event-stream` response using FastAPI's `StreamingResponse`."
         },
         {
           "id": "US-003-AC02",
-          "text": "While the job is active or waiting, emits `event: progress\\ndata: {\"pct\":N,\"step\":\"...\"}` every 500ms."
+          "text": "Each event is a JSON-encoded `PythonProgress` object emitted as `data: <json>\\n\\n`."
         },
         {
           "id": "US-003-AC03",
-          "text": "When the job completes, emits `event: completed\\ndata: {\"output\":\"<path>\"}` then closes the stream."
+          "text": "When the job reaches `\"completed\"` or `\"failed\"`, a final event with `step: \"done\"` or `step: \"error\"` is emitted and the stream closes."
         },
         {
           "id": "US-003-AC04",
-          "text": "When the job fails, emits `event: failed\\ndata: {\"error\":\"<reason>\"}` then closes the stream."
-        },
-        {
-          "id": "US-003-AC05",
-          "text": "Returns `404` before opening the stream if the job ID does not exist."
-        },
-        {
-          "id": "US-003-AC06",
-          "text": "`@elysiajs/stream` is added as a dependency."
-        },
-        {
-          "id": "US-003-AC07",
-          "text": "Visually verified in browser: EventSource connects, receives progress events, stream closes on completion."
+          "text": "If the job does not exist, the endpoint returns HTTP 404 immediately (no stream opened)."
         }
       ]
     },
     {
       "id": "US-004",
-      "title": "List jobs",
-      "description": "As a consumer, I want to `GET /jobs` and see all recent jobs with their status so that I can inspect the queue state.",
+      "title": "Job list and cancel",
+      "description": "As a consumer, I want to list recent jobs and cancel a queued job so that I can manage the job queue from external tools.",
       "acceptanceCriteria": [
         {
           "id": "US-004-AC01",
-          "text": "`GET /jobs` returns `{ jobs: JobSummary[], counts: { waiting, active, completed, failed } }`."
+          "text": "`GET /jobs` returns a JSON array of the 50 most recent jobs, each with `id`, `status`, `created_at`, `updated_at`."
         },
         {
           "id": "US-004-AC02",
-          "text": "`JobSummary` includes: `id`, `status`, `progress`, `model`, `action`, `media`, `createdAt`."
+          "text": "`DELETE /jobs/{job_id}` cancels a job that is in `\"queued\"` status; returns `{\"cancelled\": true}`."
         },
         {
           "id": "US-004-AC03",
-          "text": "Defaults to returning at most 50 most-recent jobs."
-        },
-        {
-          "id": "US-004-AC04",
-          "text": "Supports optional query param `?status=active|completed|failed|waiting` to filter."
-        },
-        {
-          "id": "US-004-AC05",
-          "text": "`bun typecheck` passes."
+          "text": "`DELETE /jobs/{job_id}` returns HTTP 409 with `{\"detail\": \"job is already running or completed\"}` when the job is not in `\"queued\"` status."
         }
       ]
     },
     {
       "id": "US-005",
-      "title": "Cancel a job",
-      "description": "As a consumer, I want to `DELETE /jobs/:id` to cancel a running or waiting job so that I can abort inference that is no longer needed.",
+      "title": "Health endpoint",
+      "description": "As a deployment operator, I want `GET /health` to return service status so that load balancers and monitoring tools can verify the gateway is alive.",
       "acceptanceCriteria": [
         {
           "id": "US-005-AC01",
-          "text": "`DELETE /jobs/:id` calls `getQueue().cancel(jobId)` and returns `{ cancelled: true }`."
+          "text": "`GET /health` returns HTTP 200 with `{\"status\": \"ok\", \"version\": \"<package_version>\"}`."
         },
         {
           "id": "US-005-AC02",
-          "text": "Returns `404` if the job ID does not exist."
-        },
-        {
-          "id": "US-005-AC03",
-          "text": "Returns `409` with `{ error: \"Job already completed\" }` if the job is already in a terminal state."
-        },
-        {
-          "id": "US-005-AC04",
-          "text": "`bun typecheck` passes."
-        }
-      ]
-    },
-    {
-      "id": "US-006",
-      "title": "Health endpoint enrichment",
-      "description": "As an operator, I want `GET /health` to include queue statistics so that I can verify the queue is operational.",
-      "acceptanceCriteria": [
-        {
-          "id": "US-006-AC01",
-          "text": "`GET /health` returns `{ status: \"ok\", queue: { waiting, active, completed, failed } }`."
-        },
-        {
-          "id": "US-006-AC02",
-          "text": "Does not break existing behavior (still returns HTTP 200)."
-        },
-        {
-          "id": "US-006-AC03",
-          "text": "`bun typecheck` passes."
+          "text": "The endpoint does not depend on the job queue being available (no DB call)."
         }
       ]
     }
@@ -172,27 +122,23 @@
   "functionalRequirements": [
     {
       "id": "FR-1",
-      "description": "All route handlers must use Elysia's native TypeScript input validation (no manual `if (!body.field)` checks)."
+      "description": "All gateway routes are defined in `server/gateway.py` as an `APIRouter` and mounted on the main FastAPI app in `server/main.py` with prefix `/` (or no prefix)."
     },
     {
       "id": "FR-2",
-      "description": "The server listens on port `3000` by default, overridable via `PORT` environment variable."
+      "description": "All request/response schemas are Pydantic models in `server/schemas.py` with strict type annotations."
     },
     {
       "id": "FR-3",
-      "description": "CORS must be enabled for all origins in development (`@elysiajs/cors`)."
+      "description": "SSE streaming uses `asyncio` and polls the job queue every 500ms maximum; polling interval is configurable via `PARALLAX_SSE_POLL_MS` env var."
     },
     {
       "id": "FR-4",
-      "description": "Unhandled errors in route handlers must return `500` with `{ error: \"Internal server error\" }` — not crash the server."
+      "description": "CORS is enabled on the gateway for `*` origins (configurable via `PARALLAX_CORS_ORIGINS` env var)."
     },
     {
       "id": "FR-5",
-      "description": "`parallax_ms/package.json` must declare `@parallax/sdk` as `workspace:*` dependency if not already present."
-    },
-    {
-      "id": "FR-6",
-      "description": "All job submission endpoints must resolve the correct Python script path using the same `getScript()` / model registry logic already in `parallax_cli/src/models/registry.ts` — do not hardcode script paths."
+      "description": "The gateway runs on the same `uvicorn` instance as `server/main.py` — no new process or port."
     }
   ]
 }

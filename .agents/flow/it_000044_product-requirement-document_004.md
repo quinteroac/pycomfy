@@ -1,69 +1,71 @@
-# Requirement: parallax_mcp Async Tools
+# Python MCP Server (fastmcp)
 
 ## Context
-The MCP server currently blocks until each inference subprocess completes — which can take 5+ minutes for video generation. AI clients (Claude, Gemini, Copilot) have tool timeout limits that cause failures on long operations. This PRD makes all five inference tools non-blocking by returning a job ID immediately, and introduces two new tools (`get_job_status`, `wait_for_job`) that allow AI agents to observe job progress on their own schedule.
+
+`parallax_mcp` is currently a TypeScript MCP server using `@modelcontextprotocol/sdk`. All five inference tools block until the pipeline subprocess completes, causing timeout failures in AI clients. Since the job infrastructure is moving to Python (PRD 001), the MCP server can be reimplemented with `fastmcp` — a Python-native MCP framework — making all tools non-blocking by returning job IDs immediately, and adding `get_job_status` / `wait_for_job` tools that let AI agents observe progress on their own schedule.
 
 ## Goals
-- Refactor all five inference tools to return a job ID within 200ms instead of blocking until completion.
-- Add `get_job_status` tool for single-shot status checks.
-- Add `wait_for_job` tool that polls internally and resolves only when the job reaches a terminal state (with a configurable timeout).
-- Remove the subprocess-spawning pattern from `parallax_mcp` — all execution goes through the shared job layer.
+
+- Implement a Python MCP server under `mcp/` using `fastmcp`.
+- Migrate all five inference tools to return a job ID within 200ms instead of blocking.
+- Add `get_job_status` and `wait_for_job` tools.
+- Register the server as a `uv run` entry point in `pyproject.toml`.
 
 ## User Stories
 
 ### US-001: Non-blocking inference tools
-**As an** AI agent using the MCP server, **I want** `create_image`, `create_video`, `create_audio`, `edit_image`, and `upscale_image` to return a job ID immediately **so that** I can avoid tool timeouts on long-running operations and continue with other reasoning while inference runs.
+**As an** AI agent using the MCP server, **I want** `create_image`, `create_video`, `create_audio`, `edit_image`, and `upscale_image` to return a job ID immediately **so that** I can avoid tool timeouts on long-running operations and continue reasoning while inference runs.
 
 **Acceptance Criteria:**
-- [ ] All five tools call `submitJob()` from `@parallax/sdk/submit` instead of spawning `parallax_cli` as a subprocess.
+- [ ] All five tools call `submit_job()` from `server/submit.py` instead of blocking.
 - [ ] Each tool returns within 200ms with a text response of the form: `job_id: <id>\nstatus: queued\nmodel: <model>`.
-- [ ] The tool descriptions in `registerTool` are updated to mention that they return a job ID, not the output path directly.
-- [ ] The `Bun.spawn` subprocess pattern is fully removed from `parallax_mcp/src/index.ts`.
-- [ ] `bun typecheck` passes on `parallax_mcp`.
-- [ ] Manually verified: calling `create_video` via Claude returns a job ID in under 1 second.
+- [ ] The tool `description` fields mention that they return a job ID and that `wait_for_job` should be used to get the output path.
+- [ ] A unit test verifies that each tool returns a string containing `job_id:` in under 500ms (with a mock queue).
 
-### US-002: get_job_status tool
-**As an** AI agent, **I want** to call `get_job_status` with a job ID and receive the current state, progress percentage, and output path (when done) **so that** I can check whether inference has finished before taking further actions.
+### US-002: `get_job_status` tool
+**As an** AI agent, **I want** to call `get_job_status(job_id)` **so that** I can check whether a job is still running, completed, or failed without blocking my reasoning loop.
 
 **Acceptance Criteria:**
-- [ ] `get_job_status` is registered with input schema `{ job_id: z.string() }`.
-- [ ] Returns a JSON-formatted text response with fields: `id`, `status`, `progress`, `output` (null or string), `error` (null or string), `model`, `action`, `media`.
-- [ ] When `job_id` does not exist, returns `isError: true` with message `Job <id> not found`.
-- [ ] `bun typecheck` passes.
+- [ ] `get_job_status` accepts `job_id: str` as its only parameter.
+- [ ] Returns a text response with fields: `status`, `model`, `created_at`, and `output_path` (if completed) or `error` (if failed).
+- [ ] Returns `status: not_found` (not an error/exception) when the job ID does not exist in the queue.
 
-### US-003: wait_for_job tool
-**As an** AI agent, **I want** to call `wait_for_job` with a job ID and optional timeout **so that** I can block until inference finishes and get the output path in one tool call — useful when the agent wants a synchronous-style result but without causing MCP transport timeouts.
-
-**Acceptance Criteria:**
-- [ ] `wait_for_job` is registered with input schema `{ job_id: z.string(), timeout_seconds: z.number().optional().default(600) }`.
-- [ ] Polls `getQueue().getJob(id)` every 2 seconds until the job reaches `completed` or `failed`, or the timeout is exceeded.
-- [ ] On `completed`: returns `{ status: "completed", output: "<path>", duration_seconds: N }`.
-- [ ] On `failed`: returns `isError: true` with `{ status: "failed", error: "<reason>" }`.
-- [ ] On timeout: returns `isError: true` with `{ status: "timeout", job_id: "<id>", message: "Job did not complete within <N> seconds. Use get_job_status to check later." }`.
-- [ ] Closes the queue connection before returning.
-- [ ] `bun typecheck` passes.
-
-### US-004: Update tool descriptions for agent discoverability
-**As an** AI agent discovering MCP tools, **I want** the tool descriptions to reflect the async pattern **so that** I know to call `get_job_status` or `wait_for_job` after submitting a job.
+### US-003: `wait_for_job` tool
+**As an** AI agent, **I want** to call `wait_for_job(job_id, timeout_seconds)` **so that** I can block my current tool call until the job finishes and get the output path directly.
 
 **Acceptance Criteria:**
-- [ ] Each inference tool description ends with: `Returns a job_id. Use get_job_status to poll or wait_for_job to block until done.`
-- [ ] `get_job_status` description reads: `Check the current status and progress of a submitted inference job. Returns status, progress percentage (0-100), and output path when completed.`
-- [ ] `wait_for_job` description reads: `Block until a submitted inference job completes. Polls internally every 2 seconds. Default timeout: 600 seconds. Returns output path on success.`
-- [ ] `bun typecheck` passes.
+- [ ] `wait_for_job` accepts `job_id: str` and `timeout_seconds: int` (default 600).
+- [ ] Polls the job queue every 2 seconds until the job status is `"completed"` or `"failed"`.
+- [ ] On `"completed"`: returns `output: <path>` as text response.
+- [ ] On `"failed"`: returns `error: <message>` as text response.
+- [ ] On timeout: returns `error: timeout after <N>s` as text response (does not raise).
+
+### US-004: MCP server entry point
+**As a** developer configuring Claude Desktop or another MCP client, **I want** to point the client at `uv run parallax-mcp` **so that** the Python MCP server starts as a stdio process without needing a separate Bun install.
+
+**Acceptance Criteria:**
+- [ ] `mcp/__main__.py` exists and starts the `fastmcp` server in stdio mode.
+- [ ] `pyproject.toml` registers a `parallax-mcp` script entry point pointing to `mcp.main:main`.
+- [ ] `uv run parallax-mcp` starts without error (no GPU required — tools return early with mock job IDs in test mode).
+- [ ] The server name reported to MCP clients is `"parallax-mcp"` with version matching `pyproject.toml`.
+
+---
 
 ## Functional Requirements
-- FR-1: `@parallax/sdk` must be added as a `workspace:*` dependency in `parallax_mcp/package.json`.
-- FR-2: `getQueue().close()` must be called after every tool handler that calls `getQueue()` — do not leave SQLite handles open across tool calls.
-- FR-3: The `CLI_DIR` constant and all `Bun.spawn(["bun", "run", "src/index.ts", ...args])` calls must be removed.
-- FR-4: All model validation (does the model exist for the given action/media?) must use `validateModel()` from `@parallax/cli/models/registry` or equivalent — do not silently submit jobs with invalid models.
-- FR-5: Script path resolution for `ParallaxJobData.script` must use `getScript()` from the model registry — same logic as the CLI.
 
-## Non-Goals (Out of Scope)
-- SSE streaming from MCP — polling via `get_job_status` is sufficient.
-- `list_jobs` MCP tool — AI agents don't need to browse job history.
-- MCP progress notifications (MCP `progressToken`) — deferred to a future iteration.
-- Any changes to the MCP server transport (stdio remains).
+- FR-1: MCP server is implemented with `fastmcp`; `mcp/` directory at repo root contains `main.py`, `tools/`, and `__main__.py`.
+- FR-2: All tools import `submit_job` and `get_queue` from `server/submit.py` and `server/queue.py` — no direct `comfy.*` imports in `mcp/`.
+- FR-3: Tool input schemas are defined as Pydantic models or typed function signatures (fastmcp auto-generates the JSON schema).
+- FR-4: The MCP server runs as a stdio process (`fastmcp` stdio transport) — not HTTP.
+- FR-5: `wait_for_job` uses `asyncio.sleep(2)` between polls — never busy-waits.
+- FR-6: All tool docstrings are present and descriptive (fastmcp uses them as tool descriptions).
+
+## Non-Goals
+
+- No HTTP/SSE transport for MCP in this PRD — stdio only.
+- No migration guide for existing `parallax_mcp` TypeScript consumers.
+- No new inference capabilities beyond what exists in the current TS MCP server.
 
 ## Open Questions
-- None.
+
+- Should `fastmcp` be pinned to a specific version, or is the latest stable acceptable? (fastmcp is evolving rapidly — pinning reduces surprises.)

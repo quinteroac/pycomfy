@@ -1,13 +1,16 @@
-# Requirement: parallax_ms REST API with Job Queue and SSE
+# FastAPI Gateway (Python)
 
 ## Context
-`parallax_ms` currently has only a `/health` endpoint. This PRD defines a full job management REST API using Elysia that allows external consumers (web UIs, scripts, webhooks) to submit inference jobs, check their status, and stream real-time progress via Server-Sent Events (SSE). This package uses the shared job infrastructure from PRD 001 (`@parallax/sdk`).
+
+`parallax_ms` is currently an Elysia TypeScript gateway running on `:3000` that proxies to the FastAPI `server/` on `:5000`. With the job infrastructure moved to Python (PRD 001), the gateway can be consolidated into `server/` as a FastAPI sub-application — eliminating the separate Node process and the TS→Python boundary. This PRD replaces `parallax_ms` with a FastAPI router mounted inside the existing FastAPI app, exposing the same REST + SSE surface.
 
 ## Goals
-- Expose HTTP endpoints for submitting all five inference operations (create image/video/audio, edit image, upscale image).
+
+- Expose REST endpoints for submitting all five inference operations (create image/video/audio, edit image, upscale image).
 - Provide a job status endpoint for polling.
-- Provide an SSE endpoint per job for real-time progress streaming without polling.
-- Provide job list and cancel endpoints for job management.
+- Provide a Server-Sent Events (SSE) endpoint per job for real-time progress streaming.
+- Provide job list and cancel endpoints.
+- Mount the gateway router on the existing FastAPI app in `server/main.py`.
 
 ## User Stories
 
@@ -15,76 +18,63 @@
 **As an** external consumer (web UI, script, webhook), **I want** to POST a job request and receive a job ID immediately **so that** I can track a long-running inference without keeping the HTTP connection open.
 
 **Acceptance Criteria:**
-- [ ] `POST /jobs/create/image` accepts a JSON body matching `GenerateImageRequest` from `@parallax/sdk` plus a required `model: string` field.
-- [ ] `POST /jobs/create/video` accepts a JSON body matching `GenerateVideoRequest` plus `model: string` and optional `input: string` (image path for i2v).
-- [ ] `POST /jobs/create/audio` accepts a JSON body matching `GenerateAudioRequest` plus `model: string`.
-- [ ] `POST /jobs/edit/image` accepts a JSON body matching `EditImageRequest` plus `model: string`.
-- [ ] `POST /jobs/upscale/image` accepts `{ image_path: string, model: string, output?: string }`.
-- [ ] All five endpoints call `submitJob()` from `@parallax/sdk/submit` and return `{ job_id: string, status: "queued" }` within 200ms.
-- [ ] Returns `400` with a descriptive error body when required fields are missing.
-- [ ] Visually verified: `curl -X POST http://localhost:3000/jobs/create/image -d '{"model":"sdxl","prompt":"a cat"}' -H 'Content-Type: application/json'` returns `{ job_id, status: "queued" }`.
+- [ ] `POST /jobs/create/image` accepts a JSON body with at minimum: `model: str`, `prompt: str`, and optional generation fields; returns `{"job_id": "<id>", "status": "queued"}` within 200ms.
+- [ ] `POST /jobs/create/video` accepts a JSON body with `model: str`, `prompt: str`, and optional `input: str` (image path for i2v).
+- [ ] `POST /jobs/create/audio` accepts a JSON body with `model: str`, `prompt: str`, and optional audio fields.
+- [ ] `POST /jobs/edit/image` accepts a JSON body with `model: str`, `prompt: str`, `input: str` (input image path).
+- [ ] `POST /jobs/upscale/image` accepts a JSON body with `model: str`, `prompt: str`, `input: str`.
+- [ ] All five endpoints call `submit_job()` from `server/submit.py` and return the job ID in < 200ms.
+- [ ] All request bodies are validated by Pydantic models defined in `server/schemas.py`.
 
-### US-002: Get job status by ID
-**As a** consumer, **I want** to `GET /jobs/:id` and receive the current state of a job **so that** I can poll status without an open SSE connection.
-
-**Acceptance Criteria:**
-- [ ] `GET /jobs/:id` returns a JSON object with: `id`, `status` (`waiting|active|completed|failed`), `progress` (0–100 number), `output` (string or null), `error` (string or null), `createdAt` (epoch ms), `startedAt` (epoch ms or null), `finishedAt` (epoch ms or null).
-- [ ] Returns `404` with `{ error: "Job not found" }` when the ID does not exist.
-- [ ] `bun typecheck` passes.
-
-### US-003: Stream job progress via SSE
-**As a** consumer, **I want** to `GET /jobs/:id/stream` and receive Server-Sent Events until the job completes or fails **so that** I get real-time progress without polling.
+### US-002: Job status polling
+**As a** consumer, **I want** to call `GET /jobs/{job_id}` **so that** I can check the current status of a job without holding a streaming connection.
 
 **Acceptance Criteria:**
-- [ ] `GET /jobs/:id/stream` returns a `text/event-stream` response.
-- [ ] While the job is active or waiting, emits `event: progress\ndata: {"pct":N,"step":"..."}` every 500ms.
-- [ ] When the job completes, emits `event: completed\ndata: {"output":"<path>"}` then closes the stream.
-- [ ] When the job fails, emits `event: failed\ndata: {"error":"<reason>"}` then closes the stream.
-- [ ] Returns `404` before opening the stream if the job ID does not exist.
-- [ ] `@elysiajs/stream` is added as a dependency.
-- [ ] Visually verified in browser: EventSource connects, receives progress events, stream closes on completion.
+- [ ] `GET /jobs/{job_id}` returns a JSON object with fields: `id`, `status`, `created_at`, `updated_at`, and `result` (null or `JobResult`).
+- [ ] Returns HTTP 404 with `{"detail": "job not found"}` when the job ID does not exist.
+- [ ] Status values match: `"queued"`, `"running"`, `"completed"`, `"failed"`, `"cancelled"`.
 
-### US-004: List jobs
-**As a** consumer, **I want** to `GET /jobs` and see all recent jobs with their status **so that** I can inspect the queue state.
+### US-003: SSE progress stream
+**As a** consumer, **I want** to connect to `GET /jobs/{job_id}/stream` and receive real-time progress events **so that** I can display a live progress bar without polling.
 
 **Acceptance Criteria:**
-- [ ] `GET /jobs` returns `{ jobs: JobSummary[], counts: { waiting, active, completed, failed } }`.
-- [ ] `JobSummary` includes: `id`, `status`, `progress`, `model`, `action`, `media`, `createdAt`.
-- [ ] Defaults to returning at most 50 most-recent jobs.
-- [ ] Supports optional query param `?status=active|completed|failed|waiting` to filter.
-- [ ] `bun typecheck` passes.
+- [ ] `GET /jobs/{job_id}/stream` returns a `text/event-stream` response using FastAPI's `StreamingResponse`.
+- [ ] Each event is a JSON-encoded `PythonProgress` object emitted as `data: <json>\n\n`.
+- [ ] When the job reaches `"completed"` or `"failed"`, a final event with `step: "done"` or `step: "error"` is emitted and the stream closes.
+- [ ] If the job does not exist, the endpoint returns HTTP 404 immediately (no stream opened).
 
-### US-005: Cancel a job
-**As a** consumer, **I want** to `DELETE /jobs/:id` to cancel a running or waiting job **so that** I can abort inference that is no longer needed.
-
-**Acceptance Criteria:**
-- [ ] `DELETE /jobs/:id` calls `getQueue().cancel(jobId)` and returns `{ cancelled: true }`.
-- [ ] Returns `404` if the job ID does not exist.
-- [ ] Returns `409` with `{ error: "Job already completed" }` if the job is already in a terminal state.
-- [ ] `bun typecheck` passes.
-
-### US-006: Health endpoint enrichment
-**As an** operator, **I want** `GET /health` to include queue statistics **so that** I can verify the queue is operational.
+### US-004: Job list and cancel
+**As a** consumer, **I want** to list recent jobs and cancel a queued job **so that** I can manage the job queue from external tools.
 
 **Acceptance Criteria:**
-- [ ] `GET /health` returns `{ status: "ok", queue: { waiting, active, completed, failed } }`.
-- [ ] Does not break existing behavior (still returns HTTP 200).
-- [ ] `bun typecheck` passes.
+- [ ] `GET /jobs` returns a JSON array of the 50 most recent jobs, each with `id`, `status`, `created_at`, `updated_at`.
+- [ ] `DELETE /jobs/{job_id}` cancels a job that is in `"queued"` status; returns `{"cancelled": true}`.
+- [ ] `DELETE /jobs/{job_id}` returns HTTP 409 with `{"detail": "job is already running or completed"}` when the job is not in `"queued"` status.
+
+### US-005: Health endpoint
+**As a** deployment operator, **I want** `GET /health` to return service status **so that** load balancers and monitoring tools can verify the gateway is alive.
+
+**Acceptance Criteria:**
+- [ ] `GET /health` returns HTTP 200 with `{"status": "ok", "version": "<package_version>"}`.
+- [ ] The endpoint does not depend on the job queue being available (no DB call).
+
+---
 
 ## Functional Requirements
-- FR-1: All route handlers must use Elysia's native TypeScript input validation (no manual `if (!body.field)` checks).
-- FR-2: The server listens on port `3000` by default, overridable via `PORT` environment variable.
-- FR-3: CORS must be enabled for all origins in development (`@elysiajs/cors`).
-- FR-4: Unhandled errors in route handlers must return `500` with `{ error: "Internal server error" }` — not crash the server.
-- FR-5: `parallax_ms/package.json` must declare `@parallax/sdk` as `workspace:*` dependency if not already present.
-- FR-6: All job submission endpoints must resolve the correct Python script path using the same `getScript()` / model registry logic already in `parallax_cli/src/models/registry.ts` — do not hardcode script paths.
 
-## Non-Goals (Out of Scope)
-- Authentication or API keys.
-- Pagination beyond the 50-job default.
-- WebSocket support — SSE is sufficient.
-- Job result file serving (only the path string is returned).
-- Forwarding requests to `server/FastAPI` — the job worker runs pipelines directly.
+- FR-1: All gateway routes are defined in `server/gateway.py` as an `APIRouter` and mounted on the main FastAPI app in `server/main.py` with prefix `/` (or no prefix).
+- FR-2: All request/response schemas are Pydantic models in `server/schemas.py` with strict type annotations.
+- FR-3: SSE streaming uses `asyncio` and polls the job queue every 500ms maximum; polling interval is configurable via `PARALLAX_SSE_POLL_MS` env var.
+- FR-4: CORS is enabled on the gateway for `*` origins (configurable via `PARALLAX_CORS_ORIGINS` env var).
+- FR-5: The gateway runs on the same `uvicorn` instance as `server/main.py` — no new process or port.
+
+## Non-Goals
+
+- No authentication or API key validation in this PRD.
+- No WebSocket support — SSE is sufficient.
+- No migration tooling for existing `parallax_ms` TypeScript consumers.
+- No CLI implementation — covered by PRD 003.
 
 ## Open Questions
+
 - None.

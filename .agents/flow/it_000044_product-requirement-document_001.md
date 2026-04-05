@@ -1,86 +1,83 @@
-# Requirement: Shared Job Infrastructure (parallax_sdk)
+# Python Job Infrastructure
 
 ## Context
-All three consumers (parallax_cli, parallax_ms, parallax_mcp) need to submit and observe long-running inference jobs without blocking. This PRD defines the shared foundation: job types, a bunqueue-backed queue singleton, a submit helper, and the detached worker process that actually runs the Python pipeline. Everything else (REST API, CLI commands, MCP tools) depends on this layer.
+
+The current async job layer is implemented in TypeScript across `@parallax/sdk` (types + bunqueue/SQLite queue) and `packages/parallax_cli/src/_worker.ts` (the subprocess worker). Migrating the full stack to Python requires a Python-native equivalent: Pydantic job types, an `aiosqlite`-backed job queue singleton, a `submit_job()` helper that spawns a detached worker, and a Python worker process that executes pipelines and emits NDJSON progress. All other Python packages (gateway, CLI, MCP) will depend on this layer.
 
 ## Goals
-- Introduce a persistent, file-based job queue (bunqueue + SQLite) in `parallax_sdk` accessible by all packages.
-- Provide a `submitJob()` function that enqueues a job and spawns a detached worker process, returning a job ID in < 100ms.
-- Implement the worker process (`packages/parallax_cli/src/_run.ts`) that picks up one job, runs the Python pipeline, reads NDJSON progress from stdout, and updates the job record.
-- Add a Python `ProgressReporter` helper so existing pipelines can emit structured progress without rewriting their core logic.
+
+- Define Pydantic models for all job contracts (`JobData`, `JobResult`, `PythonProgress`).
+- Implement a persistent SQLite-backed job queue in Python using `aiosqlite`.
+- Provide a `submit_job()` function that enqueues a job and spawns a detached worker, returning a job ID in < 100ms.
+- Implement `server/worker.py` — picks up one job, runs the pipeline subprocess, reads NDJSON progress from stdout, and updates the job record.
+- Provide a `ProgressReporter` helper that pipelines can use to emit structured NDJSON progress to stdout.
 
 ## User Stories
 
-### US-001: Define shared job types
-**As a** TypeScript developer on any parallax package, **I want** well-typed `JobData` and `JobResult` interfaces in `@parallax/sdk` **so that** I can submit and read jobs without casting or guessing shapes.
+### US-001: Pydantic job types
+**As a** Python developer on any parallax package, **I want** well-typed `JobData`, `JobResult`, and `PythonProgress` Pydantic models in `server/jobs.py` **so that** I can submit and read jobs without dict casting or guessing field names.
 
 **Acceptance Criteria:**
-- [ ] `packages/parallax_sdk/src/jobs.ts` exports `ParallaxJobData`, `ParallaxJobResult`, and `PythonProgress` interfaces matching the shapes defined in the design doc.
-- [ ] `ParallaxJobData` includes: `action`, `media`, `model`, `script`, `args`, `scriptBase`, `uvPath`.
-- [ ] `ParallaxJobResult` includes: `outputPath: string`.
-- [ ] `PythonProgress` includes: `step: string`, `pct: number`, and optional `frame`, `total`, `output`, `error`.
-- [ ] Types are re-exported from `packages/parallax_sdk/src/index.ts`.
-- [ ] `bun typecheck` passes with no errors in `parallax_sdk`.
+- [ ] `server/jobs.py` exports `JobData`, `JobResult`, and `PythonProgress` as Pydantic `BaseModel` subclasses.
+- [ ] `JobData` includes: `action: str`, `media: str`, `model: str`, `script: str`, `args: dict`, `script_base: str`, `uv_path: str`.
+- [ ] `JobResult` includes: `output_path: str`.
+- [ ] `PythonProgress` includes: `step: str`, `pct: float`, and optional `frame: int | None`, `total: int | None`, `output: str | None`, `error: str | None`.
 
-### US-002: Bunqueue singleton in parallax_sdk
-**As a** parallax package, **I want** to call `getQueue()` and get a shared bunqueue instance backed by `~/.config/parallax/jobs.db` **so that** all packages read and write to the same SQLite job store without owning the queue lifecycle themselves.
+### US-002: SQLite job queue singleton
+**As a** parallax Python package, **I want** to call `get_queue()` and get a shared async job queue backed by `~/.config/parallax/jobs.db` **so that** all packages read and write to the same SQLite job store without owning the queue lifecycle themselves.
 
 **Acceptance Criteria:**
-- [ ] `packages/parallax_sdk/src/queue.ts` exports `getQueue(): Bunqueue`.
-- [ ] `getQueue()` is a lazy singleton — creates the instance on first call, returns the same instance on subsequent calls within a process.
-- [ ] The SQLite database path resolves to `~/.config/parallax/jobs.db` (uses `os.homedir()`).
-- [ ] Queue is created in embedded mode (`embedded: true`) with no processor — consumers attach their own processors.
-- [ ] `bunqueue` is added as a dependency to `packages/parallax_sdk/package.json`.
-- [ ] `bun typecheck` passes.
+- [ ] `server/queue.py` exports `get_queue() -> JobQueue` where `JobQueue` wraps `aiosqlite`.
+- [ ] `get_queue()` is a lazy async singleton — creates the DB and table on first call, returns the same instance on subsequent calls within a process.
+- [ ] The jobs table schema includes: `id TEXT PRIMARY KEY`, `status TEXT`, `data TEXT` (JSON), `result TEXT` (JSON, nullable), `created_at TEXT`, `updated_at TEXT`.
+- [ ] `JobQueue` exposes: `enqueue(data: JobData) -> str` (returns job id), `get(job_id: str) -> dict | None`, `update_status(job_id, status, result=None)`, `list_jobs(limit=50) -> list[dict]`, `cancel(job_id) -> bool`.
 
-### US-003: submitJob() helper
-**As a** CLI command or API handler, **I want** to call `submitJob(data)` and receive a job ID immediately **so that** I can return the ID to the user without waiting for inference to finish.
+### US-003: submit_job() helper
+**As a** gateway or CLI caller, **I want** to call `submit_job(data: JobData) -> str` **so that** I get a job ID back in < 100ms without waiting for inference to finish.
 
 **Acceptance Criteria:**
-- [ ] `packages/parallax_sdk/src/submit.ts` exports `submitJob(data: ParallaxJobData): Promise<string>` returning the job ID.
-- [ ] `submitJob` enqueues a job named `"pipeline"` via `getQueue().add(...)` with `attempts: 1` and `timeout: 30 * 60 * 1000` (30 min).
-- [ ] After enqueuing, `submitJob` spawns a detached Bun process: `bun packages/parallax_cli/src/_run.ts <jobId>` with `stdin: "ignore"`, `stdout: "ignore"`, `stderr: "ignore"`, `detached: true`.
-- [ ] `submitJob` closes the queue connection before returning.
-- [ ] The full call (enqueue + spawn) completes in under 200ms on a cold start.
-- [ ] `bun typecheck` passes.
+- [ ] `server/submit.py` exports `submit_job(data: JobData) -> str`.
+- [ ] `submit_job()` enqueues the job via `get_queue()` and spawns `server/worker.py` as a detached subprocess (using `subprocess.Popen` with `start_new_session=True`).
+- [ ] Returns the job ID string. Total wall-clock time from call to return is < 100ms in a unit test with a mock queue.
+- [ ] The spawned worker process receives the job ID as its only CLI argument.
 
-### US-004: Detached worker process (_run.ts)
-**As a** submitted job, **I want** a dedicated worker process to pick me up, run the Python pipeline, stream NDJSON progress into the job record, and mark me completed or failed **so that** the submitting process can exit without losing my execution.
+### US-004: Python worker process
+**As a** job queue consumer, **I want** `server/worker.py` to pick up a job by ID, execute the pipeline, and stream NDJSON progress back to the queue **so that** any observer can follow progress in real time.
 
 **Acceptance Criteria:**
-- [ ] `packages/parallax_cli/src/_run.ts` reads `process.argv[2]` as the job ID.
-- [ ] Creates a bunqueue instance with a `"pipeline"` route processor.
-- [ ] Spawns the Python pipeline with `Bun.spawn([uvPath, "run", "python", join(scriptBase, script), ...args], { stdout: "pipe", stderr: "pipe" })`.
-- [ ] Reads stdout line by line; for each valid JSON line matching `PythonProgress`, calls `job.updateProgress(event.pct)`.
-- [ ] On successful exit, returns `{ outputPath }` as the job result.
-- [ ] On non-zero exit code, throws an `Error` with the message `Pipeline failed (exit <code>)`.
-- [ ] Closes the queue once the job is `completed` or `failed`.
-- [ ] Subprocess stderr is captured and included in the failure message when the pipeline exits non-zero.
-- [ ] `bun typecheck` passes.
+- [ ] `uv run python server/worker.py <job_id>` runs without error when the job exists and `status == "queued"`.
+- [ ] The worker reads `JobData` from the queue, spawns the pipeline subprocess (`uv run python <script> ...`), and streams stdout line-by-line.
+- [ ] Each line that is valid `PythonProgress` JSON is parsed and stored as a progress update in the queue (e.g. `update_progress(job_id, progress)`).
+- [ ] On pipeline exit code 0: updates job status to `"completed"` with the `output_path` from the last `PythonProgress` line where `output` is set.
+- [ ] On non-zero exit: updates status to `"failed"` with the last stderr content in `result.error`.
 
-### US-005: Python ProgressReporter helper
-**As a** Python pipeline author, **I want** to call `progress(step, pct, **kwargs)` **so that** the worker process receives structured progress without me rewriting the pipeline's inference logic.
+### US-005: ProgressReporter helper
+**As a** pipeline author, **I want** to import `ProgressReporter` and call `reporter.update(step, pct)` **so that** my pipeline emits structured NDJSON progress without writing JSON serialization logic manually.
 
 **Acceptance Criteria:**
-- [ ] `packages/parallax_cli/runtime/progress.py` exports a `progress(step: str, pct: float, **kwargs) -> None` function.
-- [ ] The function prints `json.dumps({"step": step, "pct": pct, **kwargs})` followed by a newline to stdout, with `flush=True`.
-- [ ] At minimum, the following pipeline files are updated to call `progress()` at logical milestones (download, model load, sampling start, sampling per-frame or per-step, encode, done): `runtime/video/ltx/ltx2/t2v.py` and `runtime/video/wan/wan22/t2v.py`.
-- [ ] Updated pipelines still print the final output path as the last line (unchanged behavior for the sync path).
-- [ ] No changes to pipeline core logic (model loading, sampling, saving).
+- [ ] `comfy_diffusion/progress.py` exports `ProgressReporter` with methods: `update(step: str, pct: float, **kwargs)` and `done(output_path: str)`.
+- [ ] Each call to `update()` prints a single line of valid JSON matching `PythonProgress` to stdout.
+- [ ] `done(output_path)` prints a final `PythonProgress` with `pct=100.0` and `output=output_path`.
+- [ ] Existing pipelines that do not use `ProgressReporter` continue to work unchanged.
+
+---
 
 ## Functional Requirements
-- FR-1: The SQLite database file is created automatically on first use if it does not exist.
-- FR-2: The detached worker process must not inherit the parent's stdio file descriptors.
-- FR-3: Non-JSON lines emitted by the Python pipeline to stdout must be silently ignored by the worker (no crash).
-- FR-4: All new TypeScript modules in `parallax_sdk` must be re-exported from `src/index.ts`.
-- FR-5: The `bunqueue` package version must be pinned to a specific minor version in `package.json` (no `^` or `~` floating).
 
-## Non-Goals (Out of Scope)
-- Retry logic, backoff, or DLQ configuration — `attempts: 1`, fail fast.
-- Job priority or delay scheduling.
-- Daemon process or persistent worker pool.
-- Any UI or REST endpoint — that is PRD 002.
-- Changes to the synchronous `spawnPipeline()` in `runner.ts` — backward compatibility must be preserved.
+- FR-1: All job models are Pydantic `BaseModel` with strict type annotations.
+- FR-2: The SQLite database path defaults to `~/.config/parallax/jobs.db` and is overridable via `PARALLAX_DB_PATH` environment variable.
+- FR-3: `submit_job()` must not block; the worker runs in a fully detached process (`start_new_session=True`).
+- FR-4: The worker uses the `uv_path` field from `JobData` to resolve the `uv` binary.
+- FR-5: `ProgressReporter` flushes stdout after every write (`flush=True`).
+- FR-6: All new modules follow the lazy import pattern — no `torch`/`comfy.*` imports at module top level.
+
+## Non-Goals
+
+- No HTTP endpoints in this PRD — covered by PRD 002.
+- No CLI commands in this PRD — covered by PRD 003.
+- No MCP tools in this PRD — covered by PRD 004.
+- No migration of existing TypeScript packages — they remain functional during the transition.
 
 ## Open Questions
-- None.
+
+- Should `JobQueue` support a `subscribe(job_id)` async generator for real-time progress, or is polling from the gateway sufficient? (SSE streaming pattern decision — impacts PRD 002.)

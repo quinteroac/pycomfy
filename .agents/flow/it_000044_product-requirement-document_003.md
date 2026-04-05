@@ -1,87 +1,73 @@
-# Requirement: parallax_cli Async Mode and Jobs Subcommand
+# Python CLI (`python -m parallax`)
 
 ## Context
-The CLI currently blocks for the entire duration of inference (up to 5+ minutes for video). This PRD adds an `--async` flag to all generation commands so they return immediately with a job ID, and introduces the `parallax jobs` subcommand for listing, watching, cancelling, and opening job results. The synchronous path (`spawnPipeline`) is preserved unchanged for backward compatibility.
+
+`parallax_cli` is currently a Bun/TypeScript CLI using Commander. Since all inference logic runs in Python, the CLI is a thin dispatch layer that calls `submit_job()` or `spawnPipeline()`. Migrating to Python with Typer eliminates the TS→Python subprocess boundary, lets the CLI import `server/submit.py` directly, and provides a native `python -m parallax` entry point consistent with the rest of the stack.
 
 ## Goals
-- Add `--async` flag to `create image`, `create video`, `create audio`, `edit image`, and `upscale image` commands.
-- Add `parallax jobs` subcommand with `list`, `watch`, `status`, `cancel`, and `open` sub-commands.
-- Show a real-time progress bar in `parallax jobs watch` using the existing `@clack/prompts` dependency.
+
+- Implement a Typer-based CLI under `cli/` with the same command surface as `parallax_cli`.
+- Support both sync (blocking) and `--async` (non-blocking, returns job ID) modes on all generation commands.
+- Add a `parallax jobs` subcommand group with `list`, `watch`, `status`, `cancel`, and `open` sub-commands.
+- Provide a `python -m parallax` entry point registered in `pyproject.toml`.
 
 ## User Stories
 
-### US-001: --async flag on generation commands
-**As a** developer, **I want** to append `--async` to any generation command **so that** the CLI returns a job ID immediately and I can continue working without waiting for inference to finish.
+### US-001: Generation commands (sync mode)
+**As a** developer, **I want** to run `parallax create image --model sdxl --prompt "..."` and have it block until the output file is ready **so that** I can use it in scripts that depend on the result.
 
 **Acceptance Criteria:**
-- [ ] The following commands accept an `--async` flag: `parallax create image`, `parallax create video`, `parallax create audio`, `parallax edit image`, `parallax upscale image`.
-- [ ] When `--async` is provided, the command calls `submitJob()` from `@parallax/sdk/submit` instead of `spawnPipeline()`.
-- [ ] The command prints exactly: `Job <jobId> queued\n  → parallax jobs watch <jobId>` and exits with code 0.
-- [ ] When `--async` is NOT provided, behavior is identical to current (calls `spawnPipeline()`).
-- [ ] `bun typecheck` passes.
-- [ ] Manually verified: `parallax create video --model wan22 --prompt "a sunset" --async` returns within 1 second.
+- [ ] `parallax create image`, `parallax create video`, `parallax create audio`, `parallax edit image`, `parallax upscale image` are implemented as Typer commands under `cli/commands/`.
+- [ ] In sync mode (default, no `--async`), each command calls the pipeline `run()` directly (or `spawnPipeline` equivalent) and blocks until completion.
+- [ ] On success, the command prints the output file path and exits with code 0.
+- [ ] On failure, the command prints the error to stderr and exits with code 1.
+- [ ] `--help` on each command shows all available options with descriptions.
 
-### US-002: parallax jobs list
-**As a** developer, **I want** to run `parallax jobs list` and see a table of recent jobs **so that** I can see what is running, queued, and done.
-
-**Acceptance Criteria:**
-- [ ] `parallax jobs list` prints a table with columns: `ID`, `Status`, `Action`, `Model`, `Progress`, `Started`, `Duration`.
-- [ ] Status is color-coded: `waiting` = dim, `active` = cyan, `completed` = green, `failed` = red (using `@clack/prompts` or `kleur`).
-- [ ] Shows at most 20 most-recent jobs, newest first.
-- [ ] When no jobs exist, prints: `No jobs found. Run a command with --async to submit one.`
-- [ ] `bun typecheck` passes.
-- [ ] Visually verified in terminal.
-
-### US-003: parallax jobs watch \<id\>
-**As a** developer, **I want** to run `parallax jobs watch <id>` and see a live progress bar until the job finishes **so that** I can monitor a previously submitted job.
+### US-002: `--async` flag on generation commands
+**As a** developer, **I want** to append `--async` to any generation command **so that** the CLI returns a job ID immediately and I can continue working without waiting for inference.
 
 **Acceptance Criteria:**
-- [ ] `parallax jobs watch <id>` polls `getQueue().getJob(id)` every 500ms.
-- [ ] Displays a spinner with the current step and percentage (e.g. `sampling… 45%`).
-- [ ] When the job completes, stops the spinner and prints: `✔ Done: <outputPath>`.
-- [ ] When the job fails, stops the spinner and prints: `✖ Failed: <failedReason>` and exits with code 1.
-- [ ] When the job ID does not exist, prints: `Job <id> not found` and exits with code 1.
-- [ ] `bun typecheck` passes.
-- [ ] Visually verified: spinner updates, success/failure message renders correctly.
+- [ ] All five generation commands accept an `--async` flag (boolean, default False).
+- [ ] When `--async` is provided, the command calls `submit_job()` from `server/submit.py` instead of blocking.
+- [ ] The command prints exactly: `Job <job_id> queued\n  → parallax jobs watch <job_id>` and exits with code 0.
+- [ ] When `--async` is NOT provided, behavior is identical to current sync mode.
 
-### US-004: parallax jobs status \<id\>
-**As a** developer or script, **I want** to run `parallax jobs status <id>` and get a one-shot status print **so that** I can check a job without keeping a watch loop open.
+### US-003: `parallax jobs` subcommand group
+**As a** developer, **I want** a `parallax jobs` subcommand **so that** I can list, monitor, and cancel jobs from the terminal.
 
 **Acceptance Criteria:**
-- [ ] `parallax jobs status <id>` prints a single structured block: `id`, `status`, `progress`, `model`, `action`, `output` (or `error`), `startedAt`, `finishedAt`.
-- [ ] When `--json` flag is provided, output is valid JSON (one object, no extra text).
-- [ ] Returns exit code 0 if completed, 1 if failed, 0 otherwise.
-- [ ] `bun typecheck` passes.
+- [ ] `parallax jobs list` prints a table of the 20 most recent jobs with columns: `ID`, `STATUS`, `MODEL`, `CREATED`.
+- [ ] `parallax jobs status <job_id>` prints the full job record as formatted JSON.
+- [ ] `parallax jobs watch <job_id>` renders a live progress bar (using `rich` or `typer`'s progress utilities) that updates until the job reaches a terminal state, then prints the output path or error.
+- [ ] `parallax jobs cancel <job_id>` cancels a queued job and prints `Cancelled <job_id>` or an appropriate error.
+- [ ] `parallax jobs open <job_id>` opens the output file with the OS default application (`xdg-open` / `open`).
 
-### US-005: parallax jobs cancel \<id\>
-**As a** developer, **I want** to run `parallax jobs cancel <id>` to stop a running job **so that** I can free GPU resources if inference is no longer needed.
-
-**Acceptance Criteria:**
-- [ ] `parallax jobs cancel <id>` calls `getQueue().cancel(jobId)` and prints: `✔ Job <id> cancelled`.
-- [ ] When the job does not exist, prints: `Job <id> not found` and exits with code 1.
-- [ ] When the job is already completed or failed, prints: `Job <id> is already <status> — nothing to cancel` and exits with code 0.
-- [ ] `bun typecheck` passes.
-
-### US-006: parallax jobs open \<id\>
-**As a** developer, **I want** to run `parallax jobs open <id>` to open the output file in the system default application **so that** I can preview the result without navigating to the output directory.
+### US-004: `python -m parallax` entry point
+**As a** developer, **I want** to invoke the CLI with `python -m parallax` or `uv run parallax` **so that** I don't need a separate Bun install to use the CLI.
 
 **Acceptance Criteria:**
-- [ ] `parallax jobs open <id>` reads the job result's `outputPath` and calls `Bun.spawn(["xdg-open", outputPath])` on Linux or `["open", outputPath]` on macOS.
-- [ ] When the job is not yet completed, prints: `Job <id> is not completed yet (status: <status>)` and exits with code 1.
-- [ ] When the job does not exist, prints: `Job <id> not found` and exits with code 1.
-- [ ] `bun typecheck` passes.
+- [ ] `cli/__main__.py` exists and calls `app()` from `cli/main.py`.
+- [ ] `pyproject.toml` registers a `parallax` script entry point pointing to `cli.main:app`.
+- [ ] `uv run parallax --help` prints the top-level help text without error.
+- [ ] `uv run python -m parallax --help` also works.
+
+---
 
 ## Functional Requirements
-- FR-1: All `parallax jobs` sub-commands must be implemented in `packages/parallax_cli/src/commands/jobs.ts` and registered in `src/index.ts` under a `jobs` parent command.
-- FR-2: `getQueue()` from `@parallax/sdk` must be called and `.close()` must be called before process exit to avoid hanging SQLite handles.
-- FR-3: The `--async` flag must be a Commander `Option` so it appears in `--help` output.
-- FR-4: `parallax jobs list` and `parallax jobs watch` must use the spinner/log API from `@clack/prompts` — not `console.log`.
 
-## Non-Goals (Out of Scope)
-- Making `--async` the default behavior — opt-in only.
-- Pagination in `parallax jobs list`.
-- `parallax jobs clean` (purge old jobs) — deferred.
-- Integration with `parallax_ms` REST API — the CLI reads directly from SQLite.
+- FR-1: CLI is implemented with Typer; `rich` may be used for table and progress output.
+- FR-2: All CLI source lives under `cli/` at repo root; `cli/commands/` contains one file per command group.
+- FR-3: The CLI reads `PARALLAX_RUNTIME_DIR`, `PYCOMFY_MODELS_DIR`, and `PARALLAX_UV_PATH` env vars with the same semantics as the current TS CLI.
+- FR-4: Sync mode uses `comfy_diffusion.pipelines` directly — no subprocess spawning for sync execution.
+- FR-5: `--async` mode uses `submit_job()` and never imports `torch` or `comfy.*` in the CLI process.
+- FR-6: All Typer commands have explicit `--help` texts for every option.
+
+## Non-Goals
+
+- No TUI or interactive prompt beyond `parallax jobs watch` progress bar.
+- No shell completion scripts in this PRD.
+- No migration of the existing Bun CLI — it remains functional during the transition.
 
 ## Open Questions
-- None.
+
+- Should `parallax jobs watch` connect to the SSE endpoint (requires gateway to be running) or poll the local SQLite DB directly? Direct DB polling avoids the dependency on the gateway being up.

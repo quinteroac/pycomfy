@@ -1,171 +1,128 @@
 {
   "goals": [
-    "Introduce a persistent, file-based job queue (bunqueue + SQLite) in `parallax_sdk` accessible by all packages.",
-    "Provide a `submitJob()` function that enqueues a job and spawns a detached worker process, returning a job ID in < 100ms.",
-    "Implement the worker process (`packages/parallax_cli/src/_run.ts`) that picks up one job, runs the Python pipeline, reads NDJSON progress from stdout, and updates the job record.",
-    "Add a Python `ProgressReporter` helper so existing pipelines can emit structured progress without rewriting their core logic."
+    "Define Pydantic models for all job contracts (`JobData`, `JobResult`, `PythonProgress`).",
+    "Implement a persistent SQLite-backed job queue in Python using `aiosqlite`.",
+    "Provide a `submit_job()` function that enqueues a job and spawns a detached worker, returning a job ID in < 100ms.",
+    "Implement `server/worker.py` — picks up one job, runs the pipeline subprocess, reads NDJSON progress from stdout, and updates the job record.",
+    "Provide a `ProgressReporter` helper that pipelines can use to emit structured NDJSON progress to stdout."
   ],
   "userStories": [
     {
       "id": "US-001",
-      "title": "Define shared job types",
-      "description": "As a TypeScript developer on any parallax package, I want well-typed `JobData` and `JobResult` interfaces in `@parallax/sdk` so that I can submit and read jobs without casting or guessing shapes.",
+      "title": "Pydantic job types",
+      "description": "As a Python developer on any parallax package, I want well-typed `JobData`, `JobResult`, and `PythonProgress` Pydantic models in `server/jobs.py` so that I can submit and read jobs without dict casting or guessing field names.",
       "acceptanceCriteria": [
         {
           "id": "US-001-AC01",
-          "text": "`packages/parallax_sdk/src/jobs.ts` exports `ParallaxJobData`, `ParallaxJobResult`, and `PythonProgress` interfaces matching the shapes defined in the design doc."
+          "text": "`server/jobs.py` exports `JobData`, `JobResult`, and `PythonProgress` as Pydantic `BaseModel` subclasses."
         },
         {
           "id": "US-001-AC02",
-          "text": "`ParallaxJobData` includes: `action`, `media`, `model`, `script`, `args`, `scriptBase`, `uvPath`."
+          "text": "`JobData` includes: `action: str`, `media: str`, `model: str`, `script: str`, `args: dict`, `script_base: str`, `uv_path: str`."
         },
         {
           "id": "US-001-AC03",
-          "text": "`ParallaxJobResult` includes: `outputPath: string`."
+          "text": "`JobResult` includes: `output_path: str`."
         },
         {
           "id": "US-001-AC04",
-          "text": "`PythonProgress` includes: `step: string`, `pct: number`, and optional `frame`, `total`, `output`, `error`."
-        },
-        {
-          "id": "US-001-AC05",
-          "text": "Types are re-exported from `packages/parallax_sdk/src/index.ts`."
-        },
-        {
-          "id": "US-001-AC06",
-          "text": "`bun typecheck` passes with no errors in `parallax_sdk`."
+          "text": "`PythonProgress` includes: `step: str`, `pct: float`, and optional `frame: int | None`, `total: int | None`, `output: str | None`, `error: str | None`."
         }
       ]
     },
     {
       "id": "US-002",
-      "title": "Bunqueue singleton in parallax_sdk",
-      "description": "As a parallax package, I want to call `getQueue()` and get a shared bunqueue instance backed by `~/.config/parallax/jobs.db` so that all packages read and write to the same SQLite job store without owning the queue lifecycle themselves.",
+      "title": "SQLite job queue singleton",
+      "description": "As a parallax Python package, I want to call `get_queue()` and get a shared async job queue backed by `~/.config/parallax/jobs.db` so that all packages read and write to the same SQLite job store without owning the queue lifecycle themselves.",
       "acceptanceCriteria": [
         {
           "id": "US-002-AC01",
-          "text": "`packages/parallax_sdk/src/queue.ts` exports `getQueue(): Bunqueue`."
+          "text": "`server/queue.py` exports `get_queue() -> JobQueue` where `JobQueue` wraps `aiosqlite`."
         },
         {
           "id": "US-002-AC02",
-          "text": "`getQueue()` is a lazy singleton — creates the instance on first call, returns the same instance on subsequent calls within a process."
+          "text": "`get_queue()` is a lazy async singleton — creates the DB and table on first call, returns the same instance on subsequent calls within a process."
         },
         {
           "id": "US-002-AC03",
-          "text": "The SQLite database path resolves to `~/.config/parallax/jobs.db` (uses `os.homedir()`)."
+          "text": "The jobs table schema includes: `id TEXT PRIMARY KEY`, `status TEXT`, `data TEXT` (JSON), `result TEXT` (JSON, nullable), `created_at TEXT`, `updated_at TEXT`."
         },
         {
           "id": "US-002-AC04",
-          "text": "Queue is created in embedded mode (`embedded: true`) with no processor — consumers attach their own processors."
-        },
-        {
-          "id": "US-002-AC05",
-          "text": "`bunqueue` is added as a dependency to `packages/parallax_sdk/package.json`."
-        },
-        {
-          "id": "US-002-AC06",
-          "text": "`bun typecheck` passes."
+          "text": "`JobQueue` exposes: `enqueue(data: JobData) -> str` (returns job id), `get(job_id: str) -> dict | None`, `update_status(job_id, status, result=None)`, `list_jobs(limit=50) -> list[dict]`, `cancel(job_id) -> bool`."
         }
       ]
     },
     {
       "id": "US-003",
-      "title": "submitJob() helper",
-      "description": "As a CLI command or API handler, I want to call `submitJob(data)` and receive a job ID immediately so that I can return the ID to the user without waiting for inference to finish.",
+      "title": "submit_job() helper",
+      "description": "As a gateway or CLI caller, I want to call `submit_job(data: JobData) -> str` so that I get a job ID back in < 100ms without waiting for inference to finish.",
       "acceptanceCriteria": [
         {
           "id": "US-003-AC01",
-          "text": "`packages/parallax_sdk/src/submit.ts` exports `submitJob(data: ParallaxJobData): Promise<string>` returning the job ID."
+          "text": "`server/submit.py` exports `submit_job(data: JobData) -> str`."
         },
         {
           "id": "US-003-AC02",
-          "text": "`submitJob` enqueues a job named `\"pipeline\"` via `getQueue().add(...)` with `attempts: 1` and `timeout: 30 * 60 * 1000` (30 min)."
+          "text": "`submit_job()` enqueues the job via `get_queue()` and spawns `server/worker.py` as a detached subprocess (using `subprocess.Popen` with `start_new_session=True`)."
         },
         {
           "id": "US-003-AC03",
-          "text": "After enqueuing, `submitJob` spawns a detached Bun process: `bun packages/parallax_cli/src/_run.ts <jobId>` with `stdin: \"ignore\"`, `stdout: \"ignore\"`, `stderr: \"ignore\"`, `detached: true`."
+          "text": "Returns the job ID string. Total wall-clock time from call to return is < 100ms in a unit test with a mock queue."
         },
         {
           "id": "US-003-AC04",
-          "text": "`submitJob` closes the queue connection before returning."
-        },
-        {
-          "id": "US-003-AC05",
-          "text": "The full call (enqueue + spawn) completes in under 200ms on a cold start."
-        },
-        {
-          "id": "US-003-AC06",
-          "text": "`bun typecheck` passes."
+          "text": "The spawned worker process receives the job ID as its only CLI argument."
         }
       ]
     },
     {
       "id": "US-004",
-      "title": "Detached worker process (_run.ts)",
-      "description": "As a submitted job, I want a dedicated worker process to pick me up, run the Python pipeline, stream NDJSON progress into the job record, and mark me completed or failed so that the submitting process can exit without losing my execution.",
+      "title": "Python worker process",
+      "description": "As a job queue consumer, I want `server/worker.py` to pick up a job by ID, execute the pipeline, and stream NDJSON progress back to the queue so that any observer can follow progress in real time.",
       "acceptanceCriteria": [
         {
           "id": "US-004-AC01",
-          "text": "`packages/parallax_cli/src/_run.ts` reads `process.argv[2]` as the job ID."
+          "text": "`uv run python server/worker.py <job_id>` runs without error when the job exists and `status == \"queued\"`."
         },
         {
           "id": "US-004-AC02",
-          "text": "Creates a bunqueue instance with a `\"pipeline\"` route processor."
+          "text": "The worker reads `JobData` from the queue, spawns the pipeline subprocess (`uv run python <script> ...`), and streams stdout line-by-line."
         },
         {
           "id": "US-004-AC03",
-          "text": "Spawns the Python pipeline with `Bun.spawn([uvPath, \"run\", \"python\", join(scriptBase, script), ...args], { stdout: \"pipe\", stderr: \"pipe\" })`."
+          "text": "Each line that is valid `PythonProgress` JSON is parsed and stored as a progress update in the queue (e.g. `update_progress(job_id, progress)`)."
         },
         {
           "id": "US-004-AC04",
-          "text": "Reads stdout line by line; for each valid JSON line matching `PythonProgress`, calls `job.updateProgress(event.pct)`."
+          "text": "On pipeline exit code 0: updates job status to `\"completed\"` with the `output_path` from the last `PythonProgress` line where `output` is set."
         },
         {
           "id": "US-004-AC05",
-          "text": "On successful exit, returns `{ outputPath }` as the job result."
-        },
-        {
-          "id": "US-004-AC06",
-          "text": "On non-zero exit code, throws an `Error` with the message `Pipeline failed (exit <code>)`."
-        },
-        {
-          "id": "US-004-AC07",
-          "text": "Closes the queue once the job is `completed` or `failed`."
-        },
-        {
-          "id": "US-004-AC08",
-          "text": "Subprocess stderr is captured and included in the failure message when the pipeline exits non-zero."
-        },
-        {
-          "id": "US-004-AC09",
-          "text": "`bun typecheck` passes."
+          "text": "On non-zero exit: updates status to `\"failed\"` with the last stderr content in `result.error`."
         }
       ]
     },
     {
       "id": "US-005",
-      "title": "Python ProgressReporter helper",
-      "description": "As a Python pipeline author, I want to call `progress(step, pct, kwargs)` so that the worker process receives structured progress without me rewriting the pipeline's inference logic.",
+      "title": "ProgressReporter helper",
+      "description": "As a pipeline author, I want to import `ProgressReporter` and call `reporter.update(step, pct)` so that my pipeline emits structured NDJSON progress without writing JSON serialization logic manually.",
       "acceptanceCriteria": [
         {
           "id": "US-005-AC01",
-          "text": "`packages/parallax_cli/runtime/progress.py` exports a `progress(step: str, pct: float, **kwargs) -> None` function."
+          "text": "`comfy_diffusion/progress.py` exports `ProgressReporter` with methods: `update(step: str, pct: float, **kwargs)` and `done(output_path: str)`."
         },
         {
           "id": "US-005-AC02",
-          "text": "The function prints `json.dumps({\"step\": step, \"pct\": pct, **kwargs})` followed by a newline to stdout, with `flush=True`."
+          "text": "Each call to `update()` prints a single line of valid JSON matching `PythonProgress` to stdout."
         },
         {
           "id": "US-005-AC03",
-          "text": "At minimum, the following pipeline files are updated to call `progress()` at logical milestones (download, model load, sampling start, sampling per-frame or per-step, encode, done): `runtime/video/ltx/ltx2/t2v.py` and `runtime/video/wan/wan22/t2v.py`."
+          "text": "`done(output_path)` prints a final `PythonProgress` with `pct=100.0` and `output=output_path`."
         },
         {
           "id": "US-005-AC04",
-          "text": "Updated pipelines still print the final output path as the last line (unchanged behavior for the sync path)."
-        },
-        {
-          "id": "US-005-AC05",
-          "text": "No changes to pipeline core logic (model loading, sampling, saving)."
+          "text": "Existing pipelines that do not use `ProgressReporter` continue to work unchanged."
         }
       ]
     }
@@ -173,23 +130,27 @@
   "functionalRequirements": [
     {
       "id": "FR-1",
-      "description": "The SQLite database file is created automatically on first use if it does not exist."
+      "description": "All job models are Pydantic `BaseModel` with strict type annotations."
     },
     {
       "id": "FR-2",
-      "description": "The detached worker process must not inherit the parent's stdio file descriptors."
+      "description": "The SQLite database path defaults to `~/.config/parallax/jobs.db` and is overridable via `PARALLAX_DB_PATH` environment variable."
     },
     {
       "id": "FR-3",
-      "description": "Non-JSON lines emitted by the Python pipeline to stdout must be silently ignored by the worker (no crash)."
+      "description": "`submit_job()` must not block; the worker runs in a fully detached process (`start_new_session=True`)."
     },
     {
       "id": "FR-4",
-      "description": "All new TypeScript modules in `parallax_sdk` must be re-exported from `src/index.ts`."
+      "description": "The worker uses the `uv_path` field from `JobData` to resolve the `uv` binary."
     },
     {
       "id": "FR-5",
-      "description": "The `bunqueue` package version must be pinned to a specific minor version in `package.json` (no `^` or `~` floating)."
+      "description": "`ProgressReporter` flushes stdout after every write (`flush=True`)."
+    },
+    {
+      "id": "FR-6",
+      "description": "All new modules follow the lazy import pattern — no `torch`/`comfy.*` imports at module top level."
     }
   ]
 }
