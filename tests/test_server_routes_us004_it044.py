@@ -14,7 +14,7 @@ from starlette.testclient import TestClient
 
 from server.app import app
 
-_QUEUE_PATCH = "server.app.get_queue"
+_QUEUE_PATCH = "server.gateway.get_queue"
 
 
 def _make_row(
@@ -85,14 +85,6 @@ class TestListJobs:
             assert "created_at" in item
             assert "updated_at" in item
 
-    def test_maps_pending_status_to_queued(self):
-        rows = [_make_row(status="pending")]
-        with _mock_queue_for_list(rows):
-            client = TestClient(app)
-            resp = client.get("/jobs")
-        assert resp.status_code == 200
-        assert resp.json()[0]["status"] == "queued"
-
     def test_passes_through_non_pending_statuses(self):
         statuses = ["running", "completed", "failed", "cancelled"]
         rows = [_make_row(job_id=f"job-{s}", status=s) for s in statuses]
@@ -159,7 +151,7 @@ class TestListJobs:
 
 class TestCancelJob:
     def test_cancel_queued_job_returns_cancelled_true(self):
-        row = _make_row(status="pending")
+        row = _make_row(status="queued")
         with _mock_queue_for_delete(row):
             client = TestClient(app)
             resp = client.delete("/jobs/job-001")
@@ -168,7 +160,7 @@ class TestCancelJob:
 
     def test_cancel_queued_job_calls_update_status(self):
         mock_queue = MagicMock()
-        row = _make_row(status="pending")
+        row = _make_row(status="queued")
         mock_queue.get = AsyncMock(return_value=row)
         mock_queue.update_status = AsyncMock(return_value=None)
 
@@ -189,7 +181,7 @@ class TestCancelJob:
         assert resp.json()["detail"] == "job not found"
 
     def test_cancel_response_body_has_boolean_not_string(self):
-        row = _make_row(status="pending")
+        row = _make_row(status="queued")
         with _mock_queue_for_delete(row):
             client = TestClient(app)
             resp = client.delete("/jobs/job-001")

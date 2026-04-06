@@ -16,10 +16,7 @@ def _sample_job_data() -> JobData:
         action="generate",
         media="image",
         model="sdxl",
-        script="image/sdxl",
-        args={"width": 512, "height": 512},
-        script_base="/tmp",
-        uv_path="/usr/bin/uv",
+        cmd=["/usr/bin/uv", "run", "python", "/tmp/image/sdxl/t2i.py", "--width", "512", "--height", "512"],
     )
 
 

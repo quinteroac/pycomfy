@@ -9,7 +9,7 @@
     "ms": "bun run --cwd packages/parallax_ms dev",
     "cli": "bun run --cwd packages/parallax_cli dev",
     "mcp": "bun run --cwd packages/parallax_mcp dev",
-    "server": "uv run server/app.py"
+    "server": "uv run fastapi dev server/main.py"
   },
   "dependencies": {
     "@quinteroac/agents-coding-toolkit": "^0.4.0"

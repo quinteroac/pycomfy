@@ -34,10 +34,13 @@ def _call_list_jobs(limit: int = 20) -> list[dict[str, Any]]:
     """Return the *limit* most recent jobs from the queue."""
 
     async def _inner() -> list[dict[str, Any]]:
-        from server.queue import get_queue
+        from server.job_queue import close_queue, get_queue
 
         queue = await get_queue()
-        return await queue.list_jobs(limit=limit)
+        try:
+            return await queue.list_jobs(limit=limit)
+        finally:
+            await close_queue()
 
     return asyncio.run(_inner())
 
@@ -46,10 +49,13 @@ def _call_get_job(job_id: str) -> dict[str, Any] | None:
     """Return the job record for *job_id*, or ``None`` if not found."""
 
     async def _inner() -> dict[str, Any] | None:
-        from server.queue import get_queue
+        from server.job_queue import close_queue, get_queue
 
         queue = await get_queue()
-        return await queue.get(job_id)
+        try:
+            return await queue.get(job_id)
+        finally:
+            await close_queue()
 
     return asyncio.run(_inner())
 
@@ -58,10 +64,13 @@ def _call_cancel_job(job_id: str) -> bool:
     """Cancel *job_id*.  Returns ``True`` on success, ``False`` otherwise."""
 
     async def _inner() -> bool:
-        from server.queue import get_queue
+        from server.job_queue import close_queue, get_queue
 
         queue = await get_queue()
-        return await queue.cancel(job_id)
+        try:
+            return await queue.cancel(job_id)
+        finally:
+            await close_queue()
 
     return asyncio.run(_inner())
 

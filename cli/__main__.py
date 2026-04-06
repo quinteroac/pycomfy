@@ -1,4 +1,4 @@
-"""Allow ``python -m cli`` invocation."""
+"""Allow ``python -m parallax`` invocation."""
 
 from cli.main import app
 

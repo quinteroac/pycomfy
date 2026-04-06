@@ -18,10 +18,7 @@ _SAMPLE_JOB_DATA = JobData(
     action="generate",
     media="image",
     model="sdxl",
-    script="image/sdxl/t2i",
-    args={"prompt": "a red apple"},
-    script_base="/tmp/pipelines",
-    uv_path="/usr/bin/uv",
+    cmd=["/usr/bin/uv", "run", "python", "/tmp/pipelines/image/sdxl/t2i.py", "--prompt", "a red apple"],
 )
 
 _FAKE_JOB_ID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"

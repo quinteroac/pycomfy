@@ -4,13 +4,12 @@ from __future__ import annotations
 import asyncio
 import io
 import json
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from server.jobs import JobData, PythonProgress
-from server.queue import _reset_singleton
+from server.job_queue import _reset_singleton
 
 
 # ---------------------------------------------------------------------------
@@ -26,10 +25,7 @@ def _sample_job_data(**overrides) -> JobData:
         action="generate",
         media="image",
         model="sdxl",
-        script="image/sdxl/t2i",
-        args={"prompt": "a red apple", "width": "512"},
-        script_base="/tmp/pipelines",
-        uv_path="/usr/bin/uv",
+        cmd=["/usr/bin/uv", "run", "python", "/tmp/pipelines/image/sdxl/t2i.py", "--prompt", "a red apple", "--width", "512"],
     )
     defaults.update(overrides)
     return JobData(**defaults)
@@ -117,7 +113,7 @@ class TestAC01JobQueued:
 
 
 # ---------------------------------------------------------------------------
-# AC02 — worker reads JobData, spawns subprocess with uv run python <script>
+# AC02 — worker reads JobData.cmd and passes it directly to subprocess
 # ---------------------------------------------------------------------------
 
 class TestAC02SubprocessSpawn:
@@ -129,40 +125,16 @@ class TestAC02SubprocessSpawn:
             _run(_run_worker("test-job-id"))
         assert mock_popen.call_count == 1
 
-    def test_popen_command_starts_with_uv_path(self):
-        job_data = _sample_job_data(uv_path="/custom/uv")
+    def test_popen_receives_exact_cmd_from_job_data(self):
+        custom_cmd = ["/custom/uv", "run", "python", "/my/pipeline/run.py", "--prompt", "hello"]
+        job_data = _sample_job_data(cmd=custom_cmd)
         q = _make_mock_queue(job_data=job_data)
         proc = _make_proc([])
         with _patch_queue(q), _patch_popen(proc) as mock_popen:
             from server.worker import _run_worker
             _run(_run_worker("test-job-id"))
         cmd = mock_popen.call_args[0][0]
-        assert cmd[0] == "/custom/uv"
-        assert cmd[1] == "run"
-        assert cmd[2] == "python"
-
-    def test_popen_command_includes_script_path(self):
-        job_data = _sample_job_data(script_base="/tmp/base", script="image/sdxl/t2i")
-        q = _make_mock_queue(job_data=job_data)
-        proc = _make_proc([])
-        with _patch_queue(q), _patch_popen(proc) as mock_popen:
-            from server.worker import _run_worker
-            _run(_run_worker("test-job-id"))
-        cmd = mock_popen.call_args[0][0]
-        assert str(Path("/tmp/base/image/sdxl/t2i")) in cmd
-
-    def test_popen_command_includes_args(self):
-        job_data = _sample_job_data(args={"prompt": "hello", "width": "512"})
-        q = _make_mock_queue(job_data=job_data)
-        proc = _make_proc([])
-        with _patch_queue(q), _patch_popen(proc) as mock_popen:
-            from server.worker import _run_worker
-            _run(_run_worker("test-job-id"))
-        cmd = mock_popen.call_args[0][0]
-        assert "--prompt" in cmd
-        assert "hello" in cmd
-        assert "--width" in cmd
-        assert "512" in cmd
+        assert cmd == custom_cmd
 
     def test_popen_stdout_pipe(self):
         q = _make_mock_queue()

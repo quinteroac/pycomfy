@@ -25,10 +25,7 @@ class TestAC02JobData:
             action="run",
             media="image",
             model="sdxl",
-            script="pipelines/image/sdxl/t2i.py",
-            args={"prompt": "cat"},
-            script_base="/opt/scripts",
-            uv_path="/usr/bin/uv",
+            cmd=["/usr/bin/uv", "run", "python", "/opt/scripts/image/sdxl/t2i.py", "--prompt", "cat"],
         )
 
     def test_job_data_instantiates(self):
@@ -36,10 +33,7 @@ class TestAC02JobData:
         assert obj.action == "run"
         assert obj.media == "image"
         assert obj.model == "sdxl"
-        assert obj.script == "pipelines/image/sdxl/t2i.py"
-        assert obj.args == {"prompt": "cat"}
-        assert obj.script_base == "/opt/scripts"
-        assert obj.uv_path == "/usr/bin/uv"
+        assert obj.cmd[0] == "/usr/bin/uv"
 
     def test_action_is_str(self):
         fields = JobData.model_fields
@@ -51,17 +45,11 @@ class TestAC02JobData:
     def test_model_is_str(self):
         assert JobData.model_fields["model"].annotation is str
 
-    def test_script_is_str(self):
-        assert JobData.model_fields["script"].annotation is str
-
-    def test_args_is_dict(self):
-        assert JobData.model_fields["args"].annotation is dict
-
-    def test_script_base_is_str(self):
-        assert JobData.model_fields["script_base"].annotation is str
-
-    def test_uv_path_is_str(self):
-        assert JobData.model_fields["uv_path"].annotation is str
+    def test_cmd_is_list(self):
+        import typing
+        annotation = JobData.model_fields["cmd"].annotation
+        origin = getattr(annotation, "__origin__", None)
+        assert origin is list
 
     def test_missing_required_field_raises(self):
         data = self._valid()

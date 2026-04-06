@@ -16,7 +16,7 @@ from starlette.testclient import TestClient
 from server.app import app
 from server.schemas import JobResult, JobStatusResponse
 
-_QUEUE_PATCH = "server.app.get_queue"
+_QUEUE_PATCH = "server.gateway.get_queue"
 
 
 def _make_row(
@@ -136,7 +136,6 @@ class TestAC02NotFound:
 
 class TestAC03StatusValues:
     @pytest.mark.parametrize("stored_status,expected_status", [
-        ("pending", "queued"),
         ("queued", "queued"),
         ("running", "running"),
         ("completed", "completed"),
@@ -150,9 +149,4 @@ class TestAC03StatusValues:
         assert resp.status_code == 200
         assert resp.json()["status"] == expected_status
 
-    def test_queued_status_when_pending_in_db(self, client):
-        """Newly submitted jobs have status 'pending' in DB; should appear as 'queued'."""
-        row = _make_row(status="pending")
-        with _mock_queue(row):
-            resp = client.get("/jobs/abc-123")
-        assert resp.json()["status"] == "queued"
+

@@ -41,7 +41,7 @@ def test_stream_returns_404_for_unknown_job():
     """AC04 — endpoint returns HTTP 404 immediately if job does not exist."""
     queue = _mock_queue([None])
     mock_get_queue = AsyncMock(return_value=queue)
-    with patch("server.app.get_queue", mock_get_queue):
+    with patch("server.gateway.get_queue", mock_get_queue):
         response = client.get(f"/jobs/nonexistent-job/stream")
     assert response.status_code == 404
 
@@ -50,7 +50,7 @@ def test_stream_404_does_not_open_stream():
     """AC04 — no streaming body is returned for a missing job."""
     queue = _mock_queue([None])
     mock_get_queue = AsyncMock(return_value=queue)
-    with patch("server.app.get_queue", mock_get_queue):
+    with patch("server.gateway.get_queue", mock_get_queue):
         response = client.get(f"/jobs/missing/stream")
     assert response.status_code == 404
     detail = response.json()
@@ -68,7 +68,7 @@ def test_stream_returns_text_event_stream_content_type():
         _make_row("completed"),   # inside generator
     ])
     mock_get_queue = AsyncMock(return_value=queue)
-    with patch("server.app.get_queue", mock_get_queue):
+    with patch("server.gateway.get_queue", mock_get_queue):
         response = client.get(f"/jobs/{_JOB_ID}/stream")
     assert response.status_code == 200
     assert "text/event-stream" in response.headers["content-type"]
@@ -81,7 +81,7 @@ def test_stream_uses_streaming_response():
         _make_row("completed"),
     ])
     mock_get_queue = AsyncMock(return_value=queue)
-    with patch("server.app.get_queue", mock_get_queue):
+    with patch("server.gateway.get_queue", mock_get_queue):
         response = client.get(f"/jobs/{_JOB_ID}/stream")
     # StreamingResponse sets text/event-stream for SSE endpoints
     assert response.status_code == 200
@@ -102,7 +102,7 @@ def test_stream_events_are_sse_formatted():
         _make_row("completed"),  # poll 2 — terminates stream
     ])
     mock_get_queue = AsyncMock(return_value=queue)
-    with patch("server.app.get_queue", mock_get_queue), \
+    with patch("server.gateway.get_queue", mock_get_queue), \
          patch("asyncio.sleep", new_callable=AsyncMock):
         response = client.get(f"/jobs/{_JOB_ID}/stream")
 
@@ -123,7 +123,7 @@ def test_stream_events_contain_valid_python_progress_json():
         _make_row("completed"),
     ])
     mock_get_queue = AsyncMock(return_value=queue)
-    with patch("server.app.get_queue", mock_get_queue), \
+    with patch("server.gateway.get_queue", mock_get_queue), \
          patch("asyncio.sleep", new_callable=AsyncMock):
         response = client.get(f"/jobs/{_JOB_ID}/stream")
 
@@ -147,7 +147,7 @@ def test_stream_progress_event_matches_stored_progress():
         _make_row("completed"),
     ])
     mock_get_queue = AsyncMock(return_value=queue)
-    with patch("server.app.get_queue", mock_get_queue), \
+    with patch("server.gateway.get_queue", mock_get_queue), \
          patch("asyncio.sleep", new_callable=AsyncMock):
         response = client.get(f"/jobs/{_JOB_ID}/stream")
 
@@ -175,7 +175,7 @@ def test_stream_emits_done_event_when_job_completes():
         _make_row("completed"),
     ])
     mock_get_queue = AsyncMock(return_value=queue)
-    with patch("server.app.get_queue", mock_get_queue):
+    with patch("server.gateway.get_queue", mock_get_queue):
         response = client.get(f"/jobs/{_JOB_ID}/stream")
 
     events = [
@@ -194,7 +194,7 @@ def test_stream_closes_after_done_event():
         _make_row("completed"),
     ])
     mock_get_queue = AsyncMock(return_value=queue)
-    with patch("server.app.get_queue", mock_get_queue):
+    with patch("server.gateway.get_queue", mock_get_queue):
         response = client.get(f"/jobs/{_JOB_ID}/stream")
 
     events = [
@@ -213,7 +213,7 @@ def test_stream_done_event_has_pct_1():
         _make_row("completed"),
     ])
     mock_get_queue = AsyncMock(return_value=queue)
-    with patch("server.app.get_queue", mock_get_queue):
+    with patch("server.gateway.get_queue", mock_get_queue):
         response = client.get(f"/jobs/{_JOB_ID}/stream")
 
     events = [
@@ -237,7 +237,7 @@ def test_stream_emits_error_event_when_job_fails():
         _make_row("failed", result=json.dumps({"error": "OOM"})),
     ])
     mock_get_queue = AsyncMock(return_value=queue)
-    with patch("server.app.get_queue", mock_get_queue):
+    with patch("server.gateway.get_queue", mock_get_queue):
         response = client.get(f"/jobs/{_JOB_ID}/stream")
 
     events = [
@@ -257,7 +257,7 @@ def test_stream_error_event_includes_error_message():
         _make_row("failed", result=json.dumps({"error": error_text})),
     ])
     mock_get_queue = AsyncMock(return_value=queue)
-    with patch("server.app.get_queue", mock_get_queue):
+    with patch("server.gateway.get_queue", mock_get_queue):
         response = client.get(f"/jobs/{_JOB_ID}/stream")
 
     events = [
@@ -277,7 +277,7 @@ def test_stream_closes_after_error_event():
         _make_row("failed", result=json.dumps({"error": "timeout"})),
     ])
     mock_get_queue = AsyncMock(return_value=queue)
-    with patch("server.app.get_queue", mock_get_queue):
+    with patch("server.gateway.get_queue", mock_get_queue):
         response = client.get(f"/jobs/{_JOB_ID}/stream")
 
     events = [
@@ -295,7 +295,7 @@ def test_stream_error_event_without_result_field():
         _make_row("failed", result=None),
     ])
     mock_get_queue = AsyncMock(return_value=queue)
-    with patch("server.app.get_queue", mock_get_queue):
+    with patch("server.gateway.get_queue", mock_get_queue):
         response = client.get(f"/jobs/{_JOB_ID}/stream")
 
     events = [
@@ -322,7 +322,7 @@ def test_stream_progress_then_done_sequence():
         _make_row("completed"),                                        # poll 3
     ])
     mock_get_queue = AsyncMock(return_value=queue)
-    with patch("server.app.get_queue", mock_get_queue), \
+    with patch("server.gateway.get_queue", mock_get_queue), \
          patch("asyncio.sleep", new_callable=AsyncMock):
         response = client.get(f"/jobs/{_JOB_ID}/stream")
 
@@ -347,7 +347,7 @@ def test_stream_deduplicates_progress_events():
         _make_row("completed"),
     ])
     mock_get_queue = AsyncMock(return_value=queue)
-    with patch("server.app.get_queue", mock_get_queue), \
+    with patch("server.gateway.get_queue", mock_get_queue), \
          patch("asyncio.sleep", new_callable=AsyncMock):
         response = client.get(f"/jobs/{_JOB_ID}/stream")
 

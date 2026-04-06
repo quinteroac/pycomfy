@@ -29,7 +29,7 @@ from server.schemas import (
 )
 
 _FAKE_JOB_ID = "test-job-id-1234"
-_SUBMIT_PATCH = "server.app.submit_job"
+_SUBMIT_PATCH = "server.gateway.submit_job"
 
 
 @pytest.fixture
