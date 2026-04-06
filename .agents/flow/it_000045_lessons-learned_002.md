@@ -19,3 +19,26 @@
 - **The lazy-import pattern is critical**: `cli/_runners/image.py` imports `comfy_diffusion` only inside function bodies (`from comfy_diffusion.pipelines... import run`). This means PyInstaller's static analysis will NOT see those imports, so they won't be bundled — exactly what we want for binary size.
 - **No `COLLECT` = onefile**: Any future spec that introduces a `COLLECT(...)` block will produce a directory distribution (dist/parallax/) instead of a single file. The absence of `COLLECT` is the onefile signal.
 - **Test file naming**: The test file is `tests/test_build_us001_it000045.py`. The `test_cli_us001_it000045.py` file belongs to PRD_001 US-001 (runtime install); use distinct prefixes (`test_build_` vs `test_cli_`) to avoid confusion.
+
+---
+
+## US-002 — CI builds binaries on every version tag
+
+**Summary:** Created `.github/workflows/release-cli.yml` with three parallel build jobs (linux, macos, windows) and a gated `release` job that uploads 6 assets (3 binaries + 3 checksums) via `softprops/action-gh-release`. Tests are static YAML/text assertions in `tests/test_ci_us002_it000045.py` — 28 tests, all passing.
+
+**Key Decisions:**
+- **Static tests only**: The workflow cannot be executed locally (requires GitHub Actions). All tests verify the workflow file's content structurally — consistent with the US-001 approach.
+- **Binary renaming step**: PyInstaller outputs `dist/parallax` / `dist/parallax.exe` regardless of platform. Each job renames the output to its platform-specific name (`parallax-linux-x86_64`, `parallax-macos-universal`, `parallax-windows-x86_64.exe`) before generating checksums. This keeps release assets unambiguous.
+- **Windows checksum via PowerShell `Get-FileHash`**: `sha256sum` is unavailable on Windows runners. The checksum output is formatted manually to match the Linux/macOS `sha256sum` format (`<hash>  <filename>`).
+- **`needs: [linux, macos, windows]`**: This is the canonical GitHub Actions mechanism to gate a job on multiple upstream jobs all succeeding (AC07). No additional `if:` condition is required.
+- **`permissions: contents: write`** at workflow scope: `softprops/action-gh-release` needs write access to create/update releases and upload assets.
+
+**Pitfalls Encountered:**
+- None significant. The rename → checksum → artifact-upload → download-in-release → publish pattern is well-established for GitHub Actions release workflows.
+
+**Useful Context for Future Agents:**
+- **`uv sync --group cli-build --no-group dev`** assumes `cli-build` is a declared dependency group in `pyproject.toml` containing `pyinstaller`. If the group doesn't exist, the workflow step will fail.
+- **`--target-arch universal2` is macOS-only**: Do not pass this flag on Linux or Windows jobs.
+- **Artifact naming**: Each build job uploads to a uniquely-named artifact (`linux-artifacts`, `macos-artifacts`, `windows-artifacts`). The release job downloads all three into the same `dist/` directory — no conflicts because binary names are platform-specific.
+- **`softprops/action-gh-release@v2`** automatically uses the triggering tag (`GITHUB_REF`) — no explicit `tag_name:` input needed for tag-triggered runs.
+- **Test file naming convention**: `test_ci_us002_it000045.py` (prefix `test_ci_`) for CI workflow tests, distinct from `test_build_` (PyInstaller spec) and `test_cli_` (runtime/install) prefixes.
