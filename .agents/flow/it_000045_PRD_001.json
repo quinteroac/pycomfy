@@ -1,0 +1,140 @@
+{
+  "goals": [
+    "Allow a non-developer user to bootstrap the entire Parallax stack from a single CLI binary with no prior Python knowledge.",
+    "Provide clear progress feedback and actionable error messages for each install step.",
+    "Make installs idempotent — re-running any subcommand detects existing state and skips or updates gracefully."
+  ],
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Install the comfy-diffusion runtime",
+      "description": "As a non-developer user, I want to run `parallax install` so that the comfy-diffusion library, torch, and the ComfyUI engine are installed and ready on my machine.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-001-AC01",
+          "text": "`parallax install` detects whether `uv` is present; if not, downloads and installs it automatically using `urllib.request` (stdlib only, no curl/pip dependency) before proceeding."
+        },
+        {
+          "id": "US-001-AC02",
+          "text": "`parallax install` creates a dedicated virtual environment at `~/.parallax/env` using `uv venv` and installs `comfy-diffusion[cuda]` (or `[cpu]` via a `--cpu` flag) into it."
+        },
+        {
+          "id": "US-001-AC03",
+          "text": "After package installation, `parallax install` calls `check_runtime()` from within the installed environment to bootstrap the ComfyUI submodule; if it returns an error dict, the command prints the error and exits with code 1."
+        },
+        {
+          "id": "US-001-AC04",
+          "text": "On success, the command prints the installed version and the next step: \"Run `parallax ms install` to set up the inference server.\""
+        },
+        {
+          "id": "US-001-AC05",
+          "text": "On failure at any step, the command prints the failing step, the subprocess error output, and a suggestion to re-run with `--verbose`."
+        },
+        {
+          "id": "US-001-AC06",
+          "text": "Re-running `parallax install` when already installed prints \"Already installed (v1.x.x). Run `parallax install --upgrade` to update.\" and exits cleanly without performing any work."
+        }
+      ]
+    },
+    {
+      "id": "US-002",
+      "title": "Install the MCP server",
+      "description": "As a non-developer user, I want to run `parallax mcp install` so that the Parallax MCP server is registered in Claude Desktop and available as a tool immediately.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-002-AC01",
+          "text": "`parallax mcp install` checks that `parallax install` has been completed (i.e. `~/.parallax/env` exists and contains the `parallax-mcp` script); if not, it prints \"Run `parallax install` first.\" and exits with code 1."
+        },
+        {
+          "id": "US-002-AC02",
+          "text": "`parallax mcp install` locates the Claude Desktop config file at the platform-appropriate path: `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS), `%APPDATA%\\Claude\\claude_desktop_config.json` (Windows), `~/.config/claude/claude_desktop_config.json` (Linux)."
+        },
+        {
+          "id": "US-002-AC03",
+          "text": "The command adds or updates the `parallax-mcp` entry under `mcpServers` in the config JSON, setting `command` to the absolute path of the `parallax-mcp` script inside `~/.parallax/env`."
+        },
+        {
+          "id": "US-002-AC04",
+          "text": "If the Claude Desktop config file does not exist, the command creates it with only the `mcpServers` key."
+        },
+        {
+          "id": "US-002-AC05",
+          "text": "Merging into the config file never overwrites keys other than `mcpServers.parallax-mcp`."
+        },
+        {
+          "id": "US-002-AC06",
+          "text": "On success, the command prints \"MCP server registered. Restart Claude Desktop to apply.\""
+        },
+        {
+          "id": "US-002-AC07",
+          "text": "Re-running `parallax mcp install` when already registered prints \"Already registered.\" and exits cleanly."
+        }
+      ]
+    },
+    {
+      "id": "US-003",
+      "title": "Register the FastAPI server as a system service",
+      "description": "As a non-developer user, I want to run `parallax ms install` so that the Parallax inference server starts automatically on boot without manual intervention.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-003-AC01",
+          "text": "`parallax ms install` checks that `parallax install` has been completed; if not, it prints \"Run `parallax install` first.\" and exits with code 1."
+        },
+        {
+          "id": "US-003-AC02",
+          "text": "On Linux, the command writes a systemd user unit file to `~/.config/systemd/user/parallax-ms.service` and runs `systemctl --user enable --now parallax-ms` to start and enable the service."
+        },
+        {
+          "id": "US-003-AC03",
+          "text": "On macOS, the command writes a launchd plist to `~/Library/LaunchAgents/run.parallax.ms.plist` and runs `launchctl load` to register it."
+        },
+        {
+          "id": "US-003-AC04",
+          "text": "The service unit/plist configures the server to run `uvicorn server.main:app --host 0.0.0.0 --port 5000` using the Python interpreter from `~/.parallax/env`."
+        },
+        {
+          "id": "US-003-AC05",
+          "text": "On success, the command prints \"Inference server running on http://localhost:5000\" and confirms the service status with one line of output."
+        },
+        {
+          "id": "US-003-AC06",
+          "text": "Re-running `parallax ms install` when already registered prints \"Already registered.\" and exits cleanly."
+        }
+      ]
+    }
+  ],
+  "functionalRequirements": [
+    {
+      "id": "FR-1",
+      "description": "All three subcommands (`install`, `mcp install`, `ms install`) are implemented as Typer sub-apps registered on the root `parallax` app in `cli/main.py`."
+    },
+    {
+      "id": "FR-2",
+      "description": "A new `cli/commands/install.py` module implements the `install` command and the `mcp` and `ms` sub-groups."
+    },
+    {
+      "id": "FR-3",
+      "description": "The install base directory defaults to `~/.parallax/` and is configurable via the `PARALLAX_HOME` environment variable."
+    },
+    {
+      "id": "FR-4",
+      "description": "All long-running subprocess calls display a spinner via `rich.progress` so the user knows the process is active."
+    },
+    {
+      "id": "FR-5",
+      "description": "All subcommands support a `--verbose` flag that streams subprocess stdout/stderr in real time instead of capturing it."
+    },
+    {
+      "id": "FR-6",
+      "description": "The uv auto-install uses `urllib.request` to download the official uv installer script from `https://astral.sh/uv/install.sh` and pipes it to `sh` via `subprocess` — no pip, curl, or wget dependency required."
+    },
+    {
+      "id": "FR-7",
+      "description": "Claude Desktop config manipulation reads the existing JSON, merges only the `mcpServers.parallax-mcp` key, and writes it back — never overwrites unrelated keys."
+    },
+    {
+      "id": "FR-8",
+      "description": "`check_runtime()` is invoked via `subprocess` against the installed environment's Python interpreter, not imported directly, so the frozen binary does not need comfy_diffusion in its bundled deps."
+    }
+  ]
+}
