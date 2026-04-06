@@ -37,3 +37,22 @@
 - The sub-app registration pattern for grouped commands is: `app = typer.Typer(...)` in `cli/commands/<name>.py`, `@app.command("<subcommand>")` decorator, then `app.add_typer(<name>_app, name="<name>")` in `cli/main.py`.
 - All tests use real `tmp_path` directories (pytest fixture) rather than mocking filesystem calls — this gives confidence that the JSON read/write/create logic is correct.
 - `platform.system()` returns `"Darwin"` (macOS), `"Windows"`, or `"Linux"` — patch it with `patch("platform.system", return_value=...)` in tests.
+
+## US-003 — Register the FastAPI server as a system service
+
+**Summary:** Implemented `parallax ms install` as a Typer sub-app (`ms_app`) in `cli/commands/ms.py`, registered via `app.add_typer(ms_app, name="ms")` in `cli/main.py`. The command checks `~/.parallax/env/bin/python` exists (AC01), writes a platform-appropriate service file (AC02/AC03), configures the service to run `python -m uvicorn server.main:app` from `~/.parallax/env` (AC04), prints the server URL + one status line (AC05), and handles idempotent re-runs by checking if the service file already exists (AC06).
+
+**Key Decisions:**
+- Used `python -m uvicorn` (not the uvicorn script) to be explicit that the Python interpreter from `~/.parallax/env` is used, satisfying AC04's wording.
+- "Already registered" check tests for file existence (unit file on Linux, plist on macOS) — simple and robust without subprocess overhead.
+- Extracted `_write_systemd_unit`, `_write_launchd_plist`, `_get_service_status_line` as testable helpers alongside path helpers `_systemd_unit_path`, `_launchd_plist_path`, `_python_path`.
+- Status confirmation (AC05) calls `systemctl --user is-active` or `launchctl list` to obtain one status line after success.
+
+**Pitfalls Encountered:**
+- Using `runner.invoke(sub_app, ["install"])` on a Typer sub-app with a single `@app.command("install")` returns exit code 2 in Typer 0.24.x. Typer enters "single command mode" and treats `"install"` as a spurious argument. The fix is always to invoke via the **root app**: `runner.invoke(cli.main.app, ["ms", "install"])`.
+- The `_app()` helper pattern (imported lazily inside a function to avoid circular imports at collection time) is the established pattern in this project's CLI tests.
+
+**Useful Context for Future Agents:**
+- **Critical:** CLI tests for sub-apps must use `cli.main.app` with the full command path (e.g. `["ms", "install"]`), not the sub-app directly. Using the sub-app with a named subcommand fails in Typer 0.24.x with exit code 2.
+- Patching module-level constants like `_ENV_DIR` in `cli.commands.ms` works correctly as long as the patch is applied before the command function accesses it (which it does at call time, not import time).
+- `subprocess.run` can be patched globally for the test; a discriminating `side_effect` function (checking `cmd` contents) is more robust than positional call counting when multiple subprocess calls happen in sequence.
