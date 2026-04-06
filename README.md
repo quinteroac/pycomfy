@@ -36,6 +36,20 @@ parallax_cli / parallax_mcp  →  @parallax/ms (:3000)  →  server/FastAPI (:50
 
 ---
 
+## Install the parallax CLI
+
+**Linux / macOS (one command):**
+```sh
+curl -fsSL https://raw.githubusercontent.com/quinteroac/comfy-diffusion/master/install.sh | sh
+```
+
+Then run:
+```sh
+parallax install
+```
+
+---
+
 ## Quick Start
 
 Call `check_runtime()` before any other `comfy_diffusion` API (model loading, prompt encoding, sampling, etc.).
