@@ -1,0 +1,156 @@
+{
+  "goals": [
+    "Define Pydantic models for all job contracts (`JobData`, `JobResult`, `PythonProgress`).",
+    "Implement a persistent SQLite-backed job queue in Python using `aiosqlite`.",
+    "Provide a `submit_job()` function that enqueues a job and spawns a detached worker, returning a job ID in < 100ms.",
+    "Implement `server/worker.py` — picks up one job, runs the pipeline subprocess, reads NDJSON progress from stdout, and updates the job record.",
+    "Provide a `ProgressReporter` helper that pipelines can use to emit structured NDJSON progress to stdout."
+  ],
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Pydantic job types",
+      "description": "As a Python developer on any parallax package, I want well-typed `JobData`, `JobResult`, and `PythonProgress` Pydantic models in `server/jobs.py` so that I can submit and read jobs without dict casting or guessing field names.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-001-AC01",
+          "text": "`server/jobs.py` exports `JobData`, `JobResult`, and `PythonProgress` as Pydantic `BaseModel` subclasses."
+        },
+        {
+          "id": "US-001-AC02",
+          "text": "`JobData` includes: `action: str`, `media: str`, `model: str`, `script: str`, `args: dict`, `script_base: str`, `uv_path: str`."
+        },
+        {
+          "id": "US-001-AC03",
+          "text": "`JobResult` includes: `output_path: str`."
+        },
+        {
+          "id": "US-001-AC04",
+          "text": "`PythonProgress` includes: `step: str`, `pct: float`, and optional `frame: int | None`, `total: int | None`, `output: str | None`, `error: str | None`."
+        }
+      ]
+    },
+    {
+      "id": "US-002",
+      "title": "SQLite job queue singleton",
+      "description": "As a parallax Python package, I want to call `get_queue()` and get a shared async job queue backed by `~/.config/parallax/jobs.db` so that all packages read and write to the same SQLite job store without owning the queue lifecycle themselves.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-002-AC01",
+          "text": "`server/queue.py` exports `get_queue() -> JobQueue` where `JobQueue` wraps `aiosqlite`."
+        },
+        {
+          "id": "US-002-AC02",
+          "text": "`get_queue()` is a lazy async singleton — creates the DB and table on first call, returns the same instance on subsequent calls within a process."
+        },
+        {
+          "id": "US-002-AC03",
+          "text": "The jobs table schema includes: `id TEXT PRIMARY KEY`, `status TEXT`, `data TEXT` (JSON), `result TEXT` (JSON, nullable), `created_at TEXT`, `updated_at TEXT`."
+        },
+        {
+          "id": "US-002-AC04",
+          "text": "`JobQueue` exposes: `enqueue(data: JobData) -> str` (returns job id), `get(job_id: str) -> dict | None`, `update_status(job_id, status, result=None)`, `list_jobs(limit=50) -> list[dict]`, `cancel(job_id) -> bool`."
+        }
+      ]
+    },
+    {
+      "id": "US-003",
+      "title": "submit_job() helper",
+      "description": "As a gateway or CLI caller, I want to call `submit_job(data: JobData) -> str` so that I get a job ID back in < 100ms without waiting for inference to finish.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-003-AC01",
+          "text": "`server/submit.py` exports `submit_job(data: JobData) -> str`."
+        },
+        {
+          "id": "US-003-AC02",
+          "text": "`submit_job()` enqueues the job via `get_queue()` and spawns `server/worker.py` as a detached subprocess (using `subprocess.Popen` with `start_new_session=True`)."
+        },
+        {
+          "id": "US-003-AC03",
+          "text": "Returns the job ID string. Total wall-clock time from call to return is < 100ms in a unit test with a mock queue."
+        },
+        {
+          "id": "US-003-AC04",
+          "text": "The spawned worker process receives the job ID as its only CLI argument."
+        }
+      ]
+    },
+    {
+      "id": "US-004",
+      "title": "Python worker process",
+      "description": "As a job queue consumer, I want `server/worker.py` to pick up a job by ID, execute the pipeline, and stream NDJSON progress back to the queue so that any observer can follow progress in real time.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-004-AC01",
+          "text": "`uv run python server/worker.py <job_id>` runs without error when the job exists and `status == \"queued\"`."
+        },
+        {
+          "id": "US-004-AC02",
+          "text": "The worker reads `JobData` from the queue, spawns the pipeline subprocess (`uv run python <script> ...`), and streams stdout line-by-line."
+        },
+        {
+          "id": "US-004-AC03",
+          "text": "Each line that is valid `PythonProgress` JSON is parsed and stored as a progress update in the queue (e.g. `update_progress(job_id, progress)`)."
+        },
+        {
+          "id": "US-004-AC04",
+          "text": "On pipeline exit code 0: updates job status to `\"completed\"` with the `output_path` from the last `PythonProgress` line where `output` is set."
+        },
+        {
+          "id": "US-004-AC05",
+          "text": "On non-zero exit: updates status to `\"failed\"` with the last stderr content in `result.error`."
+        }
+      ]
+    },
+    {
+      "id": "US-005",
+      "title": "ProgressReporter helper",
+      "description": "As a pipeline author, I want to import `ProgressReporter` and call `reporter.update(step, pct)` so that my pipeline emits structured NDJSON progress without writing JSON serialization logic manually.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-005-AC01",
+          "text": "`comfy_diffusion/progress.py` exports `ProgressReporter` with methods: `update(step: str, pct: float, **kwargs)` and `done(output_path: str)`."
+        },
+        {
+          "id": "US-005-AC02",
+          "text": "Each call to `update()` prints a single line of valid JSON matching `PythonProgress` to stdout."
+        },
+        {
+          "id": "US-005-AC03",
+          "text": "`done(output_path)` prints a final `PythonProgress` with `pct=100.0` and `output=output_path`."
+        },
+        {
+          "id": "US-005-AC04",
+          "text": "Existing pipelines that do not use `ProgressReporter` continue to work unchanged."
+        }
+      ]
+    }
+  ],
+  "functionalRequirements": [
+    {
+      "id": "FR-1",
+      "description": "All job models are Pydantic `BaseModel` with strict type annotations."
+    },
+    {
+      "id": "FR-2",
+      "description": "The SQLite database path defaults to `~/.config/parallax/jobs.db` and is overridable via `PARALLAX_DB_PATH` environment variable."
+    },
+    {
+      "id": "FR-3",
+      "description": "`submit_job()` must not block; the worker runs in a fully detached process (`start_new_session=True`)."
+    },
+    {
+      "id": "FR-4",
+      "description": "The worker uses the `uv_path` field from `JobData` to resolve the `uv` binary."
+    },
+    {
+      "id": "FR-5",
+      "description": "`ProgressReporter` flushes stdout after every write (`flush=True`)."
+    },
+    {
+      "id": "FR-6",
+      "description": "All new modules follow the lazy import pattern — no `torch`/`comfy.*` imports at module top level."
+    }
+  ]
+}

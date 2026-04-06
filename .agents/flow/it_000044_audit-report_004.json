@@ -1,0 +1,68 @@
+{
+  "iteration": "000044",
+  "prd_index": "004",
+  "generated_at": "2026-04-05T18:06:00.000Z",
+  "executive_summary": "The MCP server entry-point scaffold (US-004) is fully implemented: `mcp/main.py` instantiates FastMCP in stdio mode, `mcp/__main__.py` delegates to it, `pyproject.toml` registers `parallax-mcp = \"mcp.main:main\"`, the server name is `\"parallax-mcp\"` with the version read from package metadata, and US-004 tests pass. However, the actual MCP tools required by US-001 through US-003 are entirely absent — there is no `mcp/tools/` subdirectory, no `create_image`, `create_video`, `create_audio`, `edit_image`, `upscale_image`, `get_job_status`, or `wait_for_job` registrations anywhere in `mcp/`. FR-1 partially complies (missing `tools/`); FR-2, FR-3, FR-5, and FR-6 cannot comply because no tools exist.",
+  "verification_by_fr": [
+    {
+      "frId": "FR-1",
+      "assessment": "partially_comply",
+      "notes": "`mcp/main.py` and `mcp/__main__.py` are present and use fastmcp. The required `mcp/tools/` subdirectory is missing entirely."
+    },
+    {
+      "frId": "FR-2",
+      "assessment": "does_not_comply",
+      "notes": "No tool files exist in `mcp/` that import `submit_job` or `get_queue`. The requirement cannot be satisfied without tool implementations."
+    },
+    {
+      "frId": "FR-3",
+      "assessment": "does_not_comply",
+      "notes": "No tool functions or Pydantic input models are defined anywhere in `mcp/`."
+    },
+    {
+      "frId": "FR-4",
+      "assessment": "comply",
+      "notes": "`mcp/main.py` calls `mcp.run(transport=\"stdio\")` — stdio transport is correctly configured."
+    },
+    {
+      "frId": "FR-5",
+      "assessment": "does_not_comply",
+      "notes": "`wait_for_job` is not implemented; `asyncio.sleep(2)` poll logic is absent."
+    },
+    {
+      "frId": "FR-6",
+      "assessment": "does_not_comply",
+      "notes": "No tool functions exist, therefore no tool docstrings exist."
+    }
+  ],
+  "verification_by_us": [
+    {
+      "usId": "US-001",
+      "assessment": "does_not_comply",
+      "notes": "None of the five inference tools (`create_image`, `create_video`, `create_audio`, `edit_image`, `upscale_image`) are implemented in `mcp/`. AC01 through AC04 are all unmet: no `submit_job()` calls, no 200ms job-ID response format, no descriptive tool docstrings, no unit tests for the MCP layer."
+    },
+    {
+      "usId": "US-002",
+      "assessment": "does_not_comply",
+      "notes": "`get_job_status` tool does not exist in `mcp/`. AC01 (parameter), AC02 (response fields), and AC03 (not-found behaviour) are all unmet."
+    },
+    {
+      "usId": "US-003",
+      "assessment": "does_not_comply",
+      "notes": "`wait_for_job` tool does not exist in `mcp/`. AC01 through AC05 are all unmet."
+    },
+    {
+      "usId": "US-004",
+      "assessment": "comply",
+      "notes": "All four acceptance criteria are met: `mcp/__main__.py` exists and delegates to `main()` (AC01); `pyproject.toml` registers `parallax-mcp = \"mcp.main:main\"` (AC02); the server starts without error on EOF stdin (AC03, validated by tests); server name is `\"parallax-mcp\"` with version from package metadata (AC04). All US-004 tests in `tests/test_mcp_us004_it044.py` pass."
+    }
+  ],
+  "minor_observations": [
+    "The `mcp/__init__.py` namespace-package shim is sophisticated and correctly re-exports the installed `mcp` SDK symbols, but it is not covered by any dedicated unit test. A regression test would safeguard this fragile path-manipulation logic.",
+    "FR-1 specifies a `tools/` subdirectory; all tool implementations should live there (e.g. `mcp/tools/inference.py`, `mcp/tools/jobs.py`) and be imported into `main.py` so the FastMCP instance registers them.",
+    "US-001-AC04 requires timing assertions (< 500ms per tool call with a mock queue). These tests are absent even as stubs.",
+    "The `server/submit.py` `submit_job()` function uses `asyncio.run()` internally, which will conflict if called from an already-running asyncio event loop (as in fastmcp tools). Callers inside async tool handlers must use `await queue.enqueue(data)` directly rather than the synchronous wrapper.",
+    "fastmcp is pinned to `>=3.2.0` in `pyproject.toml` — the open question in the PRD about pinning to a specific version remains unresolved. Consider pinning to a specific minor version for reproducibility."
+  ],
+  "conclusions_and_recommendations": "Three of four user stories (US-001, US-002, US-003) and four of six functional requirements (FR-2, FR-3, FR-5, FR-6) are unimplemented. The refactor plan must deliver: (1) create `mcp/tools/` with at least two modules — `inference.py` for the five non-blocking inference tools and `jobs.py` for `get_job_status` and `wait_for_job`; (2) register all tools with the FastMCP instance in `mcp/main.py` via module import; (3) ensure each tool calls `submit_job()` (or its async equivalent) and returns the `job_id: <id>\\nstatus: queued\\nmodel: <model>` format within 200ms; (4) implement `wait_for_job` with `asyncio.sleep(2)` polling and timeout-as-text-response behaviour; (5) add unit tests for US-001 through US-003 with mock queue. FR-4 (stdio transport) and US-004 (entry point) are already compliant and require no changes."
+}

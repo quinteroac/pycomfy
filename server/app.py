@@ -1,16 +1,20 @@
-from fastapi import FastAPI
+"""Backward-compatible re-export shim.
 
-app = FastAPI(title="parallax-worker", version="0.1.0")
+All application logic lives in ``server.gateway`` (APIRouter) and
+``server.main`` (FastAPI app + middleware).  This module re-exports the
+``app`` object so existing imports and test patches continue to work.
+"""
+from __future__ import annotations
 
+# Re-export the assembled FastAPI application.
+from server.main import app  # noqa: F401
 
-@app.get("/health")
-def health():
-    return {"status": "ok"}
-
-
-# TODO: add routes (generate, edit, download, ...)
-
-if __name__ == "__main__":
-    import uvicorn
-
-    uvicorn.run("app:app", host="0.0.0.0", port=5000, reload=True)
+# Re-export symbols that tests patch via "server.app.<name>" so that
+# monkeypatching these names still takes effect in gateway handlers.
+# Tests should migrate to patching "server.gateway.<name>" directly.
+from server.gateway import (  # noqa: F401
+    _pkg_version,
+    _uv_path,
+    get_queue,
+    submit_job,
+)
