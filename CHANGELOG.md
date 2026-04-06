@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [000044] - 2026-04-06
+
+### Added
+- **PRD 001:** Define Pydantic models for all job contracts (`JobData`, `JobResult`, `PythonProgress`).
+- **PRD 001:** Implement a persistent SQLite-backed job queue in Python using `aiosqlite`.
+- **PRD 001:** Provide a `submit_job()` function that enqueues a job and spawns a detached worker, returning a job ID in < 100ms.
+- **PRD 001:** Implement `server/worker.py` — picks up one job, runs the pipeline subprocess, reads NDJSON progress from stdout, and updates the job record.
+- **PRD 001:** Provide a `ProgressReporter` helper that pipelines can use to emit structured NDJSON progress to stdout.
+- **PRD 002:** Expose REST endpoints for submitting all five inference operations (create image/video/audio, edit image, upscale image).
+- **PRD 002:** Provide a job status endpoint for polling.
+- **PRD 002:** Provide a Server-Sent Events (SSE) endpoint per job for real-time progress streaming.
+- **PRD 002:** Provide job list and cancel endpoints.
+- **PRD 002:** Mount the gateway router on the existing FastAPI app in `server/main.py`.
+- **PRD 003:** Implement a Typer-based CLI under `cli/` with the same command surface as `parallax_cli`.
+- **PRD 003:** Support both sync (blocking) and `--async` (non-blocking, returns job ID) modes on all generation commands.
+- **PRD 003:** Add a `parallax jobs` subcommand group with `list`, `watch`, `status`, `cancel`, and `open` sub-commands.
+- **PRD 003:** Provide a `python -m parallax` entry point registered in `pyproject.toml`.
+- **PRD 004:** Implement a Python MCP server under `mcp/` using `fastmcp`.
+- **PRD 004:** Migrate all five inference tools to return a job ID within 200ms instead of blocking.
+- **PRD 004:** Add `get_job_status` and `wait_for_job` tools.
+- **PRD 004:** Register the server as a `uv run` entry point in `pyproject.toml`.
+
 ## [000043] - 2026-04-04
 
 ### Added
