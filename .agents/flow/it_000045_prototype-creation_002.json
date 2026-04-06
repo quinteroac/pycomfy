@@ -2,12 +2,12 @@
   "entries": [
     {
       "use_case_id": "US-001",
-      "status": "pending",
-      "attempt_count": 0,
-      "last_agent_exit_code": null,
+      "status": "completed",
+      "attempt_count": 1,
+      "last_agent_exit_code": 0,
       "quality_checks": [],
       "last_error_summary": "",
-      "updated_at": "2026-04-06T20:14:46.852Z",
+      "updated_at": "2026-04-06T20:31:54.280Z",
       "audit_artifact_path": ".agents/flow/it_000045_audit.json",
       "refactor_report_path": ".agents/flow/it_000045_refactor-report.md"
     },
