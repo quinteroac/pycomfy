@@ -42,3 +42,25 @@
 - **Artifact naming**: Each build job uploads to a uniquely-named artifact (`linux-artifacts`, `macos-artifacts`, `windows-artifacts`). The release job downloads all three into the same `dist/` directory — no conflicts because binary names are platform-specific.
 - **`softprops/action-gh-release@v2`** automatically uses the triggering tag (`GITHUB_REF`) — no explicit `tag_name:` input needed for tag-triggered runs.
 - **Test file naming convention**: `test_ci_us002_it000045.py` (prefix `test_ci_`) for CI workflow tests, distinct from `test_build_` (PyInstaller spec) and `test_cli_` (runtime/install) prefixes.
+
+---
+
+## US-003 — Binary is self-identified
+
+**Summary:** Added `parallax --version` support that prints `parallax 1.x.x`. The version constant lives in `cli/_version.py` and is overwritten by `parallax.spec` at PyInstaller build time by reading `[project].version` from `pyproject.toml`. This satisfies AC02 (no runtime package lookup) because the value is a baked string literal in the bundled source.
+
+**Key Decisions:**
+- **`cli/_version.py` as the version carrier**: A dedicated module with `__version__ = "1.3.0"` is the cleanest approach. PyInstaller bundles the file as-is; the spec overwrites it before bundling so the binary always contains the exact tag version.
+- **Spec-level baking via `tomllib`**: `parallax.spec` is a Python script; adding a `tomllib.load()` block at the top (before `Analysis`) lets us read `pyproject.toml` and overwrite `cli/_version.py` in one spec-parse step — no separate pre-build script needed.
+- **`SPECPATH` for repo-relative paths**: PyInstaller exposes `SPECPATH` as the directory containing the spec file. Using `pathlib.Path(SPECPATH)` avoids relying on the current working directory.
+- **Removed `no_args_is_help=True`**: The `Typer` constructor option conflicts with the `@app.callback(invoke_without_command=True)` needed to wire `--version`. The callback manually calls `ctx.get_help()` when no subcommand is given, preserving the original UX.
+- **Typer `is_eager=True`**: Required so `--version` is processed before any subcommand validation, matching conventional CLI behaviour.
+
+**Pitfalls Encountered:**
+- `no_args_is_help=True` on the `Typer` instance suppresses the `invoke_without_command=True` callback, so the `--version` option never fires with no subcommand. Must remove it and replicate the help-on-no-args behaviour manually in the callback.
+- `tomllib` is stdlib in Python 3.11+; no extra dependency needed.
+
+**Useful Context for Future Agents:**
+- `cli/_version.py` is intentionally a generated/overwritten file during builds. If you see it say `"1.3.0"` in the repo that is the development default; the spec always overwrites it to the true tag version before bundling.
+- The spec baking block uses `_textwrap.dedent` + an f-string to write a clean Python file. Future version bumps only require updating `[project].version` in `pyproject.toml` — the spec and binary version stay in sync automatically.
+- `test_version_us003_it000045.py` uses `typer.testing.CliRunner` for integration testing; no subprocess needed.

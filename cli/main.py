@@ -6,8 +6,11 @@ Entry point: ``python -m cli`` or via the ``parallax`` script defined in
 
 from __future__ import annotations
 
+from typing import Annotated, Optional
+
 import typer
 
+from cli._version import __version__
 from cli.commands.create import app as create_app
 from cli.commands.edit import app as edit_app
 from cli.commands.install import install
@@ -19,7 +22,6 @@ from cli.commands.upscale import app as upscale_app
 app = typer.Typer(
     name="parallax",
     help="Parallax CLI — run ComfyUI-backed inference pipelines from the command line.",
-    no_args_is_help=True,
 )
 
 app.add_typer(create_app, name="create")
@@ -52,6 +54,30 @@ def async_command(ctx: typer.Context) -> None:
 
     cmd = [_uv_path(), "run", "parallax"] + subcmd
     enqueue_cmd(cmd)
+
+
+def _version_callback(value: bool) -> None:
+    if value:
+        typer.echo(f"parallax {__version__}")
+        raise typer.Exit()
+
+
+@app.callback(invoke_without_command=True)
+def _root_callback(
+    ctx: typer.Context,
+    version: Annotated[
+        Optional[bool],
+        typer.Option(
+            "--version",
+            "-V",
+            callback=_version_callback,
+            is_eager=True,
+            help="Print the version and exit.",
+        ),
+    ] = None,
+) -> None:
+    if ctx.invoked_subcommand is None:
+        typer.echo(ctx.get_help())
 
 
 def main() -> None:

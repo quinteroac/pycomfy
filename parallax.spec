@@ -13,6 +13,32 @@
 # excluded so that the binary stays well under 50 MB.
 # -*- mode: python ; coding: utf-8 -*-
 
+# ── Bake version from pyproject.toml into cli/_version.py ─────────────────
+# This runs at spec-parse time (before Analysis), so the version constant is
+# embedded in the bundled source rather than looked up from an installed
+# package at runtime (comfy-diffusion is NOT bundled in the binary).
+import tomllib as _tomllib
+import pathlib as _pathlib
+import textwrap as _textwrap
+
+_repo_root = _pathlib.Path(SPECPATH)
+with open(_repo_root / "pyproject.toml", "rb") as _f:
+    _project_version = _tomllib.load(_f)["project"]["version"]
+
+(_repo_root / "cli" / "_version.py").write_text(
+    _textwrap.dedent(f'''\
+        """Build-time version constant for the ``parallax`` CLI binary.
+
+        Generated automatically by ``parallax.spec`` — do not edit by hand.
+        Source of truth: ``[project].version`` in ``pyproject.toml``.
+        """
+
+        __version__ = "{_project_version}"
+        '''),
+    encoding="utf-8",
+)
+# ──────────────────────────────────────────────────────────────────────────
+
 block_cipher = None
 
 a = Analysis(
