@@ -1,48 +1,45 @@
 {
-  "current_iteration": "000046",
-  "current_phase": "prototype",
+  "current_iteration": "000047",
+  "current_phase": "define",
   "phases": {
     "define": {
       "ideation": {
-        "status": "pending",
+        "status": "completed",
         "file": null
       },
       "requirement_definition": [
         {
           "index": 1,
           "status": "approved",
-          "file": "it_000046_product-requirement-document_001.md"
+          "file": "it_000047_product-requirement-document_001.md"
+        },
+        {
+          "index": 2,
+          "status": "approved",
+          "file": "it_000047_product-requirement-document_002.md"
+        },
+        {
+          "index": 3,
+          "status": "approved",
+          "file": "it_000047_product-requirement-document_003.md"
+        },
+        {
+          "index": 4,
+          "status": "approved",
+          "file": "it_000047_product-requirement-document_004.md"
         }
       ],
       "prd_generation": {
         "status": "completed",
-        "file": "it_000046_PRD_001.json"
+        "file": "it_000047_PRD_004.json"
       }
     },
     "prototype": {
-      "prototype_creation": [
-        {
-          "index": 1,
-          "status": "completed",
-          "file": "it_000046_prototype-creation_001.json"
-        }
-      ],
-      "prototype_audit": [
-        {
-          "index": 1,
-          "status": "completed",
-          "file": "it_000046_audit-report_001.json"
-        }
-      ],
-      "prototype_refactor": [
-        {
-          "index": 1,
-          "status": "completed",
-          "file": "it_000046_refactor-plan_001.md"
-        }
-      ],
+      "prototype_creation": [],
+      "prototype_audit": [],
+      "prototype_refactor": [],
       "prototype_approval": {
-        "status": "completed",
+        "status": "pending",
         "file": null
       },
       "project_context": {
@@ -86,6 +83,6 @@
       }
     }
   },
-  "last_updated": "2026-04-07T18:25:14.359Z",
-  "updated_by": "nvst:approve-prototype"
+  "last_updated": "2026-04-07T19:47:48.583Z",
+  "updated_by": "nvst:approve-requirement"
 }
