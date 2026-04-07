@@ -203,7 +203,6 @@ export function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <span className="app-logo">◈</span>
         <span className="app-title">Parallax</span>
       </header>
 
@@ -211,8 +210,7 @@ export function App() {
         {messages.length === 0 ? (
           <div className="chat-empty">
             <p className="chat-empty-hint">
-              Select a media type and configure parameters below, then type your
-              prompt to begin.
+              Type a prompt and press Generate to begin.
             </p>
           </div>
         ) : (
@@ -228,7 +226,6 @@ export function App() {
       <footer className="composer">
         <div className="composer-config">
           <MediaTypeSelector value={params.mediaType} onChange={setMediaType} />
-          <div className="composer-divider" aria-hidden="true" />
           <ParameterPanel params={params} onUpdate={updateParam} />
         </div>
 

@@ -25,3 +25,29 @@
 - The `role="log"` + `aria-label="Chat messages"` is on the `.chat-messages` div inside `App.tsx` (only rendered when messages exist — the empty-state div does not have it).
 - Medium/low issues from the audit remain open: no responsive breakpoints, `field-sizing: content` compatibility, video/audio accessible labels, colour-only error states, skip link. These are documented in the audit report for future iterations.
 - Frontend tests run via `bun run test` in `frontend/`; TypeScript check via `bun run lint`.
+
+## US-002 — Distill the interface to its essential structure
+
+**Summary:** Applied the distill skill to the chat UI, removing decorative elements and visual noise. Changes focused on stripping ornamentation that didn't serve communication or function while preserving all interactive elements and accessibility attributes.
+
+**Key Decisions:**
+
+- **Removed `◈` logo glyph** from app header — purely decorative, no semantic value. The `Parallax` text title already identifies the app.
+- **Removed `composer-divider`** — the 1px separator between `MediaTypeSelector` and `ParameterPanel` was redundant; flex layout + gap provides sufficient spatial separation.
+- **Removed glow `box-shadow` from textarea focus** (`0 0 0 3px --accent-glow`) — a prominent purple ring is decorative bloom. A simple `border-color` change (already present) suffices to communicate focus state accessibly.
+- **Removed `--accent-glow` CSS variable** — after removing all glow shadows it was unused; removing it prevents future accidental reuse of the pattern.
+- **Removed glow `box-shadow` from active MediaType button** (`0 1px 6px rgba(accent-rgb, 0.4)`) — decorative emphasis that competed with the active background colour.
+- **Removed `text-transform: uppercase` and `letter-spacing: 0.06em`** from ParameterPanel field labels — over-designed for utility labels. Labels are now plain text, making the parameters visually recessive (secondary priority) vs. the MediaTypeSelector and textarea.
+- **Fixed stale hardcoded colour** `rgba(139, 92, 246, 0.6)` in textarea focus border-color → `rgba(var(--accent-rgb), 0.6)` to use the CSS variable set in US-001.
+- **Trimmed empty-state copy** to "Type a prompt and press Generate to begin." — shorter, imperative, zero redundancy.
+
+**Pitfalls Encountered:**
+
+- `--accent-glow` was referenced only in `App.css` (`textarea:focus`). After removing that glow rule, the variable was completely unused; removing it is safe and reduces `:root` noise.
+- The `composer-divider` CSS rules in `App.css` needed to be deleted alongside the HTML element removal — otherwise dead CSS would linger.
+
+**Useful Context for Future Agents:**
+
+- `:root` in `App.css` no longer has `--accent-glow`. Do not re-introduce it. The focus affordance pattern for this UI is `border-color: rgba(var(--accent-rgb), 0.6)` only — no box-shadow glow.
+- ParameterPanel field labels are intentionally plain-cased and at 50% opacity (`rgba(255,255,255,0.5)`) to stay recessive relative to the active MediaTypeSelector pill and the textarea.
+- `AC03` tests in `DistillUS002.test.tsx` assert the absence of `◈` and `.composer-divider` — if either is accidentally reintroduced, these tests will fail.

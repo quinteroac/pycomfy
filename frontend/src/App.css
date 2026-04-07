@@ -8,7 +8,6 @@
   /* #7c3aed gives ~5.25:1 contrast with white — passes WCAG AA (was #8b5cf6 at ~4.05:1) */
   --accent: #7c3aed;
   --accent-rgb: 124, 58, 237;
-  --accent-glow: rgba(124, 58, 237, 0.3);
   --radius: 12px;
 }
 
@@ -56,11 +55,6 @@ body {
   gap: 10px;
   padding: 0 20px;
   border-bottom: 1px solid var(--border);
-}
-
-.app-logo {
-  font-size: 18px;
-  color: var(--accent);
 }
 
 .app-title {
@@ -119,13 +113,6 @@ body {
   flex-wrap: wrap;
 }
 
-.composer-divider {
-  width: 1px;
-  height: 28px;
-  background: var(--border);
-  flex-shrink: 0;
-}
-
 .composer-input-row {
   display: flex;
   align-items: flex-end;
@@ -155,8 +142,7 @@ body {
 }
 
 .composer-textarea:focus {
-  border-color: rgba(139, 92, 246, 0.6);
-  box-shadow: 0 0 0 3px var(--accent-glow);
+  border-color: rgba(var(--accent-rgb), 0.6);
 }
 
 .composer-send {
