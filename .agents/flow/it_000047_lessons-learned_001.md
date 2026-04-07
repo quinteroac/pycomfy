@@ -41,3 +41,26 @@
 - `App.tsx` now owns `inputImage: File | null`, `prompt: string`, `imageError: string | null` state and a `handleSubmit` that builds `FormData`.
 - The `ImageUpload` component is fully controlled: pass `value` + `onChange` + optional `error` prop; it handles the hidden input, preview, and remove button internally.
 - `vi.stubGlobal` / `vi.unstubAllGlobals` is the correct pattern for mocking browser globals in Vitest + happy-dom.
+
+## US-003 — Submit prompt and stream generation progress
+
+**Summary:** Added chat timeline with user/assistant bubbles, Enter-to-submit keyboard shortcut, SSE progress streaming via `EventSource`, connection-lost handling, and in-flight disabled state. New files: `ChatBubble.tsx` + `ChatBubble.module.css`. Updated: `App.tsx`, `types.ts` (ChatMessage type), `App.css`. 13 new tests in `ChatStream.test.tsx`.
+
+**Key Decisions:**
+- `ChatMessage` type added to `types.ts` to keep all domain types in one place.
+- `EventSource` used directly (not wrapped in a hook) since it's a single-use pattern inside `handleSubmit`.
+- `isSubmitting` state disables both the textarea and button simultaneously; the `handleSubmit` guard (`if (isSubmitting) return`) provides a programmatic safety net regardless of the DOM disabled state.
+- Assistant bubble is created with `status: "streaming"` immediately on submit (before the fetch resolves) so AC03 is satisfied.
+- SSE `pct` values come as `0.0–1.0` floats from `PythonProgress`; multiplied by 100 for display.
+- `esRef` stores the current `EventSource` so it can be closed on unmount cleanup.
+
+**Pitfalls Encountered:**
+- `EventSource` is not implemented in happy-dom; requires a hand-rolled `MockEventSource` class with `emit()` and `emitError()` helpers. Use `vi.stubGlobal("EventSource", MockEventSource)` to inject it.
+- `act()` is required when calling `es.emit(...)` inside tests to flush React state updates synchronously.
+- The counter-based `nextId()` helper at module level persists across test renders in the same file, which is fine as long as IDs are only used as React keys and `data-testid` values are role-based (`bubble-user`, `bubble-assistant`).
+
+**Useful Context for Future Agents:**
+- `App.tsx` now owns `messages: ChatMessage[]` and `isSubmitting: boolean` state.
+- `ChatBubble` renders a `data-testid="bubble-user"` or `data-testid="bubble-assistant"` wrapper. Progress row is `data-testid="progress-row"` (only visible when `status === "streaming"`).
+- SSE terminal events: `step="done"` → complete, `step="error"` → error. All other steps update the bubble with percentage progress.
+- `MockEventSource.instances` is an array; always read the last instance in tests after `waitFor`.

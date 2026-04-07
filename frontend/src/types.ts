@@ -64,3 +64,24 @@ export function modelsForType(type: MediaType): readonly string[] {
   if (type === "video") return VIDEO_MODELS;
   return AUDIO_MODELS;
 }
+
+// ── Chat timeline types ───────────────────────────────────────────────────────
+
+export type MessageRole = "user" | "assistant";
+
+export type MessageStatus =
+  | "idle"
+  | "streaming"
+  | "complete"
+  | "error"
+  | "connection-lost";
+
+export interface ChatMessage {
+  id: string;
+  role: MessageRole;
+  content: string;
+  /** Progress percentage 0–100 while streaming. */
+  progress?: number;
+  progressLabel?: string;
+  status: MessageStatus;
+}

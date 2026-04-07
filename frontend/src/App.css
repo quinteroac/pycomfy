@@ -84,6 +84,13 @@ body {
   justify-content: center;
 }
 
+.chat-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-bottom: 8px;
+}
+
 .chat-empty-hint {
   max-width: 380px;
   text-align: center;
