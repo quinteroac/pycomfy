@@ -1,0 +1,20 @@
+{
+  "iteration": "000046",
+  "prd_index": "001",
+  "refactor_items": [
+    {
+      "id": "RF-1",
+      "priority": "low",
+      "title": "Add `s` to `_ltx23` explicit signature",
+      "file": "cli/_runners/video.py",
+      "description": "Update `_ltx23` signature from `(*, mdir, prompt, image, w, h, n, f, c, seed, audio=None, **_)` to `(*, mdir, prompt, image, w, h, n, f, s, c, seed, audio=None, **_)` to match PRD spec FR-6. Cosmetic only — `s` is still not forwarded to any pipeline since ltx23 pipelines have no `steps` parameter."
+    },
+    {
+      "id": "RF-2",
+      "priority": "medium",
+      "title": "Add unit tests for CLI audio guard validations",
+      "file": "tests/cli/test_create_video_audio.py",
+      "description": "Add CPU-only pytest tests covering: (a) --audio with non-ltx23 model exits 1 with correct message; (b) --audio with non-existent file exits 1 with correct message; (c) --audio without --input exits 1 with correct message. These do not require a GPU and can run in CI."
+    }
+  ]
+}

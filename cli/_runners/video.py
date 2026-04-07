@@ -21,21 +21,20 @@ def default(model: str, key: str, fallback: object) -> object:
 def _ltx2(*, mdir, prompt, image, w, h, n, f, s, c, seed, **_):  # type: ignore[no-untyped-def]
     if image is not None:
         from comfy_diffusion.pipelines.video.ltx.ltx2.i2v import run
-        result = run(models_dir=mdir, prompt=prompt, image=image, width=w, height=h, length=n, fps=f, steps=s, cfg=c, seed=seed)
-    else:
-        from comfy_diffusion.pipelines.video.ltx.ltx2.t2v import run
-        result = run(models_dir=mdir, prompt=prompt, width=w, height=h, length=n, fps=f, steps=s, cfg_pass1=c, seed=seed)
-    return result["frames"]
+        return run(models_dir=mdir, prompt=prompt, image=image, width=w, height=h, length=n, fps=f, steps=s, cfg=c, seed=seed)
+    from comfy_diffusion.pipelines.video.ltx.ltx2.t2v import run
+    return run(models_dir=mdir, prompt=prompt, width=w, height=h, length=n, fps=f, steps=s, cfg_pass1=c, seed=seed)
 
 
-def _ltx23(*, mdir, prompt, image, w, h, n, f, seed, **_):  # type: ignore[no-untyped-def]
+def _ltx23(*, mdir, prompt, image, w, h, n, f, s, c, seed, audio=None, **_):  # type: ignore[no-untyped-def]
+    if audio is not None:
+        from comfy_diffusion.pipelines.video.ltx.ltx23.ia2v import run
+        return run(models_dir=mdir, prompt=prompt, image=image, audio_path=audio, width=w, height=h, length=n, fps=f, cfg=c, seed=seed)
     if image is not None:
         from comfy_diffusion.pipelines.video.ltx.ltx23.i2v import run
-        result = run(models_dir=mdir, prompt=prompt, image=image, width=w, height=h, length=n, fps=f, seed=seed)
-    else:
-        from comfy_diffusion.pipelines.video.ltx.ltx23.t2v import run
-        result = run(models_dir=mdir, prompt=prompt, width=w, height=h, length=n, fps=f, seed=seed)
-    return result["frames"]
+        return run(models_dir=mdir, prompt=prompt, image=image, width=w, height=h, length=n, fps=f, seed=seed)
+    from comfy_diffusion.pipelines.video.ltx.ltx23.t2v import run
+    return run(models_dir=mdir, prompt=prompt, width=w, height=h, length=n, fps=f, seed=seed)
 
 
 def _wan21(*, mdir, prompt, image, w, h, n, f, s, c, seed, **_):  # type: ignore[no-untyped-def]

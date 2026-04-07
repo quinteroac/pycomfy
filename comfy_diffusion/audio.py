@@ -411,6 +411,45 @@ def trim_audio_duration(
     )
 
 
+def _load_audio_av(path: str, start_time: float, duration: "float | None") -> "tuple":
+    """Load audio via PyAV — used when torchaudio is unavailable or broken."""
+    import numpy as np
+    import torch
+    import av
+
+    container = av.open(path)
+    stream = container.streams.audio[0]
+    sample_rate: int = stream.sample_rate
+    channels: int = stream.channels
+
+    chunks = []
+    for frame in container.decode(stream):
+        arr = frame.to_ndarray()  # packed: [1, samples*channels] or planar: [channels, samples]
+        # Normalise packed interleaved formats to [channels, samples].
+        if arr.shape[0] == 1 and channels > 1:
+            arr = arr.reshape(channels, -1, order="F")  # interleaved → planar
+        chunks.append(arr)
+    container.close()
+
+    waveform = np.concatenate(chunks, axis=1)  # [C, N]
+
+    # Convert integer PCM to float32 [-1, 1].
+    if waveform.dtype == np.int16:
+        waveform = waveform.astype(np.float32) / 32768.0
+    elif waveform.dtype == np.int32:
+        waveform = waveform.astype(np.float32) / 2147483648.0
+    else:
+        waveform = waveform.astype(np.float32)
+
+    if start_time > 0.0 or duration is not None:
+        start_s = int(start_time * sample_rate)
+        waveform = waveform[:, start_s:]
+        if duration is not None:
+            waveform = waveform[:, : int(duration * sample_rate)]
+
+    return torch.from_numpy(waveform.copy()), sample_rate
+
+
 def load_audio(
     path: str | "Path",
     start_time: float = 0.0,
@@ -430,20 +469,21 @@ def load_audio(
     import math
     from pathlib import Path as _Path
 
-    import torchaudio
+    audio_path = str(_Path(path))
 
-    audio_path = _Path(path)
-    # Load full audio first to get sample_rate, then slice.
-    # torchaudio.info() is not available in torchaudio >=2.9 so we avoid it.
-    waveform, sample_rate = torchaudio.load(str(audio_path))
-
-    if start_time > 0.0 or duration is not None:
-        start_frame = max(0, math.floor(start_time * sample_rate))
-        if duration is not None:
-            end_frame = start_frame + max(0, math.ceil(duration * sample_rate))
-            waveform = waveform[:, start_frame:end_frame]
-        else:
-            waveform = waveform[:, start_frame:]
+    try:
+        import torchaudio
+        waveform, sample_rate = torchaudio.load(audio_path)
+        if start_time > 0.0 or duration is not None:
+            start_frame = max(0, math.floor(start_time * sample_rate))
+            if duration is not None:
+                end_frame = start_frame + max(0, math.ceil(duration * sample_rate))
+                waveform = waveform[:, start_frame:end_frame]
+            else:
+                waveform = waveform[:, start_frame:]
+    except Exception:
+        # torchaudio >=2.9 may require TorchCodec; fall back to PyAV.
+        waveform, sample_rate = _load_audio_av(audio_path, start_time, duration)
 
     # Shape: [C, N] → [1, C, N]
     waveform = waveform.unsqueeze(0)
