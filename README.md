@@ -24,6 +24,8 @@ This repo contains the core Python library plus a set of TypeScript application 
 |---------|----------|-------------|------|
 | `comfy_diffusion` | Python | Core inference library (this repo) | [docs/comfy_diffusion.md](docs/comfy_diffusion.md) |
 | `server/` | Python | FastAPI worker — HTTP interface to the core on `:5000` | [docs/server.md](docs/server.md) |
+| `cli/` | Python | Standalone binary CLI — `parallax install / mcp install / ms install` | [docs/parallax_cli.md](docs/parallax_cli.md) |
+| `mcp/` | Python | FastMCP server for Claude Desktop — registered via `parallax mcp install` | [docs/parallax_mcp.md](docs/parallax_mcp.md) |
 | `@parallax/ms` | TypeScript | Elysia gateway on `:3000`, proxies jobs to `server/` | [docs/parallax_ms.md](docs/parallax_ms.md) |
 | `@parallax/cli` | TypeScript | Bun CLI — `parallax generate`, `parallax edit`, … | [docs/parallax_cli.md](docs/parallax_cli.md) |
 | `@parallax/mcp` | TypeScript | MCP server for Claude — tools that call `@parallax/ms` | [docs/parallax_mcp.md](docs/parallax_mcp.md) |
@@ -37,6 +39,8 @@ parallax_cli / parallax_mcp  →  @parallax/ms (:3000)  →  server/FastAPI (:50
 ---
 
 ## Install the parallax CLI
+
+The `parallax` CLI is distributed as a single self-contained binary — no Python installation required on the target machine.
 
 **Linux / macOS (one command):**
 ```sh
@@ -57,6 +61,32 @@ Then open a new terminal and run:
 ```powershell
 parallax install
 ```
+
+### Full setup flow
+
+After the binary is installed, three installer subcommands bootstrap the complete stack in order:
+
+| Command | What it does |
+|---------|-------------|
+| `parallax install` | Creates `~/.parallax/env`, installs `comfy-diffusion` + torch via `uv`, and bootstraps the ComfyUI runtime. Pass `--cpu` for CPU-only environments. |
+| `parallax mcp install` | Registers the Parallax MCP server in Claude Desktop (`~/Library/Application Support/Claude/…` on macOS, `%APPDATA%\Claude\…` on Windows, `~/.config/claude/…` on Linux). Restart Claude Desktop to apply. |
+| `parallax ms install` | Registers the inference server as a systemd user service (Linux) or launchd agent (macOS) so it starts automatically on boot. Prints the service URL on success. |
+
+All three commands are **idempotent** — re-running them detects existing state and skips or updates gracefully. Add `--verbose` to any command to stream subprocess output in real time.
+
+The install base directory defaults to `~/.parallax/`. Override with `PARALLAX_HOME=/custom/path parallax install`.
+
+### Pre-built binaries
+
+Standalone binaries for all supported platforms are published as release assets on every [GitHub Release](https://github.com/quinteroac/comfy-diffusion/releases):
+
+| Platform | Asset |
+|----------|-------|
+| Linux x86_64 | `parallax-linux-x86_64` |
+| macOS (Apple Silicon + Intel) | `parallax-macos-universal` |
+| Windows x86_64 | `parallax-windows-x86_64.exe` |
+
+Each asset ships with a `.sha256` checksum file. The `install.sh` / `install.ps1` scripts above download and verify checksums automatically.
 
 ---
 
