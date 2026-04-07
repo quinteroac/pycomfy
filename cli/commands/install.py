@@ -14,13 +14,13 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
-import sys
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated, Any
 
 import typer
 
-_ENV_DIR = Path.home() / ".parallax" / "env"
+from cli.commands._common import ENV_DIR as _ENV_DIR
+
 _PACKAGE_CUDA = "comfy-diffusion[cuda]"
 _PACKAGE_CPU = "comfy-diffusion[cpu]"
 
@@ -33,7 +33,7 @@ _UV_INSTALLER_URL = "https://astral.sh/uv/install.sh"
 # ---------------------------------------------------------------------------
 
 
-def _find_uv() -> Optional[str]:
+def _find_uv() -> str | None:
     """Return the absolute path to the ``uv`` binary, or *None* if not found."""
     found = shutil.which("uv")
     if found:
@@ -87,7 +87,7 @@ def _ensure_uv(verbose: bool = False) -> str:
     return uv
 
 
-def _installed_version(env_dir: Path) -> Optional[str]:
+def _installed_version(env_dir: Path) -> str | None:
     """Return the installed ``comfy-diffusion`` version string, or *None*."""
     python = env_dir / "bin" / "python"
     if not python.exists():
@@ -117,11 +117,23 @@ def _run_step(
     verbose: bool,
 ) -> None:
     """Execute *cmd* and raise ``typer.Exit(1)`` on failure (AC05)."""
-    kwargs: dict = {"text": True}
+    kwargs: dict[str, Any] = {"text": True}
     if not verbose:
         kwargs["capture_output"] = True
 
-    result = subprocess.run(cmd, **kwargs)
+    if not verbose:
+        from rich.progress import Progress, SpinnerColumn, TextColumn
+
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            transient=True,
+        ) as progress:
+            progress.add_task(description=step_name, total=None)
+            result = subprocess.run(cmd, **kwargs)
+    else:
+        result = subprocess.run(cmd, **kwargs)
+
     if result.returncode != 0:
         typer.echo(f"\nError during step: {step_name}", err=True)
         if not verbose:

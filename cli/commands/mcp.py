@@ -16,12 +16,13 @@ import json
 import os
 import platform
 from pathlib import Path
+from typing import Annotated, Any
 
 import typer
 
-app = typer.Typer(name="mcp", help="Manage MCP server integration.", no_args_is_help=True)
+from cli.commands._common import ENV_DIR as _ENV_DIR
 
-_ENV_DIR = Path.home() / ".parallax" / "env"
+app = typer.Typer(name="mcp", help="Manage MCP server integration.", no_args_is_help=True)
 _MCP_SCRIPT_NAME = "parallax-mcp"
 
 
@@ -39,7 +40,8 @@ def _claude_config_path() -> Path:
     """Return the platform-appropriate Claude Desktop config file path (AC02)."""
     system = platform.system()
     if system == "Darwin":
-        return Path.home() / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json"
+        base = Path.home() / "Library" / "Application Support" / "Claude"
+        return base / "claude_desktop_config.json"
     if system == "Windows":
         appdata = os.environ.get("APPDATA", str(Path.home() / "AppData" / "Roaming"))
         return Path(appdata) / "Claude" / "claude_desktop_config.json"
@@ -47,17 +49,17 @@ def _claude_config_path() -> Path:
     return Path.home() / ".config" / "claude" / "claude_desktop_config.json"
 
 
-def _read_config(config_path: Path) -> dict:
+def _read_config(config_path: Path) -> dict[str, Any]:
     """Read and parse the Claude Desktop config JSON, or return {} if absent (AC04)."""
     if not config_path.exists():
         return {}
     try:
-        return json.loads(config_path.read_text(encoding="utf-8"))
+        return json.loads(config_path.read_text(encoding="utf-8"))  # type: ignore[no-any-return]
     except (json.JSONDecodeError, OSError):
         return {}
 
 
-def _write_config(config_path: Path, config: dict) -> None:
+def _write_config(config_path: Path, config: dict[str, Any]) -> None:
     """Write the config dict as JSON, creating parent directories as needed (AC04)."""
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(json.dumps(config, indent=2), encoding="utf-8")
@@ -69,7 +71,11 @@ def _write_config(config_path: Path, config: dict) -> None:
 
 
 @app.command("install")
-def install() -> None:
+def install(
+    verbose: Annotated[
+        bool, typer.Option("--verbose", help="Show verbose output.")
+    ] = False,
+) -> None:
     """Register the Parallax MCP server in Claude Desktop."""
     # AC01 — ensure parallax install has been run
     script = _mcp_script_path()
@@ -79,6 +85,8 @@ def install() -> None:
 
     # AC02 — locate Claude Desktop config
     config_path = _claude_config_path()
+    if verbose:
+        typer.echo(f"Claude Desktop config: {config_path}")
 
     # AC04 — read existing config (or start fresh)
     config = _read_config(config_path)
@@ -98,6 +106,8 @@ def install() -> None:
 
     # AC04 / AC05 — write back (only parallax-mcp key changed)
     _write_config(config_path, config)
+    if verbose:
+        typer.echo(f"Wrote config to {config_path}")
 
     # AC06
     typer.echo("MCP server registered. Restart Claude Desktop to apply.")

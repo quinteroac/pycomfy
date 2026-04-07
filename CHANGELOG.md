@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [000045] - 2026-04-07
+
+### Added
+- **PRD 001:** Allow a non-developer user to bootstrap the entire Parallax stack from a single CLI binary with no prior Python knowledge.
+- **PRD 001:** Provide clear progress feedback and actionable error messages for each install step.
+- **PRD 001:** Make installs idempotent — re-running any subcommand detects existing state and skips or updates gracefully.
+- **PRD 002:** Produce a single-file `parallax` executable per supported platform that requires no runtime dependencies.
+- **PRD 002:** Automate the build and publish process so every tagged release produces ready-to-download binaries with zero manual steps.
+- **PRD 002:** Keep binary size reasonable by excluding heavy inference deps (torch, transformers, comfy_diffusion) — the installer subcommands pull those at runtime via uv.
+- **PRD 003:** Reduce onboarding to a single command: `curl -fsSL https://raw.githubusercontent.com/quinteroac/comfy-diffusion/master/install.sh | sh`.
+- **PRD 003:** Handle platform/arch detection, download, checksum verification, and PATH setup automatically.
+- **PRD 003:** Provide clear, human-readable output at each step for a non-developer audience.
+
 ## [000044] - 2026-04-06
 
 ### Added

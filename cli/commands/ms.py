@@ -16,12 +16,13 @@ import platform
 import subprocess
 import textwrap
 from pathlib import Path
+from typing import Annotated
 
 import typer
 
-app = typer.Typer(name="ms", help="Manage inference server.", no_args_is_help=True)
+from cli.commands._common import ENV_DIR as _ENV_DIR
 
-_ENV_DIR = Path.home() / ".parallax" / "env"
+app = typer.Typer(name="ms", help="Manage inference server.", no_args_is_help=True)
 _SERVICE_NAME = "parallax-ms"
 _LAUNCHD_LABEL = "run.parallax.ms"
 
@@ -130,8 +131,39 @@ def _get_service_status_line(system: str) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _run_service_cmd(
+    cmd: list[str],
+    step_name: str,
+    verbose: bool,
+) -> subprocess.CompletedProcess:  # type: ignore[type-arg]
+    """Run a service manager command with optional spinner; raise Exit(1) on failure."""
+    if not verbose:
+        from rich.progress import Progress, SpinnerColumn, TextColumn
+
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            transient=True,
+        ) as progress:
+            progress.add_task(description=step_name, total=None)
+            result = subprocess.run(cmd, capture_output=True, text=True)
+    else:
+        result = subprocess.run(cmd, text=True)
+
+    if result.returncode != 0:
+        stderr = getattr(result, "stderr", "") or ""
+        stdout = getattr(result, "stdout", "") or ""
+        typer.echo(stderr.strip() or stdout.strip(), err=True)
+        raise typer.Exit(1)
+    return result
+
+
 @app.command("install")
-def install() -> None:
+def install(
+    verbose: Annotated[
+        bool, typer.Option("--verbose", help="Show full subprocess output.")
+    ] = False,
+) -> None:
     """Register the Parallax inference server as a system service."""
     # AC01 — ensure parallax install has been run first
     if not _env_installed():
@@ -151,16 +183,15 @@ def install() -> None:
 
         # AC02 + AC04 — write unit file
         _write_systemd_unit(python)
+        if verbose:
+            typer.echo(f"Wrote systemd unit to {unit_path}")
 
         # AC02 — enable and start via systemctl
-        result = subprocess.run(
+        _run_service_cmd(
             ["systemctl", "--user", "enable", "--now", _SERVICE_NAME],
-            capture_output=True,
-            text=True,
+            step_name="Enabling systemd service…",
+            verbose=verbose,
         )
-        if result.returncode != 0:
-            typer.echo(result.stderr.strip() or result.stdout.strip(), err=True)
-            raise typer.Exit(1)
 
     elif system == "Darwin":
         plist_path = _launchd_plist_path()
@@ -172,16 +203,15 @@ def install() -> None:
 
         # AC03 + AC04 — write plist file
         _write_launchd_plist(python)
+        if verbose:
+            typer.echo(f"Wrote launchd plist to {plist_path}")
 
         # AC03 — register via launchctl load
-        result = subprocess.run(
+        _run_service_cmd(
             ["launchctl", "load", str(plist_path)],
-            capture_output=True,
-            text=True,
+            step_name="Loading launchd service…",
+            verbose=verbose,
         )
-        if result.returncode != 0:
-            typer.echo(result.stderr.strip() or result.stdout.strip(), err=True)
-            raise typer.Exit(1)
 
     else:
         typer.echo(f"Unsupported platform: {system}", err=True)

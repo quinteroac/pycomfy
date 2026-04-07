@@ -7,7 +7,7 @@ $ErrorActionPreference = "Stop"
 
 $REPO         = "quinteroac/comfy-diffusion"
 $ASSET        = "parallax-windows-x86_64.exe"
-$INSTALL_DIR  = Join-Path $env:APPDATA "parallax\bin"
+$INSTALL_DIR  = if ($env:PARALLAX_INSTALL_DIR) { $env:PARALLAX_INSTALL_DIR } else { Join-Path $env:APPDATA "parallax\bin" }
 $INSTALL_PATH = Join-Path $INSTALL_DIR "parallax.exe"
 
 # ── version resolution (AC02) ─────────────────────────────────────────────
@@ -22,7 +22,7 @@ if ($env:PARALLAX_VERSION) {
     $Json = $Response.Content | ConvertFrom-Json
     $Version = $Json.tag_name
     if (-not $Version) {
-        Write-Host "Could not fetch latest release. Set PARALLAX_VERSION=vX.X.X to install a specific version."
+        Write-Host "[parallax] Could not fetch latest release. Set PARALLAX_VERSION=vX.X.X to install a specific version."
         exit 1
     }
     Write-Host "[parallax] Latest version: $Version"
@@ -45,8 +45,13 @@ Write-Host "[parallax] Downloading $ASSET..."
 
 # Ensure progress bar is visible even if the caller suppressed it
 $ProgressPreference = "Continue"
-Invoke-WebRequest -Uri $BinaryUrl   -OutFile $TmpBinary   -UseBasicParsing
-Invoke-WebRequest -Uri $ChecksumUrl -OutFile $TmpChecksum -UseBasicParsing
+try {
+    Invoke-WebRequest -Uri $BinaryUrl   -OutFile $TmpBinary   -UseBasicParsing
+    Invoke-WebRequest -Uri $ChecksumUrl -OutFile $TmpChecksum -UseBasicParsing
+} catch {
+    Write-Host "[parallax] Download failed: $_"
+    exit 1
+}
 
 # ── checksum verification (AC04) ──────────────────────────────────────────
 
@@ -57,7 +62,7 @@ $ActualHash   = (Get-FileHash -Path $TmpBinary -Algorithm SHA256).Hash.ToUpper()
 
 if ($ActualHash -ne $ExpectedHash) {
     Remove-Item -Path $TmpBinary -Force
-    Write-Host "Checksum verification failed. Aborting."
+    Write-Host "[parallax] Checksum verification failed. Aborting."
     exit 1
 }
 

@@ -48,6 +48,16 @@ Then run:
 parallax install
 ```
 
+**Windows (PowerShell, one command):**
+```powershell
+irm https://raw.githubusercontent.com/quinteroac/comfy-diffusion/master/install.ps1 | iex
+```
+
+Then open a new terminal and run:
+```powershell
+parallax install
+```
+
 ---
 
 ## Quick Start
