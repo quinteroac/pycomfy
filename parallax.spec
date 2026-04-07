@@ -17,6 +17,7 @@
 # This runs at spec-parse time (before Analysis), so the version constant is
 # embedded in the bundled source rather than looked up from an installed
 # package at runtime (comfy-diffusion is NOT bundled in the binary).
+import platform as _platform
 import tomllib as _tomllib
 import pathlib as _pathlib
 import textwrap as _textwrap
@@ -194,7 +195,7 @@ exe = EXE(
     console=True,
     disable_windowed_traceback=False,
     argv_emulation=False,
-    target_arch=None,
+    target_arch='universal2' if _platform.system() == 'Darwin' else None,
     codesign_identity=None,
     entitlements_file=None,
 )
