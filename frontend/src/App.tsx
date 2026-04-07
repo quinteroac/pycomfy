@@ -126,11 +126,21 @@ export function App() {
             const pct = Math.round((progress.pct ?? 0) * 100);
 
             if (progress.step === "done") {
+              const extMap: Record<string, string> = {
+                image: "png",
+                video: "mp4",
+                audio: "wav",
+              };
+              const ext = extMap[params.mediaType] ?? "bin";
+              const mediaUrl = `${__PARALLAX_API_URL__}/jobs/${jobId}/result`;
               updateAssistantBubble(assistantMsgId, {
                 content: "Generation complete ✓",
                 status: "complete",
                 progress: 100,
                 progressLabel: "100%",
+                mediaUrl,
+                mediaType: params.mediaType,
+                filename: `parallax-${jobId}.${ext}`,
               });
               es.close();
               setIsSubmitting(false);

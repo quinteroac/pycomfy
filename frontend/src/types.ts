@@ -84,4 +84,10 @@ export interface ChatMessage {
   progress?: number;
   progressLabel?: string;
   status: MessageStatus;
+  /** URL of the generated media (set when status becomes "complete"). */
+  mediaUrl?: string;
+  /** The media type of the generated output (set when status becomes "complete"). */
+  mediaType?: MediaType;
+  /** Suggested download filename with extension (set when status becomes "complete"). */
+  filename?: string;
 }

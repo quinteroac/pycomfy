@@ -64,3 +64,25 @@
 - `ChatBubble` renders a `data-testid="bubble-user"` or `data-testid="bubble-assistant"` wrapper. Progress row is `data-testid="progress-row"` (only visible when `status === "streaming"`).
 - SSE terminal events: `step="done"` → complete, `step="error"` → error. All other steps update the bubble with percentage progress.
 - `MockEventSource.instances` is an array; always read the last instance in tests after `waitFor`.
+
+## US-004 — Display generated media inline and allow download
+
+**Summary:** Implemented inline media rendering (image/video/audio) and a Download button in the assistant chat bubble. Added `GET /jobs/{job_id}/result` server endpoint to serve the output file. Extended `ChatMessage` with `mediaUrl`, `mediaType`, and `filename` fields. When SSE `step="done"` fires, the media URL is constructed and stored on the message; `ChatBubble` renders the appropriate element plus a download anchor.
+
+**Key Decisions:**
+- Added `mediaUrl`, `mediaType`, and `filename` directly to `ChatMessage` in `types.ts` so the bubble component stays purely presentational (receives everything it needs via props).
+- Media URL is constructed eagerly on `step="done"` without an additional fetch: `{apiUrl}/jobs/{jobId}/result`. This avoids an extra round-trip and matches the server pattern for all previously implemented endpoints.
+- Server endpoint `GET /jobs/{job_id}/result` uses FastAPI's `FileResponse` with `Content-Disposition: attachment` to enable browser downloads even from cross-origin requests where the `download` attribute alone would not suffice.
+- Added `mimetypes.guess_type` for automatic `Content-Type` inference from file extension.
+- Download anchor uses `data-testid="download-btn"` and `download={filename}` attribute; the extension is derived from `params.mediaType` at submit time (`.png` / `.mp4` / `.wav`).
+
+**Pitfalls Encountered:**
+- The `FileResponse` import must be added alongside the existing `StreamingResponse` import — easy to miss since the original gateway only used streaming responses.
+- `mimetypes` is a Python stdlib module but must be explicitly imported; it's not pulled in transitively.
+- Route order in FastAPI matters: the new `/jobs/{job_id}/result` route must be placed **before** `/jobs/create/image` (which uses a fixed path prefix) to avoid route-matching conflicts if both are under the same router — in this case there's no conflict, but placing it near the other `/jobs/{job_id}/...` routes keeps the file readable.
+
+**Useful Context for Future Agents:**
+- `ChatMessage.mediaUrl` is set to `{apiUrl}/jobs/{jobId}/result` on `step="done"`. The endpoint streams the file from `output_path` stored in the job result JSON.
+- `ChatBubble` renders media **outside** the `.bubble-content` div (in a sibling `.media-container` div) so the download button and media are visually separated from the text label.
+- Test pattern for AC04 (in-memory persistence): render once, complete one job, wait for re-enable, then submit again and assert `getAllByTestId("bubble-user").length === 2`.
+- `vi.spyOn(Storage.prototype, "setItem")` is the correct way to assert no `localStorage` writes in Vitest + happy-dom.

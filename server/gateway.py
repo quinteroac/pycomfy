@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import mimetypes
 import os
 import shutil
 import sys
@@ -11,7 +12,7 @@ from pathlib import Path
 from typing import AsyncGenerator
 
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 
 from server.jobs import JobData, PythonProgress
 from server.job_queue import get_queue
@@ -157,6 +158,38 @@ async def stream_job_progress(job_id: str) -> StreamingResponse:
             await asyncio.sleep(_SSE_POLL_S)
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@router.get("/jobs/{job_id}/result")
+def get_job_result_file(job_id: str) -> FileResponse:
+    async def _get() -> dict | None:
+        queue = await get_queue()
+        return await queue.get(job_id)
+
+    row = asyncio.run(_get())
+    if row is None:
+        raise HTTPException(status_code=404, detail="job not found")
+    if row["status"] != "completed":
+        raise HTTPException(status_code=409, detail="job not yet completed")
+
+    result: dict | None = None
+    if row.get("result"):
+        result = json.loads(row["result"])
+
+    if not result or not result.get("output_path"):
+        raise HTTPException(status_code=404, detail="no output file recorded")
+
+    output_path = result["output_path"]
+    if not Path(output_path).exists():
+        raise HTTPException(status_code=404, detail="output file not found on disk")
+
+    media_type, _ = mimetypes.guess_type(output_path)
+    return FileResponse(
+        path=output_path,
+        media_type=media_type or "application/octet-stream",
+        filename=Path(output_path).name,
+        headers={"Content-Disposition": f'attachment; filename="{Path(output_path).name}"'},
+    )
 
 
 @router.post("/jobs/create/image", response_model=JobResponse)
