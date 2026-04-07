@@ -1,12 +1,17 @@
 """``parallax frontend install`` — download and install the pre-built chat UI.
 
-Acceptance criteria implemented:
+Acceptance criteria implemented (US-001):
   AC01 — fetch latest release from GitHub; find asset ``parallax-frontend-{version}.tar.gz``
   AC02 — extract archive to ``~/.parallax/frontend/``, replacing any prior installation
   AC03 — write ``PARALLAX_FRONTEND_PATH=~/.parallax/frontend`` to ``~/.parallax/config.env``
   AC04 — print "Frontend installed at ~/.parallax/frontend" on success
   AC05 — network/404 errors → human-readable message + exit 1 + no partial installation left behind
   AC06 — re-running overwrites the existing installation cleanly
+
+Acceptance criteria implemented (US-002):
+  AC01 — ``--version`` accepts a semver string (e.g. ``1.2.3``)
+  AC02 — unknown version → print GitHub error + exit non-zero
+  AC03 — ``--version`` omitted → install latest release
 """
 
 from __future__ import annotations
@@ -18,7 +23,7 @@ import tempfile
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Optional
 
 import typer
 
@@ -29,6 +34,9 @@ app = typer.Typer(name="frontend", help="Manage the Parallax frontend.", no_args
 _GITHUB_REPO = "quinteroac/comfy-diffusion"
 _ASSET_PREFIX = "parallax-frontend-"
 _RELEASES_API_URL = f"https://api.github.com/repos/{_GITHUB_REPO}/releases/latest"
+_RELEASES_API_URL_BY_TAG = (
+    f"https://api.github.com/repos/{_GITHUB_REPO}/releases/tags/{{tag}}"
+)
 
 
 # ---------------------------------------------------------------------------
@@ -40,6 +48,25 @@ def _latest_release_info() -> dict:  # type: ignore[type-arg]
     """Fetch the latest release metadata from the GitHub Releases API."""
     req = urllib.request.Request(
         _RELEASES_API_URL,
+        headers={
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        },
+    )
+    with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310
+        return json.loads(resp.read())  # type: ignore[no-any-return]
+
+
+def _release_info_by_tag(version: str) -> dict:  # type: ignore[type-arg]
+    """Fetch release metadata for the given *version* tag from the GitHub Releases API.
+
+    The tag is tried first as ``v{version}`` (e.g. ``v1.2.3``) and falls back to
+    the bare version string if the caller already includes the prefix.
+    """
+    tag = version if version.startswith("v") else f"v{version}"
+    url = _RELEASES_API_URL_BY_TAG.format(tag=tag)
+    req = urllib.request.Request(
+        url,
         headers={
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",
@@ -101,17 +128,43 @@ def _write_config_env(frontend_dir: Path, config_path: Path) -> None:
 
 
 @app.command("install")
-def install() -> None:
-    """Download and install the latest pre-built frontend to ~/.parallax/frontend."""
+def install(
+    version: Annotated[
+        Optional[str],
+        typer.Option(
+            "--version",
+            "-v",
+            help="Semver version to install (e.g. 1.2.3). Defaults to the latest release.",
+        ),
+    ] = None,
+) -> None:
+    """Download and install the pre-built frontend to ~/.parallax/frontend.
+
+    Installs the latest release by default. Pass ``--version 1.2.3`` to pin a
+    specific release.
+    """
     frontend_dir = FRONTEND_DIR
     config_path = CONFIG_ENV_PATH
 
-    # AC01 — fetch release info
+    # Fetch release info — either latest or a specific tagged version (US-002 AC01/AC03)
     try:
-        release = _latest_release_info()
+        if version is not None:
+            release = _release_info_by_tag(version)
+        else:
+            release = _latest_release_info()
     except urllib.error.HTTPError as exc:
+        # US-002 AC02 — print the GitHub error body when present
+        error_body = ""
+        if exc.fp is not None:
+            try:
+                raw = exc.fp.read()
+                data = json.loads(raw)
+                error_body = data.get("message", "")
+            except Exception:
+                pass
+        detail = error_body or exc.reason
         typer.echo(
-            f"Error: failed to fetch release info (HTTP {exc.code}: {exc.reason}).",
+            f"Error: failed to fetch release info (HTTP {exc.code}: {detail}).",
             err=True,
         )
         raise typer.Exit(1)
