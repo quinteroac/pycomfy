@@ -515,7 +515,7 @@ wheels = [
 
 [[package]]
 name = "comfy-diffusion"
-version = "1.3.0"
+version = "1.3.2"
 source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
