@@ -30,7 +30,7 @@ case "$OS" in
     esac
     ;;
   Darwin)
-    ASSET="parallax-macos-universal"
+    ASSET="parallax-macos-arm64"
     ;;
   *)
     error "Unsupported OS: $OS. This installer supports Linux and macOS only."
