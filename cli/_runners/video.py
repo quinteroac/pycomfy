@@ -28,7 +28,11 @@ def _ltx2(*, mdir, prompt, image, w, h, n, f, s, c, seed, **_):  # type: ignore[
     return result["frames"]
 
 
-def _ltx23(*, mdir, prompt, image, w, h, n, f, seed, **_):  # type: ignore[no-untyped-def]
+def _ltx23(*, mdir, prompt, image, w, h, n, f, seed, audio=None, **_):  # type: ignore[no-untyped-def]
+    if audio is not None:
+        from comfy_diffusion.pipelines.video.ltx.ltx23.ia2v import run
+        result = run(models_dir=mdir, prompt=prompt, image=image, audio_path=audio, width=w, height=h, length=n, fps=f, seed=seed)
+        return result["frames"]
     if image is not None:
         from comfy_diffusion.pipelines.video.ltx.ltx23.i2v import run
         result = run(models_dir=mdir, prompt=prompt, image=image, width=w, height=h, length=n, fps=f, seed=seed)
