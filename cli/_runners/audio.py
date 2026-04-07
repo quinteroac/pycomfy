@@ -16,7 +16,7 @@ def default(model: str, key: str, fallback: object) -> object:
 
 
 def _ace_step(*, mdir, prompt, lyrics, dur, b, s, c, seed, **_):  # type: ignore[no-untyped-def]
-    from comfy_diffusion.pipelines.audio.ace_step.v1_5.checkpoint import run
+    from comfy_diffusion.pipelines.audio.ace_step.v1_5.split import run
     return run(models_dir=mdir, tags=prompt, lyrics=lyrics, duration=dur, bpm=b, seed=seed, steps=s, cfg=c)
 
 

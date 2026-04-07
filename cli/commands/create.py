@@ -117,8 +117,14 @@ def create_video(
         from PIL import Image as _PIL
         image_obj = _PIL.open(input).convert("RGB")
     try:
-        frames = video.RUNNERS[model](mdir=mdir, prompt=prompt, image=image_obj, audio=audio, w=w, h=h, n=n, f=f, s=s, c=c, seed=seed)
-        typer.echo(save_video_frames(frames, output, fps=float(f)))
+        result = video.RUNNERS[model](mdir=mdir, prompt=prompt, image=image_obj, audio=audio, w=w, h=h, n=n, f=f, s=s, c=c, seed=seed)
+        if isinstance(result, dict):
+            frames = result["frames"]
+            audio_out = result.get("audio")
+        else:
+            frames = result
+            audio_out = None
+        typer.echo(save_video_frames(frames, output, fps=float(f), audio=audio_out))
     except (typer.Exit, SystemExit):
         raise
     except Exception as exc:

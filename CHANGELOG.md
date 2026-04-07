@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [000046] - 2026-04-07
+
+### Added
+- Expose `ltx23/ia2v` through `parallax create video` via a new `--audio` flag.
+- Keep the command surface backwards-compatible (existing t2v and i2v invocations are unaffected).
+- Guard `--audio` so it is only accepted for `ltx23` (the only model that supports it).
+
 ## [000045] - 2026-04-07
 
 ### Added

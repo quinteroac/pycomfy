@@ -34,7 +34,12 @@ def save_image(images: list[Any], output: str) -> str:
     return str(out.resolve())
 
 
-def save_video_frames(frames: list[Any], output: str, fps: float = 24.0) -> str:
+def save_video_frames(
+    frames: list[Any],
+    output: str,
+    fps: float = 24.0,
+    audio: "dict[str, Any] | None" = None,
+) -> str:
     """Encode *frames* (list of PIL images) to an MP4 file at *output*.
 
     Uses PyAV when available; falls back to saving individual PNG frames in a
@@ -48,6 +53,9 @@ def save_video_frames(frames: list[Any], output: str, fps: float = 24.0) -> str:
         Destination MP4 file path.
     fps:
         Frame rate.
+    audio:
+        Optional ComfyUI AUDIO dict ``{"waveform": tensor, "sample_rate": int}``
+        to mux into the MP4.  Ignored when PyAV is not available.
 
     Returns
     -------
@@ -67,17 +75,39 @@ def save_video_frames(frames: list[Any], output: str, fps: float = 24.0) -> str:
         w, h = frames[0].size
         rate = Fraction(int(fps), 1) if fps == int(fps) else Fraction(round(fps * 1000), 1000)
         with av.open(str(out), "w") as container:
-            stream = container.add_stream("libx264", rate=rate, options={"crf": "18"})
-            stream.width = w
-            stream.height = h
-            stream.pix_fmt = "yuv420p"
+            vstream = container.add_stream("libx264", rate=rate, options={"crf": "18"})
+            vstream.width = w
+            vstream.height = h
+            vstream.pix_fmt = "yuv420p"
+
+            astream = None
+            if audio is not None:
+                import numpy as np
+                sample_rate: int = audio["sample_rate"]
+                waveform = audio["waveform"]  # [1, C, N] or [C, N]
+                if waveform.dim() == 3:
+                    waveform = waveform.squeeze(0)  # → [C, N]
+                astream = container.add_stream("aac", rate=sample_rate)
+
             for i, pil_img in enumerate(frames):
-                frame = av.VideoFrame.from_image(pil_img)
-                frame.pts = i
-                for packet in stream.encode(frame):
+                vframe = av.VideoFrame.from_image(pil_img)
+                vframe.pts = i
+                for packet in vstream.encode(vframe):
                     container.mux(packet)
-            for packet in stream.encode():
+            for packet in vstream.encode():
                 container.mux(packet)
+
+            if astream is not None:
+                pcm = waveform.cpu().numpy()  # [C, N] float32
+                # PyAV expects [C, N] float32 in fltp layout.
+                aframe = av.AudioFrame.from_ndarray(pcm, format="fltp", layout="stereo" if pcm.shape[0] == 2 else "mono")
+                aframe.sample_rate = sample_rate
+                aframe.pts = 0
+                for packet in astream.encode(aframe):
+                    container.mux(packet)
+                for packet in astream.encode():
+                    container.mux(packet)
+
         return str(out.resolve())
 
     except ImportError:
