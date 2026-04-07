@@ -26,6 +26,22 @@ export const VIDEO_PIPELINES: VideoPipeline[] = [
   "ia2v",
 ];
 
+/** Pipelines that require a reference input image. */
+export const IMAGE_REQUIRED_PIPELINES: ReadonlyArray<VideoPipeline> = [
+  "i2v",
+  "is2v",
+  "ia2v",
+];
+
+export function requiresInputImage(
+  params: Pick<GenerationParams, "mediaType" | "pipeline">
+): boolean {
+  return (
+    params.mediaType === "video" &&
+    (IMAGE_REQUIRED_PIPELINES as string[]).includes(params.pipeline)
+  );
+}
+
 export const PIPELINE_LABELS: Record<VideoPipeline, string> = {
   t2v: "Text-to-Video",
   i2v: "Image-to-Video",
