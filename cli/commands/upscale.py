@@ -16,6 +16,7 @@ from typing import Annotated, Optional
 import typer
 
 from cli._io import resolve_models_dir, save_image
+from cli.commands._common import ensure_env_on_path
 
 app = typer.Typer(help="Upscale an image using a super-resolution model.")
 
@@ -106,6 +107,7 @@ def upscale_image(
         typer.echo(f"Error: input file not found: {input}", err=True)
         raise typer.Exit(code=1)
 
+    ensure_env_on_path()
     mdir = resolve_models_dir(models_dir)
 
     try:

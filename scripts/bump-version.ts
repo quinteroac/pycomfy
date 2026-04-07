@@ -49,7 +49,7 @@ function gitRelease(nextVersion: string): void {
     throw new Error(`Tag already exists locally: ${tag}`);
   }
 
-  run("git add pyproject.toml package.json");
+  run("git add pyproject.toml package.json cli/_version.py");
   run(`git commit -m "chore(release): ${tag}"`);
   run(`git tag -a ${tag} -m "Release ${tag}"`);
   run(`git push origin ${branch}`);
@@ -114,9 +114,15 @@ function main(): void {
   const pyprojectContent = readFileSync(pyprojectPath, "utf8");
   const packageJsonPath = resolve(process.cwd(), "package.json");
   const packageJsonContent = readFileSync(packageJsonPath, "utf8");
+  const versionPyPath = resolve(process.cwd(), "cli", "_version.py");
+  const versionPyContent = readFileSync(versionPyPath, "utf8");
 
   const { updated, previous, next } = updatePyprojectVersion(pyprojectContent, arg);
   const { updated: updatedPackageJson } = updatePackageJsonVersion(packageJsonContent, next);
+  const updatedVersionPy = versionPyContent.replace(
+    /^(__version__\s*=\s*["'])([^"']+)(["'])$/m,
+    `$1${next}$3`,
+  );
 
   if (previous === next) {
     console.log(`Version already ${next} (no changes).`);
@@ -125,6 +131,7 @@ function main(): void {
 
   writeFileSync(pyprojectPath, updated, "utf8");
   writeFileSync(packageJsonPath, updatedPackageJson, "utf8");
+  writeFileSync(versionPyPath, updatedVersionPy, "utf8");
   console.log(`Bumped version: ${previous} -> ${next}`);
 
   gitRelease(next);

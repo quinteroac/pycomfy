@@ -8,6 +8,7 @@ import typer
 
 from cli._io import resolve_models_dir, save_audio, save_image, save_video_frames
 from cli._runners import audio, image, video
+from cli.commands._common import ensure_env_on_path
 
 app = typer.Typer(help="Generate media from a text prompt.")
 
@@ -37,6 +38,7 @@ def create_image(
                         "height": height, "steps": steps, "cfg": cfg, "seed": seed,
                         "output": output, "models_dir": models_dir})
         return
+    ensure_env_on_path()
     mdir = resolve_models_dir(models_dir)
     w = width  or int(image.default(model, "width",  1024))
     h = height or int(image.default(model, "height", 1024))
@@ -84,6 +86,7 @@ def create_video(
         if not _Path(input).is_file():
             typer.echo(f"Error: input file not found: {input}", err=True)
             raise typer.Exit(code=1)
+    ensure_env_on_path()
     mdir = resolve_models_dir(models_dir)
     w = width  or int(video.default(model, "width",  832))
     h = height or int(video.default(model, "height", 480))
@@ -129,6 +132,7 @@ def create_audio(
                   args={"prompt": prompt, "length": length, "steps": steps, "cfg": cfg, "bpm": bpm,
                         "lyrics": lyrics, "seed": seed, "output": output, "models_dir": models_dir})
         return
+    ensure_env_on_path()
     mdir = resolve_models_dir(models_dir)
     dur = length if length is not None else float(audio.default(model, "length", 120))
     s   = steps  or int(audio.default(model, "steps", 8))

@@ -8,6 +8,7 @@ import typer
 
 from cli._io import resolve_models_dir, save_image
 from cli._runners import edit_image
+from cli.commands._common import ensure_env_on_path
 
 app = typer.Typer(help="Edit existing media using a model and prompt.")
 
@@ -53,6 +54,7 @@ def edit_image_cmd(
         if not _Path(subject_image).is_file():
             typer.echo(f"Error: subject image not found: {subject_image}", err=True)
             raise typer.Exit(code=1)
+    ensure_env_on_path()
     mdir = resolve_models_dir(models_dir)
     w = width  or int(edit_image.default(model, "width",  1024))
     h = height or int(edit_image.default(model, "height", 1024))

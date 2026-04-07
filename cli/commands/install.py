@@ -21,8 +21,8 @@ import typer
 
 from cli.commands._common import ENV_DIR as _ENV_DIR
 
-_PACKAGE_CUDA = "comfy-diffusion[cuda]"
-_PACKAGE_CPU = "comfy-diffusion[cpu]"
+_PACKAGE_CUDA = "comfy-diffusion[cuda,comfyui]"
+_PACKAGE_CPU = "comfy-diffusion[cpu,comfyui]"
 
 # UV installer URL (official astral.sh installer — stdlib urllib.request only)
 _UV_INSTALLER_URL = "https://astral.sh/uv/install.sh"
@@ -206,20 +206,27 @@ def install(
         typer.echo("Re-run with --verbose for full output.", err=True)
         raise typer.Exit(1)
 
-    # AC02 — create dedicated virtual environment
-    _run_step(
-        [uv, "venv", str(env_dir)],
-        step_name="uv venv",
-        verbose=verbose,
-    )
-
-    # AC02 — install comfy-diffusion into the new venv
     package = _PACKAGE_CPU if cpu else _PACKAGE_CUDA
-    _run_step(
-        [uv, "pip", "install", package, "--python", str(env_dir / "bin" / "python")],
-        step_name=f"install {package}",
-        verbose=verbose,
-    )
+
+    if upgrade and env_dir.exists():
+        # Upgrade path: just pip install --upgrade, keep the existing venv
+        _run_step(
+            [uv, "pip", "install", "--upgrade", package, "--python", str(env_dir / "bin" / "python")],
+            step_name=f"upgrade {package}",
+            verbose=verbose,
+        )
+    else:
+        # Fresh install: create venv then install
+        _run_step(
+            [uv, "venv", str(env_dir)],
+            step_name="uv venv",
+            verbose=verbose,
+        )
+        _run_step(
+            [uv, "pip", "install", package, "--python", str(env_dir / "bin" / "python")],
+            step_name=f"install {package}",
+            verbose=verbose,
+        )
 
     # AC03 — bootstrap ComfyUI engine
     _bootstrap_comfyui(env_dir, verbose=verbose)
