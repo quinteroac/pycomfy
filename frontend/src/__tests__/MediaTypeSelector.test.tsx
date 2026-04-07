@@ -18,7 +18,7 @@ describe("MediaTypeSelector — US-001", () => {
 
   it("AC01: the group is labelled for accessibility", () => {
     setup();
-    expect(screen.getByRole("group", { name: /media type/i })).toBeInTheDocument();
+    expect(screen.getByRole("radiogroup", { name: /media type/i })).toBeInTheDocument();
   });
 
   it("AC01: selected type has aria-checked=true, others false", () => {

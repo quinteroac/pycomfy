@@ -14,7 +14,7 @@ const MEDIA_TYPES: { value: MediaType; label: string; icon: string }[] = [
 
 export function MediaTypeSelector({ value, onChange }: Props) {
   return (
-    <div className={styles.root} role="group" aria-label="Media type">
+    <div className={styles.root} role="radiogroup" aria-label="Media type">
       {MEDIA_TYPES.map(({ value: type, label, icon }) => (
         <button
           key={type}

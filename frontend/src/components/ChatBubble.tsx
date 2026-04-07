@@ -33,6 +33,11 @@ export function ChatBubble({ message }: ChatBubbleProps) {
                 <div
                   className={styles["progress-bar-fill"]}
                   style={{ width: `${progress}%` }}
+                  role="progressbar"
+                  aria-valuenow={progress}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-label="Generation progress"
                   data-testid="progress-bar"
                 />
               </div>

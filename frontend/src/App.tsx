@@ -216,7 +216,7 @@ export function App() {
             </p>
           </div>
         ) : (
-          <div className="chat-messages" data-testid="chat-messages">
+          <div className="chat-messages" data-testid="chat-messages" role="log" aria-label="Chat messages">
             {messages.map((msg) => (
               <ChatBubble key={msg.id} message={msg} />
             ))}

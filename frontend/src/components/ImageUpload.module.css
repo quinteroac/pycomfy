@@ -24,8 +24,8 @@
 }
 
 .uploadBtn:hover {
-  border-color: rgba(139, 92, 246, 0.6);
-  background: rgba(139, 92, 246, 0.08);
+  border-color: rgba(var(--accent-rgb), 0.6);
+  background: rgba(var(--accent-rgb), 0.08);
   color: rgba(255, 255, 255, 0.85);
 }
 
@@ -61,8 +61,12 @@
 }
 
 .removeBtn {
+  /* Visual size: 20×20; hit area expanded to ~44×44 via padding + negative margin */
   width: 20px;
   height: 20px;
+  padding: 12px;
+  margin: -12px;
+  box-sizing: content-box;
   border-radius: 50%;
   border: none;
   background: rgba(255, 255, 255, 0.15);

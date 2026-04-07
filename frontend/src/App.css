@@ -5,8 +5,10 @@
   --border: rgba(255, 255, 255, 0.08);
   --text: rgba(255, 255, 255, 0.9);
   --text-muted: rgba(255, 255, 255, 0.45);
-  --accent: #8b5cf6;
-  --accent-glow: rgba(139, 92, 246, 0.3);
+  /* #7c3aed gives ~5.25:1 contrast with white — passes WCAG AA (was #8b5cf6 at ~4.05:1) */
+  --accent: #7c3aed;
+  --accent-rgb: 124, 58, 237;
+  --accent-glow: rgba(124, 58, 237, 0.3);
   --radius: 12px;
 }
 
@@ -159,8 +161,8 @@ body {
 
 .composer-send {
   flex-shrink: 0;
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   border-radius: 10px;
   background: var(--accent);
   border: none;
@@ -175,7 +177,7 @@ body {
 }
 
 .composer-send:hover {
-  background: #7c3aed;
+  background: #6d28d9;
 }
 
 .composer-send:active {
@@ -183,7 +185,7 @@ body {
 }
 
 .composer-send:disabled {
-  background: rgba(139, 92, 246, 0.3);
+  background: rgba(var(--accent-rgb), 0.3);
   cursor: not-allowed;
   transform: none;
 }
