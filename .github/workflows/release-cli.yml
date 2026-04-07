@@ -1,0 +1,159 @@
+name: Release CLI Binaries
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+permissions:
+  contents: write   # required to create/update GitHub Releases
+
+jobs:
+  # ──────────────────────────────────────────────
+  # Build — Linux (x86_64)
+  # ──────────────────────────────────────────────
+  linux:
+    name: Build (Linux x86_64)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install CLI build dependencies
+        run: uv sync --group cli-build --no-group dev
+
+      - name: Build binary
+        run: uv run pyinstaller parallax.spec
+
+      - name: Rename binary
+        run: mv dist/parallax dist/parallax-linux-x86_64
+
+      - name: Generate SHA256 checksum
+        run: sha256sum dist/parallax-linux-x86_64 > dist/parallax-linux-x86_64.sha256
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-artifacts
+          path: |
+            dist/parallax-linux-x86_64
+            dist/parallax-linux-x86_64.sha256
+
+  # ──────────────────────────────────────────────
+  # Build — macOS (universal2)
+  # ──────────────────────────────────────────────
+  macos:
+    name: Build (macOS universal2)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install CLI build dependencies
+        run: uv sync --group cli-build --no-group dev
+
+      - name: Build universal2 binary
+        run: uv run pyinstaller parallax.spec --target-arch universal2
+
+      - name: Rename binary
+        run: mv dist/parallax dist/parallax-macos-universal
+
+      - name: Generate SHA256 checksum
+        run: shasum -a 256 dist/parallax-macos-universal > dist/parallax-macos-universal.sha256
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-artifacts
+          path: |
+            dist/parallax-macos-universal
+            dist/parallax-macos-universal.sha256
+
+  # ──────────────────────────────────────────────
+  # Build — Windows (x86_64)
+  # ──────────────────────────────────────────────
+  windows:
+    name: Build (Windows x86_64)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install CLI build dependencies
+        run: uv sync --group cli-build --no-group dev
+
+      - name: Build binary
+        run: uv run pyinstaller parallax.spec
+
+      - name: Rename binary
+        run: mv dist/parallax.exe dist/parallax-windows-x86_64.exe
+
+      - name: Generate SHA256 checksum
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash dist/parallax-windows-x86_64.exe -Algorithm SHA256).Hash.ToLower()
+          "$hash  parallax-windows-x86_64.exe" | Out-File -Encoding ascii dist/parallax-windows-x86_64.exe.sha256
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-artifacts
+          path: |
+            dist/parallax-windows-x86_64.exe
+            dist/parallax-windows-x86_64.exe.sha256
+
+  # ──────────────────────────────────────────────
+  # Release — publish all assets to GitHub Releases
+  # ──────────────────────────────────────────────
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [linux, macos, windows]
+    steps:
+      - name: Download Linux artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-artifacts
+          path: dist/
+
+      - name: Download macOS artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-artifacts
+          path: dist/
+
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-artifacts
+          path: dist/
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/parallax-linux-x86_64
+            dist/parallax-linux-x86_64.sha256
+            dist/parallax-macos-universal
+            dist/parallax-macos-universal.sha256
+            dist/parallax-windows-x86_64.exe
+            dist/parallax-windows-x86_64.exe.sha256
