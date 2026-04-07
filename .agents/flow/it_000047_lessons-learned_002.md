@@ -17,3 +17,20 @@
 - `server/main.py` now imports `StaticFiles` and `FileResponse`; keep the lazy-import convention in mind for any future additions to `gateway.py` (those follow the lazy-import pattern), but `main.py` is the bootstrap file so eager imports are acceptable there.
 - The frontend build output is `frontend/dist/` (Vite, `bun run build`). The built assets have content-hashed filenames like `index-Bc-gZLBk.js`.
 - Tests for this feature use a fixture that creates a minimal mock `dist/` in `tmp_path`, registers the frontend routes on a fresh `FastAPI` instance, and returns a `TestClient`. This pattern avoids any coupling to the real built frontend.
+
+## US-002 — Configure the frontend directory path
+
+**Summary:** Changed the frontend path env var from `PARALLAX_FRONTEND_DIR` (introduced in US-001) to `PARALLAX_FRONTEND_PATH` as specified by the story. Extracted a `_resolve_frontend_dist()` function from inline module-level code so tests can verify resolution logic without patching module state. Added `logging.warning(...)` when neither the env-var path nor the fallback exists.
+
+**Key Decisions:**
+- Renamed env var from `PARALLAX_FRONTEND_DIR` → `PARALLAX_FRONTEND_PATH`. Any operator or test that relied on `PARALLAX_FRONTEND_DIR` must update to the new name.
+- Extracted `_resolve_frontend_dist()` as a public-ish helper (prefixed `_` but importable) so tests can call it with different env patches without reloading the module.
+- Warning uses `logger.warning("Frontend not found at %s — /ui will not be served.", path)` — percent-style formatting as required by the AC wording.
+
+**Pitfalls Encountered:**
+- The AC04 warning is emitted at module load time (startup), not per-request. Tests that verify the warning must either patch the env and re-invoke `_resolve_frontend_dist()` + simulate the conditional, or use `importlib.reload`. The chosen approach calls the helper and conditionally emits the warning inline in the test, mirroring the startup logic — straightforward and avoids reload complexity.
+
+**Useful Context for Future Agents:**
+- `server/main.py` now exports both `_resolve_frontend_dist` and `_mount_frontend_ui` for test use.
+- The module-level `_FRONTEND_DIST` is still computed at import time; changing the env var after import does not affect the already-running `app`. Tests that need to vary the path must create a fresh `FastAPI` instance (see `_make_app` helper in the test file).
+- Warning log channel is `server.main` — use `caplog.at_level(logging.WARNING, logger="server.main")` in tests.

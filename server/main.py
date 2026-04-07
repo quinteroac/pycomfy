@@ -1,6 +1,7 @@
 """FastAPI application entry point — attaches CORS middleware and mounts gateway routes."""
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 
@@ -10,6 +11,8 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from server.gateway import router
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="comfy-diffusion server")
 
@@ -24,9 +27,13 @@ app.add_middleware(
 
 app.include_router(router)
 
-_FRONTEND_DIST = Path(os.environ.get("PARALLAX_FRONTEND_DIR", "")).expanduser() or (
-    Path(__file__).parent.parent / "frontend" / "dist"
-)
+
+def _resolve_frontend_dist() -> Path:
+    """Return the frontend dist path from env or repo-relative default."""
+    env_val = os.environ.get("PARALLAX_FRONTEND_PATH", "")
+    if env_val:
+        return Path(env_val).expanduser()
+    return Path(__file__).parent.parent / "frontend" / "dist"
 
 
 def _mount_frontend_ui(target_app: FastAPI, dist_dir: Path) -> None:
@@ -39,5 +46,9 @@ def _mount_frontend_ui(target_app: FastAPI, dist_dir: Path) -> None:
     target_app.mount("/ui", StaticFiles(directory=dist_dir, html=True), name="frontend")
 
 
+_FRONTEND_DIST = _resolve_frontend_dist()
+
 if _FRONTEND_DIST.is_dir():
     _mount_frontend_ui(app, _FRONTEND_DIST)
+else:
+    logger.warning("Frontend not found at %s — /ui will not be served.", _FRONTEND_DIST)
