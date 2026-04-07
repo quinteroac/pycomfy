@@ -16,8 +16,17 @@ def _get_base_dir() -> Path:
     return Path.home() / ".parallax"
 
 
+#: Parallax base directory (``~/.parallax`` by default).
+BASE_DIR: Path = _get_base_dir()
+
 #: Root env directory.  Override by setting ``PARALLAX_HOME`` in your environment.
-ENV_DIR: Path = _get_base_dir() / "env"
+ENV_DIR: Path = BASE_DIR / "env"
+
+#: Frontend installation directory.
+FRONTEND_DIR: Path = BASE_DIR / "frontend"
+
+#: Config env file path — shell-style ``KEY=VALUE`` pairs for the Parallax stack.
+CONFIG_ENV_PATH: Path = BASE_DIR / "config.env"
 
 
 def ensure_env_on_path() -> None:
