@@ -38,3 +38,20 @@
 - `config.env` is a shell-style `KEY=VALUE` file written at `~/.parallax/config.env`. It stores persistent runtime configuration like `PARALLAX_FRONTEND_PATH`. Any command that needs to persist a path should use `_write_config_env()` (or a similar upsert approach on this file).
 - When testing a Typer sub-app in isolation, always wrap it in a parent app (`_cli.add_typer(sub_app, name="sub")`) and invoke with `["sub", "cmd"]` to ensure correct subgroup routing.
 - The GitHub repo is `quinteroac/comfy-diffusion` — used in `_GITHUB_REPO` for the Releases API URL.
+
+## US-003 — Check installed frontend version
+
+**Summary:** Added a `version` sub-command to the `frontend` Typer app. It reads `~/.parallax/frontend/version.txt` and prints its content (stripped). When the file is absent (whether the directory doesn't exist or just the file is missing), it prints a friendly "not installed" message with the install command.
+
+**Key Decisions:**
+- The command is registered as `@app.command("version")` on the existing `frontend` Typer app — no new file or sub-app needed.
+- Uses `FRONTEND_DIR / "version.txt"` path (derived from `_common.py` constant) — consistent with the install command writing there.
+- Returns exit code 0 in the "not installed" case; this is informational, not an error condition.
+
+**Pitfalls Encountered:**
+- None — straightforward read-and-print pattern. The `FRONTEND_DIR` patch in tests works cleanly since the module-level constant is imported by reference.
+
+**Useful Context for Future Agents:**
+- `FRONTEND_DIR` is `~/.parallax/frontend` (from `cli/commands/_common.py`). The `version.txt` file at that path is the canonical source of the installed version.
+- Tests patch `cli.commands.frontend.FRONTEND_DIR` directly with a `tmp_path` fixture to avoid touching the real filesystem.
+- The Typer sub-app wrapping pattern (`_cli.add_typer(app, name="frontend")`) is required for correct routing — see US-001 lessons learned for details.

@@ -1,4 +1,4 @@
-"""``parallax frontend install`` — download and install the pre-built chat UI.
+"""``parallax frontend`` — manage the pre-built chat UI.
 
 Acceptance criteria implemented (US-001):
   AC01 — fetch latest release from GitHub; find asset ``parallax-frontend-{version}.tar.gz``
@@ -12,6 +12,10 @@ Acceptance criteria implemented (US-002):
   AC01 — ``--version`` accepts a semver string (e.g. ``1.2.3``)
   AC02 — unknown version → print GitHub error + exit non-zero
   AC03 — ``--version`` omitted → install latest release
+
+Acceptance criteria implemented (US-003):
+  AC01 — ``parallax frontend version`` prints version from ``~/.parallax/frontend/version.txt``
+  AC02 — if no frontend installed, prints a helpful message
 """
 
 from __future__ import annotations
@@ -215,3 +219,16 @@ def install(
 
     # AC04 — success
     typer.echo(f"Frontend installed at {frontend_dir}")
+
+
+@app.command("version")
+def version() -> None:
+    """Print the installed frontend version.
+
+    Reads the version string from ``~/.parallax/frontend/version.txt``.
+    """
+    version_file = FRONTEND_DIR / "version.txt"
+    if not version_file.exists():
+        typer.echo("Frontend not installed. Run `parallax frontend install` to install.")
+        return
+    typer.echo(version_file.read_text(encoding="utf-8").strip())
