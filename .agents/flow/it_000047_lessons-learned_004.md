@@ -51,3 +51,29 @@
 - `:root` in `App.css` no longer has `--accent-glow`. Do not re-introduce it. The focus affordance pattern for this UI is `border-color: rgba(var(--accent-rgb), 0.6)` only — no box-shadow glow.
 - ParameterPanel field labels are intentionally plain-cased and at 50% opacity (`rgba(255,255,255,0.5)`) to stay recessive relative to the active MediaTypeSelector pill and the textarea.
 - `AC03` tests in `DistillUS002.test.tsx` assert the absence of `◈` and `.composer-divider` — if either is accidentally reintroduced, these tests will fail.
+
+## US-003 — Harden the interface against edge cases
+
+**Summary:** Implemented five resilience improvements to the chat UI: long-prompt wrapping (AC01), 30-second SSE inactivity timeout (AC02), testable empty-state placeholder (AC03), keyboard-focusable controls with visible focus indicators (AC04), and full server error message surfacing (AC05).
+
+**Key Decisions:**
+
+- **SSE timeout via captured timer ID**: The 30s timeout is implemented with a `sseTimeoutId` variable local to the EventSource setup closure. `armSseTimeout()` clears any existing timer and sets a new one; it is called once when the EventSource is created and again on every `onmessage` event (resetting the window). `clearSseTimeout()` is called on `done`, `error`, and `onerror` to cancel cleanly.
+- **`"timeout"` added to `MessageStatus`**: Rather than reusing `"connection-lost"`, a distinct `"timeout"` status makes it easier to style and test independently. Both use the same amber warning colour in `ChatBubble.module.css`.
+- **Server error body surfacing**: Changed the fetch error path to read `res.text()` and append the body to the error message. The `.catch(() => "")` guard ensures a failed body read doesn't cascade.
+- **`data-testid="chat-empty"` for AC03**: Added to the existing empty-state div to enable reliable assertions.
+- **`focus-visible` outline on textarea**: Added `.composer-textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }` after the `:focus` rule. Higher specificity of `:focus-visible` overrides `outline: none` for keyboard navigation only.
+
+**Pitfalls Encountered:**
+
+- **`tabIndex` in JSDOM**: Native `<button>` and `<textarea>` elements return `tabIndex === -1` in JSDOM without an explicit attribute, even though they are natively focusable in real browsers. Use `element.focus()` + `expect(document.activeElement).toBe(element)` instead.
+- **setTimeout spy must pass through non-30s calls**: When mocking `setTimeout` to capture the 30s SSE timeout callback, all other delays must be forwarded to the original `setTimeout` to avoid breaking `userEvent` internals.
+- **`clearTimeout` spy for fake timer ID**: When returning a fake timer ID from the mocked `setTimeout`, the corresponding `clearTimeout` spy must no-op for that fake ID to avoid passing an invalid ID to the real `clearTimeout`.
+
+**Useful Context for Future Agents:**
+
+- `MessageStatus` in `types.ts` now includes `"timeout"`. Style it in `ChatBubble.module.css` via `.status-timeout .bubble-content`.
+- The `armSseTimeout` / `clearSseTimeout` pattern lives entirely within the `handleSubmit` closure — no separate ref in component scope.
+- The `.composer-textarea:focus-visible` rule in `App.css` sits after the `:focus` rule; do not reorder.
+- `data-testid="chat-empty"` is on the empty-state wrapper in `App.tsx` (conditionally rendered — absent when messages exist).
+- All 119 frontend tests pass; TypeScript compiles clean (`bun run lint`).

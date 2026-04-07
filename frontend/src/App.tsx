@@ -101,8 +101,11 @@ export function App() {
       method: "POST",
       body: formData,
     })
-      .then((res) => {
-        if (!res.ok) throw new Error(`Server error ${res.status}`);
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = await res.text().catch(() => "");
+          throw new Error(`Server error ${res.status}${body ? `: ${body}` : ""}`);
+        }
         return res.json();
       })
       .then((data: { job_id: string }) => {
@@ -116,7 +119,29 @@ export function App() {
         );
         esRef.current = es;
 
+        let sseTimeoutId: ReturnType<typeof setTimeout> | null = null;
+        const clearSseTimeout = () => {
+          if (sseTimeoutId !== null) {
+            clearTimeout(sseTimeoutId);
+            sseTimeoutId = null;
+          }
+        };
+        const armSseTimeout = () => {
+          clearSseTimeout();
+          sseTimeoutId = setTimeout(() => {
+            updateAssistantBubble(assistantMsgId, {
+              content:
+                "No response from server for 30 seconds — generation may have stalled.",
+              status: "timeout",
+            });
+            es.close();
+            setIsSubmitting(false);
+          }, 30_000);
+        };
+        armSseTimeout();
+
         es.onmessage = (event) => {
+          armSseTimeout();
           try {
             const progress = JSON.parse(event.data) as {
               step: string;
@@ -126,6 +151,7 @@ export function App() {
             const pct = Math.round((progress.pct ?? 0) * 100);
 
             if (progress.step === "done") {
+              clearSseTimeout();
               const extMap: Record<string, string> = {
                 image: "png",
                 video: "mp4",
@@ -145,6 +171,7 @@ export function App() {
               es.close();
               setIsSubmitting(false);
             } else if (progress.step === "error") {
+              clearSseTimeout();
               updateAssistantBubble(assistantMsgId, {
                 content: progress.error ?? "Generation failed.",
                 status: "error",
@@ -165,6 +192,7 @@ export function App() {
         };
 
         es.onerror = () => {
+          clearSseTimeout();
           updateAssistantBubble(assistantMsgId, {
             content: "Connection lost — check job status.",
             status: "connection-lost",
@@ -208,7 +236,7 @@ export function App() {
 
       <main className="chat-area">
         {messages.length === 0 ? (
-          <div className="chat-empty">
+          <div className="chat-empty" data-testid="chat-empty">
             <p className="chat-empty-hint">
               Type a prompt and press Generate to begin.
             </p>

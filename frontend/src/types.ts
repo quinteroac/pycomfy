@@ -74,7 +74,8 @@ export type MessageStatus =
   | "streaming"
   | "complete"
   | "error"
-  | "connection-lost";
+  | "connection-lost"
+  | "timeout";
 
 export interface ChatMessage {
   id: string;

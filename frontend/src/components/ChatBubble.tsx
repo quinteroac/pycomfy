@@ -16,6 +16,7 @@ export function ChatBubble({ message }: ChatBubbleProps) {
     isAssistant ? styles["bubble-assistant"] : styles["bubble-user"],
     status === "error" ? styles["status-error"] : "",
     status === "connection-lost" ? styles["status-connection-lost"] : "",
+    status === "timeout" ? styles["status-timeout"] : "",
   ]
     .filter(Boolean)
     .join(" ");
