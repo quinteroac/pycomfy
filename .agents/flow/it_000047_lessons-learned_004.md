@@ -77,3 +77,31 @@
 - The `.composer-textarea:focus-visible` rule in `App.css` sits after the `:focus` rule; do not reorder.
 - `data-testid="chat-empty"` is on the empty-state wrapper in `App.tsx` (conditionally rendered — absent when messages exist).
 - All 119 frontend tests pass; TypeScript compiles clean (`bun run lint`).
+
+## US-004 — Apply final polish and micro-interactions
+
+**Summary:** Implemented CSS micro-animations (bubble entrance, progress pulse, media reveal) with `prefers-reduced-motion` support, plus several CSS polish fixes (consistent transition durations, overflow clipping, `--surface-3` token, improved `download-btn` hover, correct `@media` cascade ordering). Added 21 tests covering all four acceptance criteria by reading CSS files directly with Node.js `fs` in the vitest runtime.
+
+**Key Decisions:**
+
+- **`@media (prefers-reduced-motion: reduce)` must be last in the CSS file.** CSS cascade order matters: if the main `.bubble { animation: bubbleIn }` rule comes after the media query override in source order, the main rule wins for everyone, defeating the purpose. Placing the `@media` block at the very end of the CSS file ensures it overrides the animation declarations for reduced-motion users.
+- **`@keyframes` placement doesn't matter for cascade**, but the `@media` override definitely does. Keyframes can stay near the top; only the overriding `@media` block must come last.
+- **Node.js `fs` in vitest test files works at runtime** even without `@types/node`. Vitest runs in Node.js (even with `happy-dom` environment), so `fs`, `url`, and `path` are available. The only issue is TypeScript types — solved by adding a minimal `__tests__/node-types.d.ts` with hand-written declarations.
+- **Vite `?raw` import did not work** in this project's vitest setup (CSS module plugin intercepts before `?raw` takes effect, returning an object instead of a string). Use `readFileSync` + `fileURLToPath(import.meta.url)` instead.
+- **`--surface-3` CSS token** was added to `:root` in `App.css` to give the `download-btn` hover a visible background change.
+- **Spinner** (`@keyframes spin`) was also added to the `prefers-reduced-motion: reduce` block.
+
+**Pitfalls Encountered:**
+
+- The `@media (prefers-reduced-motion: reduce)` block was initially placed before the main `.bubble` rule in CSS source order, causing the main rule to override the media query (cascade bug). Moving it to the end fixed both the functional bug and the failing tests.
+- The test regex `\.bubble\s*\{([^}]*)\}` matched the `.bubble` inside the `@media` block when the media query was declared first. After reordering CSS, the first match is now the main rule.
+- Vite `?raw` import returns an object (not a string) in this project — CSS module transform intercepts it. Use `readFileSync` instead.
+- `noUnusedLocals: true` in tsconfig caused a lint error for an unused `userEvent` import.
+
+**Useful Context for Future Agents:**
+
+- `__tests__/node-types.d.ts` provides minimal type declarations for `fs`, `url`, and `path`. Do not delete it — it is required by PolishAnimateUS004 tests.
+- `ChatBubble.module.css` ends with `@media (prefers-reduced-motion: reduce) { ... }`. New animations must add `animation: none` to this block.
+- Three animation keyframes (`bubbleIn`, `progressPulse`, `mediaReveal`) are defined at the top of `ChatBubble.module.css`.
+- CSS animation `fill-mode: both` is used on entrance animations (`.bubble`, `.media-container`) — do not change to `forwards` only.
+- All 140 frontend tests pass; TypeScript compiles clean (`bun run lint`).

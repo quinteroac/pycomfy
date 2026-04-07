@@ -1,8 +1,43 @@
+/* ── Entrance animations ───────────────────────────────── */
+
+@keyframes bubbleIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes progressPulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+@keyframes mediaReveal {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 .bubble {
   display: flex;
   flex-direction: column;
   max-width: 80%;
-  gap: 6px;
+  gap: 8px;
+  animation: bubbleIn 0.18s ease-out both;
 }
 
 .bubble-user {
@@ -76,6 +111,7 @@
   background: var(--accent);
   border-radius: 2px;
   transition: width 0.3s ease;
+  animation: progressPulse 1.4s ease-in-out infinite;
 }
 
 .progress-label {
@@ -108,6 +144,7 @@
   flex-direction: column;
   gap: 8px;
   max-width: 100%;
+  animation: mediaReveal 0.22s ease-out both;
 }
 
 .media-image {
@@ -148,11 +185,31 @@
 }
 
 .download-btn:hover {
-  background: var(--surface-3, var(--surface-2));
+  background: var(--surface-3, rgba(255, 255, 255, 0.08));
   border-color: var(--accent);
 }
 
 .download-btn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+/* ── Reduced-motion overrides (must be last to win the cascade) ─────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .bubble {
+    animation: none;
+  }
+
+  .spinner {
+    animation: none;
+  }
+
+  .progress-bar-fill {
+    animation: none;
+  }
+
+  .media-container {
+    animation: none;
+  }
 }
