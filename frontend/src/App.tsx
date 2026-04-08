@@ -8,7 +8,9 @@ import { requiresInputImage } from "./types";
 import type { ChatMessage } from "./types";
 import "./App.css";
 
-declare const __PARALLAX_API_URL__: string;
+function getApiUrl(): string {
+  return `http://${window.location.hostname}:5000`;
+}
 
 let _msgCounter = 0;
 function nextId() {
@@ -26,6 +28,14 @@ export function App() {
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   const needsImage = requiresInputImage(params);
+
+  // Clear the reference image when switching to a media type / pipeline that doesn't need it
+  useEffect(() => {
+    if (!needsImage) {
+      setInputImage(null);
+      setImageError(null);
+    }
+  }, [needsImage]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -87,19 +97,37 @@ export function App() {
     setIsSubmitting(true);
     setPrompt("");
 
-    const formData = new FormData();
-    if (inputImage) formData.append("image", inputImage);
-    formData.append("media_type", params.mediaType);
-    formData.append("model", params.model);
-    formData.append("pipeline", params.pipeline);
-    formData.append("width", String(params.width));
-    formData.append("height", String(params.height));
-    formData.append("duration", String(params.duration));
-    formData.append("prompt", trimmed);
+    let fetchBody: FormData | string;
+    let fetchHeaders: Record<string, string> | undefined;
 
-    fetch(`${__PARALLAX_API_URL__}/create/${params.mediaType}`, {
+    if (inputImage) {
+      const formData = new FormData();
+      formData.append("image", inputImage);
+      formData.append("media_type", params.mediaType);
+      formData.append("model", params.model);
+      formData.append("pipeline", params.pipeline);
+      formData.append("width", String(params.width));
+      formData.append("height", String(params.height));
+      formData.append("duration", String(params.duration));
+      formData.append("prompt", trimmed);
+      fetchBody = formData;
+    } else {
+      fetchBody = JSON.stringify({
+        media_type: params.mediaType,
+        model: params.model,
+        pipeline: params.pipeline,
+        width: params.width,
+        height: params.height,
+        duration: params.duration,
+        prompt: trimmed,
+      });
+      fetchHeaders = { "Content-Type": "application/json" };
+    }
+
+    fetch(`${getApiUrl()}/jobs/create/${params.mediaType}`, {
       method: "POST",
-      body: formData,
+      body: fetchBody,
+      ...(fetchHeaders ? { headers: fetchHeaders } : {}),
     })
       .then(async (res) => {
         if (!res.ok) {
@@ -115,7 +143,7 @@ export function App() {
         });
 
         const es = new EventSource(
-          `${__PARALLAX_API_URL__}/jobs/${jobId}/stream`
+          `${getApiUrl()}/jobs/${jobId}/stream`
         );
         esRef.current = es;
 
@@ -131,12 +159,12 @@ export function App() {
           sseTimeoutId = setTimeout(() => {
             updateAssistantBubble(assistantMsgId, {
               content:
-                "No response from server for 30 seconds — generation may have stalled.",
+                "No response from server for 10 minutes — generation may have stalled.",
               status: "timeout",
             });
             es.close();
             setIsSubmitting(false);
-          }, 30_000);
+          }, 600_000);
         };
         armSseTimeout();
 
@@ -158,7 +186,7 @@ export function App() {
                 audio: "wav",
               };
               const ext = extMap[params.mediaType] ?? "bin";
-              const mediaUrl = `${__PARALLAX_API_URL__}/jobs/${jobId}/result`;
+              const mediaUrl = `${getApiUrl()}/jobs/${jobId}/result`;
               updateAssistantBubble(assistantMsgId, {
                 content: "Generation complete ✓",
                 status: "complete",
@@ -242,7 +270,7 @@ export function App() {
             </p>
           </div>
         ) : (
-          <div className="chat-messages" data-testid="chat-messages" role="log" aria-label="Chat messages">
+          <div className="chat-messages" data-testid="chat-messages" role="log" aria-live="polite" aria-label="Chat messages">
             {messages.map((msg) => (
               <ChatBubble key={msg.id} message={msg} />
             ))}

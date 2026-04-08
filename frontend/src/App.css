@@ -1,14 +1,31 @@
 :root {
+  /* ── Surfaces ───────────────────────────── */
   --bg: #0d0d17;
   --surface: #13131f;
   --surface-2: #1a1a2e;
   --surface-3: #21213a;
-  --border: rgba(255, 255, 255, 0.08);
+
+  /* ── Borders ────────────────────────────── */
+  --border: rgba(255, 255, 255, 0.08);       /* structural hairlines */
+  --border-input: rgba(255, 255, 255, 0.1);  /* interactive element borders */
+
+  /* ── Typography ─────────────────────────── */
   --text: rgba(255, 255, 255, 0.9);
   --text-muted: rgba(255, 255, 255, 0.45);
+
+  /* ── Accent ─────────────────────────────── */
   /* #7c3aed gives ~5.25:1 contrast with white — passes WCAG AA (was #8b5cf6 at ~4.05:1) */
   --accent: #7c3aed;
   --accent-rgb: 124, 58, 237;
+  --accent-hover: #6d28d9;
+
+  /* ── Semantic status ────────────────────── */
+  --error: #f87171;
+  --error-border: rgba(239, 68, 68, 0.4);
+  --warning: #fcd34d;
+  --warning-border: rgba(251, 191, 36, 0.4);
+
+  /* ── Misc ───────────────────────────────── */
   --radius: 12px;
 }
 
@@ -110,7 +127,7 @@ body {
 
 .composer-config {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 12px;
   flex-wrap: wrap;
 }
@@ -118,14 +135,14 @@ body {
 .composer-input-row {
   display: flex;
   align-items: flex-end;
-  gap: 10px;
+  gap: 20px;
 }
 
 .composer-textarea {
   flex: 1;
   resize: none;
   background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-input);
   border-radius: var(--radius);
   color: var(--text);
   font-family: inherit;
@@ -170,7 +187,7 @@ body {
 }
 
 .composer-send:hover {
-  background: #6d28d9;
+  background: var(--accent-hover);
 }
 
 .composer-send:active {

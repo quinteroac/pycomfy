@@ -37,7 +37,6 @@
   flex-direction: column;
   max-width: 80%;
   gap: 8px;
-  animation: bubbleIn 0.18s ease-out both;
 }
 
 .bubble-user {
@@ -88,7 +87,6 @@
   border: 2px solid rgba(255, 255, 255, 0.15);
   border-top-color: var(--accent);
   border-radius: 50%;
-  animation: spin 0.7s linear infinite;
   flex-shrink: 0;
 }
 
@@ -111,7 +109,6 @@
   background: var(--accent);
   border-radius: 2px;
   transition: width 0.3s ease;
-  animation: progressPulse 1.4s ease-in-out infinite;
 }
 
 .progress-label {
@@ -123,18 +120,18 @@
 /* ── Status variants ───────────────────────────────── */
 
 .status-error .bubble-content {
-  border-color: rgba(239, 68, 68, 0.4);
-  color: #fca5a5;
+  border-color: var(--error-border);
+  color: var(--error);
 }
 
 .status-connection-lost .bubble-content {
-  border-color: rgba(251, 191, 36, 0.4);
-  color: #fcd34d;
+  border-color: var(--warning-border);
+  color: var(--warning);
 }
 
 .status-timeout .bubble-content {
-  border-color: rgba(251, 191, 36, 0.4);
-  color: #fcd34d;
+  border-color: var(--warning-border);
+  color: var(--warning);
 }
 
 /* ── Media container ───────────────────────────────── */
@@ -144,7 +141,6 @@
   flex-direction: column;
   gap: 8px;
   max-width: 100%;
-  animation: mediaReveal 0.22s ease-out both;
 }
 
 .media-image {
@@ -185,7 +181,7 @@
 }
 
 .download-btn:hover {
-  background: var(--surface-3, rgba(255, 255, 255, 0.08));
+  background: var(--surface-3);
   border-color: var(--accent);
 }
 
@@ -194,22 +190,22 @@
   outline-offset: 2px;
 }
 
-/* ── Reduced-motion overrides (must be last to win the cascade) ─────────── */
+/* ── Motion: progressive enhancement (off by default, on for no-preference) ── */
 
-@media (prefers-reduced-motion: reduce) {
+@media (prefers-reduced-motion: no-preference) {
   .bubble {
-    animation: none;
+    animation: bubbleIn 0.18s ease-out both;
   }
 
   .spinner {
-    animation: none;
+    animation: spin 0.7s linear infinite;
   }
 
   .progress-bar-fill {
-    animation: none;
+    animation: progressPulse 1.4s ease-in-out infinite;
   }
 
   .media-container {
-    animation: none;
+    animation: mediaReveal 0.22s ease-out both;
   }
 }

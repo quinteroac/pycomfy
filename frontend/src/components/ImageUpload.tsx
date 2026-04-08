@@ -9,6 +9,8 @@ interface Props {
   error?: string | null;
 }
 
+const INPUT_ID = "image-upload-file-input";
+
 export function ImageUpload({ value, onChange, error }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -37,11 +39,11 @@ export function ImageUpload({ value, onChange, error }: Props) {
     <div className={styles.root} data-testid="image-upload">
       <input
         ref={inputRef}
+        id={INPUT_ID}
         type="file"
         accept={ACCEPTED_TYPES}
         className={styles.hiddenInput}
         data-testid="image-upload-input"
-        aria-label="Upload reference image"
         onChange={handleFileChange}
       />
 
@@ -64,16 +66,14 @@ export function ImageUpload({ value, onChange, error }: Props) {
           </button>
         </div>
       ) : (
-        <button
-          type="button"
+        <label
+          htmlFor={INPUT_ID}
           className={`${styles.uploadBtn}${error ? ` ${styles.uploadBtnError}` : ""}`}
           data-testid="image-upload-trigger"
-          onClick={() => inputRef.current?.click()}
-          aria-label="Upload reference image"
         >
           <span className={styles.uploadIcon} aria-hidden="true">🖼</span>
           <span>Reference image</span>
-        </button>
+        </label>
       )}
 
       {error && (

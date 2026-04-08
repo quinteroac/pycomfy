@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import mimetypes
 import os
 import shutil
@@ -11,7 +12,11 @@ from importlib.metadata import version as _pkg_version
 from pathlib import Path
 from typing import AsyncGenerator
 
-from fastapi import APIRouter, HTTPException
+logger = logging.getLogger(__name__)
+
+import tempfile
+
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse
 
 from server.jobs import JobData, PythonProgress
@@ -34,6 +39,27 @@ router = APIRouter()
 _REPO_ROOT = str(Path(__file__).resolve().parents[1])
 _SSE_POLL_S = float(os.environ.get("PARALLAX_SSE_POLL_MS", "500")) / 1000.0
 
+_VIDEO_FPS: dict[str, int] = {
+    "ltx2": 24,
+    "ltx23": 25,
+    "wan21": 16,
+    "wan22": 16,
+}
+
+# Models whose frame count must satisfy (length - 1) % 8 == 0
+_LTX_MODELS = {"ltx2", "ltx23"}
+
+
+def _duration_to_length(duration_s: float, model: str) -> int:
+    """Convert duration in seconds to frame count, respecting model constraints."""
+    fps = _VIDEO_FPS.get(model, 24)
+    raw = duration_s * fps
+    if model in _LTX_MODELS:
+        # Round to nearest valid length: 8k + 1
+        k = max(0, round((raw - 1) / 8))
+        return 8 * k + 1
+    return max(1, round(raw))
+
 
 def _uv_path() -> str:
     found = shutil.which("uv")
@@ -51,6 +77,7 @@ def _build_cmd(action: str, media: str, model: str, req_dict: dict) -> list[str]
     for key, value in req_dict.items():
         if value is not None and key != "model":
             cmd.extend([f"--{key.replace('_', '-')}", str(value)])
+    logger.info("Built command: %s", cmd)
     return cmd
 
 
@@ -205,24 +232,74 @@ def create_image(req: CreateImageRequest) -> JobResponse:
 
 
 @router.post("/jobs/create/video", response_model=JobResponse)
-def create_video(req: CreateVideoRequest) -> JobResponse:
+async def create_video(request: Request) -> JobResponse:
+    content_type = request.headers.get("content-type", "")
+    input_path: str | None = None
+
+    if "multipart/form-data" in content_type:
+        form = await request.form()
+
+        def _str(key: str) -> str | None:
+            v = form.get(key)
+            return str(v) if v is not None else None
+
+        def _int(key: str) -> int | None:
+            v = form.get(key)
+            return int(v) if v is not None else None  # type: ignore[arg-type]
+
+        def _float(key: str) -> float | None:
+            v = form.get(key)
+            return float(v) if v is not None else None  # type: ignore[arg-type]
+
+        image_field = form.get("image")
+        if image_field is not None and hasattr(image_field, "read"):
+            filename = getattr(image_field, "filename", None) or "upload"
+            suffix = Path(filename).suffix or ".png"
+            tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+            tmp.write(await image_field.read())  # type: ignore[union-attr]
+            tmp.close()
+            input_path = tmp.name
+
+        req = CreateVideoRequest(
+            model=_str("model") or "",
+            prompt=_str("prompt") or "",
+            pipeline=_str("pipeline"),  # type: ignore[call-arg]
+            width=_int("width"),
+            height=_int("height"),
+            duration=_float("duration"),
+            seed=_int("seed"),
+            input=input_path,
+        )
+    else:
+        body = await request.json()
+        req = CreateVideoRequest(**body)
+
+    req_dict = req.model_dump()
+    if req_dict.get("duration") is not None and req_dict.get("length") is None:
+        req_dict["length"] = _duration_to_length(req_dict["duration"], req.model)
+    req_dict.pop("duration", None)
+    req_dict.pop("pipeline", None)
     data = JobData(
         action="create",
         media="video",
         model=req.model,
-        cmd=_build_cmd("create", "video", req.model, req.model_dump()),
+        cmd=_build_cmd("create", "video", req.model, req_dict),
     )
-    job_id = submit_job(data)
+    job_id = await asyncio.to_thread(submit_job, data)
     return JobResponse(job_id=job_id, status="queued")
 
 
 @router.post("/jobs/create/audio", response_model=JobResponse)
 def create_audio(req: CreateAudioRequest) -> JobResponse:
+    req_dict = req.model_dump()
+    if req_dict.get("duration") is not None and req_dict.get("length") is None:
+        req_dict["length"] = req_dict["duration"]
+    req_dict.pop("duration", None)
     data = JobData(
         action="create",
         media="audio",
         model=req.model,
-        cmd=_build_cmd("create", "audio", req.model, req.model_dump()),
+        cmd=_build_cmd("create", "audio", req.model, req_dict),
     )
     job_id = submit_job(data)
     return JobResponse(job_id=job_id, status="queued")

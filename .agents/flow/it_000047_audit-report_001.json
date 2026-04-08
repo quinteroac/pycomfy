@@ -1,0 +1,73 @@
+{
+  "iteration": "000047",
+  "prd_index": "001",
+  "generated_at": "2026-04-07T20:58:36.875Z",
+  "executive_summary": "The PRD-001 implementation is largely complete and all 140 automated tests pass. All four user stories are fully covered: media type selection with conditional parameter panels, conditional image upload for i2v/is2v/ia2v pipelines, SSE-based progress streaming, and inline media playback with download. Two functional requirements have minor deviations: FR-3 and FR-4 both specify that requests without an image should be sent as application/json, but the implementation always uses multipart/form-data regardless of whether an image is present. FR-1 specifies 'Bun as the bundler/dev server', but Vite is the actual bundler/dev server — Bun is used only as the package manager and script runner.",
+  "verification_by_fr": [
+    {
+      "frId": "FR-1",
+      "assessment": "partially_comply",
+      "notes": "React 18 is used (react ^18.3.1). However, Vite — not Bun — is the bundler and dev server. Bun is used only as the package manager and npm-script runner. The intent of the PRD was likely a Bun-powered toolchain, which is effectively satisfied, but the strict wording ('Bun as the bundler/dev server') is only partially met."
+    },
+    {
+      "frId": "FR-2",
+      "assessment": "comply",
+      "notes": "All server communication targets the configured base URL (defaults to http://localhost:5000). No new server routes are introduced."
+    },
+    {
+      "frId": "FR-3",
+      "assessment": "partially_comply",
+      "notes": "All required fields (media_type, model, pipeline, width, height, duration, prompt) are included in the request body. However, they are sent as FormData fields rather than a JSON body, even when no image is attached. The POST endpoint and field names match, but the content-type is always multipart/form-data."
+    },
+    {
+      "frId": "FR-4",
+      "assessment": "partially_comply",
+      "notes": "When an image is present it is correctly included in a multipart/form-data request. However, when no image is selected the request still uses FormData instead of switching to application/json as required by the PRD."
+    },
+    {
+      "frId": "FR-5",
+      "assessment": "comply",
+      "notes": "The application is a pure client-side SPA with no Node/Bun runtime dependency after the build step."
+    },
+    {
+      "frId": "FR-6",
+      "assessment": "comply",
+      "notes": "Vite is configured with outDir: 'dist' and emptyOutDir: true, producing a self-contained index.html + hashed JS/CSS bundle."
+    },
+    {
+      "frId": "FR-7",
+      "assessment": "comply",
+      "notes": "The PARALLAX_API_URL build-time env var is injected via vite.config.ts define block, defaulting to http://localhost:5000. The variable is referenced as __PARALLAX_API_URL__ inside the app."
+    }
+  ],
+  "verification_by_us": [
+    {
+      "usId": "US-001",
+      "assessment": "comply",
+      "notes": "AC01–AC06 all satisfied. MediaTypeSelector renders image/video/audio radio buttons. ParameterPanel conditionally renders model, pipeline (video only), width/height (image+video), and duration (video+audio). Default params are width=768, height=512, duration=5. setMediaType resets pipeline to 't2v' (VIDEO_PIPELINES[0])."
+    },
+    {
+      "usId": "US-002",
+      "assessment": "comply",
+      "notes": "AC01–AC05 all satisfied. ImageUpload is conditionally rendered when requiresInputImage() is true (i2v, is2v, ia2v). Accepts .jpg/.jpeg/.png/.webp. Thumbnail preview via createObjectURL. Image included in FormData. Inline validation error fires and blocks submission when image is missing for required pipelines."
+    },
+    {
+      "usId": "US-003",
+      "assessment": "comply",
+      "notes": "AC01–AC06 all satisfied. Enter submits (Shift+Enter adds newline). User bubble appears immediately on submit. Assistant bubble with streaming status appears below. SSE connection to /jobs/{id}/stream renders progress percentage. es.onerror sets 'Connection lost — check job status.' message. Button and textarea are disabled while isSubmitting is true."
+    },
+    {
+      "usId": "US-004",
+      "assessment": "comply",
+      "notes": "AC01–AC04 all satisfied. ChatBubble renders <img>, <video controls>, or <audio controls> depending on mediaType when status=complete. An anchor with download attribute serves as the Download button with the correct filename. Error status shows server error message. Chat history is in-memory state (useState) with no localStorage dependency."
+    }
+  ],
+  "minor_observations": [
+    "The app always sends multipart/form-data even when no image is attached (FR-3/FR-4 gap). If the server strictly validates Content-Type for non-image requests, this will cause failures. Recommend switching to JSON body when inputImage is null.",
+    "Bun native bundler is not used — Vite handles bundling. This is a pragmatic and valid choice but deviates from the literal FR-1 wording. No action required unless Bun-native bundling is a hard requirement.",
+    "The SSE stall timeout message ('No response from server for 30 seconds — generation may have stalled.') differs from the PRD's specified 'Connection lost — check job status.' text for SSE drops. The timeout path and the error path produce distinct messages, which is a UX improvement but the timeout message is not specified in the PRD.",
+    "The ImageUpload component does not expose a clickable label-based trigger — it uses a button that imperatively calls inputRef.current?.click(). This is accessible via keyboard but some screen readers may not associate the button correctly with the underlying hidden <input>. Consider wrapping in a <label> instead.",
+    "No explicit test covers the Shift+Enter newline behavior (US-003-AC01). It is implemented in handleKeyDown but the test suite does not include a regression for it."
+  ],
+  "conclusions_and_recommendations": "The implementation is production-ready for PRD-001 scope. All user stories comply and all tests pass. The two key refactor items are: (1) Fix FR-3/FR-4 by sending application/json when no image is attached — this likely requires a conditional fetch that switches between JSON and FormData bodies; (2) Optionally clarify FR-1 compliance by confirming Vite-over-Bun is the accepted tooling choice. The minor SSE timeout wording difference and the ImageUpload accessibility note are low-priority improvements. Recommend proceeding to refactor to address the content-type issue before merging."
+}

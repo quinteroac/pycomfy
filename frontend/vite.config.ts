@@ -7,11 +7,6 @@ export default defineConfig({
     outDir: "dist",
     emptyOutDir: true,
   },
-  define: {
-    __PARALLAX_API_URL__: JSON.stringify(
-      process.env.PARALLAX_API_URL ?? "http://localhost:5000"
-    ),
-  },
   test: {
     environment: "happy-dom",
     globals: true,

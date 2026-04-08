@@ -38,27 +38,69 @@
       "prototype_creation": [
         {
           "index": 1,
-          "status": "in_progress",
+          "status": "completed",
           "file": "it_000047_prototype-creation_001.json"
         },
         {
           "index": 2,
-          "status": "in_progress",
+          "status": "completed",
           "file": "it_000047_prototype-creation_002.json"
         },
         {
           "index": 3,
-          "status": "in_progress",
+          "status": "completed",
           "file": "it_000047_prototype-creation_003.json"
         },
         {
           "index": 4,
-          "status": "in_progress",
+          "status": "completed",
           "file": "it_000047_prototype-creation_004.json"
         }
       ],
-      "prototype_audit": [],
-      "prototype_refactor": [],
+      "prototype_audit": [
+        {
+          "index": 1,
+          "status": "completed",
+          "file": "it_000047_audit-report_001.json"
+        },
+        {
+          "index": 2,
+          "status": "completed",
+          "file": "it_000047_audit-report_002.json"
+        },
+        {
+          "index": 3,
+          "status": "completed",
+          "file": "it_000047_audit-report_003.json"
+        },
+        {
+          "index": 4,
+          "status": "completed",
+          "file": "it_000047_audit-report_004.json"
+        }
+      ],
+      "prototype_refactor": [
+        {
+          "index": 1,
+          "status": "completed",
+          "file": "it_000047_refactor-plan_001.md"
+        },
+        {
+          "index": 2,
+          "status": "completed",
+          "file": "it_000047_refactor-plan_002.md"
+        },
+        {
+          "index": 3,
+          "status": "completed",
+          "file": "it_000047_refactor-plan_003.md"
+        },
+        {
+          "index": 4,
+          "status": "completed",
+          "file": "it_000047_refactor-plan_004.md"
+        }
+      ],
       "prototype_approval": {
         "status": "pending",
         "file": null
@@ -104,6 +146,6 @@
       }
     }
   },
-  "last_updated": "2026-04-07T19:48:06.077Z",
-  "updated_by": "nvst:create-prototype"
+  "last_updated": "2026-04-07T21:18:25.735Z",
+  "updated_by": "nvst:refactor-prototype"
 }

@@ -1,0 +1,47 @@
+{
+  "iteration": "000047",
+  "prd_index": "004",
+  "generated_at": "2026-04-07T21:05:51.998Z",
+  "refactor_items": [
+    {
+      "id": "R-004-001",
+      "priority": 1,
+      "title": "Run teach-impeccable to establish project design context",
+      "description": "FR-3 requires teach-impeccable to be run before any impeccable audit pass. No .impeccable.md or equivalent config file exists. Run the teach-impeccable skill to generate the project design context file and commit it to the repository so future impeccable passes use project-specific guidelines.",
+      "affected_files": [
+        ".impeccable.md"
+      ],
+      "effort": "small"
+    },
+    {
+      "id": "R-004-002",
+      "priority": 2,
+      "title": "Add aria-valuemin and aria-valuemax to progressbar element",
+      "description": "The role='progressbar' element in ChatBubble.tsx has aria-valuenow but is missing aria-valuemin={0} and aria-valuemax={100}. ARIA 1.1 recommends all three attributes for screen-reader compatibility. Add both attributes to the progress bar div.",
+      "affected_files": [
+        "frontend/src/components/ChatBubble.tsx"
+      ],
+      "effort": "trivial"
+    },
+    {
+      "id": "R-004-003",
+      "priority": 3,
+      "title": "Add explicit aria-live='polite' to chat messages container",
+      "description": "The chat messages container uses role='log' which has implicit aria-live='polite' per ARIA spec. Adding an explicit aria-live='polite' attribute improves cross-reader compatibility without any functional change.",
+      "affected_files": [
+        "frontend/src/App.tsx"
+      ],
+      "effort": "trivial"
+    },
+    {
+      "id": "R-004-004",
+      "priority": 4,
+      "title": "Document distill skill rejection decisions",
+      "description": "FR-2 requires that rejections of skill recommendations are noted. The distill pass (US-002) was completed but no artifact documents which recommendations were reviewed and which were declined. Create a brief distill review note in .agents/flow/ to satisfy FR-2.",
+      "affected_files": [
+        ".agents/flow/it_000047_distill-review_001.md"
+      ],
+      "effort": "trivial"
+    }
+  ]
+}

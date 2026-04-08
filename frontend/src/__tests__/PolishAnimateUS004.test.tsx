@@ -102,9 +102,9 @@ describe("US-004 AC02 — Animations implemented", () => {
   });
 
   it("progress-bar-fill uses progressPulse animation while streaming", () => {
-    const fillRule = chatBubbleCssRaw.match(/\.progress-bar-fill\s*\{([^}]*)\}/)?.[1] ?? "";
-    expect(fillRule).toMatch(/progressPulse/);
-    expect(fillRule).toMatch(/infinite/);
+    // Animation may be inside a @media (prefers-reduced-motion: no-preference) block
+    expect(chatBubbleCssRaw).toMatch(/\.progress-bar-fill\s*\{[^}]*progressPulse/s);
+    expect(chatBubbleCssRaw).toMatch(/\.progress-bar-fill\s*\{[^}]*infinite/s);
   });
 
   it("CSS defines mediaReveal keyframe for media reveal", () => {
@@ -112,26 +112,28 @@ describe("US-004 AC02 — Animations implemented", () => {
   });
 
   it("media-container uses mediaReveal animation", () => {
-    const containerRule = chatBubbleCssRaw.match(/\.media-container\s*\{([^}]*)\}/)?.[1] ?? "";
-    expect(containerRule).toMatch(/mediaReveal/);
+    // Animation may be inside a @media (prefers-reduced-motion: no-preference) block
+    expect(chatBubbleCssRaw).toMatch(/\.media-container\s*\{[^}]*mediaReveal/s);
   });
 
   it(".bubble uses bubbleIn animation", () => {
-    const bubbleRule = chatBubbleCssRaw.match(/\.bubble\s*\{([^}]*)\}/)?.[1] ?? "";
-    expect(bubbleRule).toMatch(/bubbleIn/);
+    // Animation may be inside a @media (prefers-reduced-motion: no-preference) block
+    expect(chatBubbleCssRaw).toMatch(/\.bubble\s*\{[^}]*bubbleIn/s);
   });
 });
 
 // ── AC03: Prefers-reduced-motion ─────────────────────────────────────────────
 
 describe("US-004 AC03 — Animations respect prefers-reduced-motion", () => {
-  it("CSS contains a prefers-reduced-motion: reduce media query", () => {
-    expect(chatBubbleCssRaw).toMatch(/@media[^{]*prefers-reduced-motion[^{]*reduce/);
+  it("CSS uses progressive enhancement: animations gated by prefers-reduced-motion: no-preference", () => {
+    // Animations default to off; they are enabled only when reduced-motion is not requested.
+    // This is safer than the opt-out (reduce) approach per WCAG and the design system spec.
+    expect(chatBubbleCssRaw).toMatch(/@media[^{]*prefers-reduced-motion[^{]*no-preference/);
   });
 
-  it("reduced-motion block disables .bubble animation", () => {
-    // Extract the entire reduced-motion media block
-    const start = chatBubbleCssRaw.search(/@media[^{]*prefers-reduced-motion[^{]*reduce/);
+  it("no-preference block enables all animated elements", () => {
+    // Extract the entire @media (prefers-reduced-motion: no-preference) block
+    const start = chatBubbleCssRaw.search(/@media[^{]*prefers-reduced-motion[^{]*no-preference/);
     const blockStart = chatBubbleCssRaw.indexOf("{", start) + 1;
     // Find the matching closing brace
     let depth = 1;
@@ -141,11 +143,13 @@ describe("US-004 AC03 — Animations respect prefers-reduced-motion", () => {
       if (chatBubbleCssRaw[i] === "}") depth--;
       i++;
     }
-    const rmBlock = chatBubbleCssRaw.slice(blockStart, i - 1);
-    expect(rmBlock).toMatch(/\.bubble/);
-    expect(rmBlock).toMatch(/animation:\s*none/);
-    expect(rmBlock).toMatch(/\.progress-bar-fill/);
-    expect(rmBlock).toMatch(/\.media-container/);
+    const block = chatBubbleCssRaw.slice(blockStart, i - 1);
+    expect(block).toMatch(/\.bubble/);
+    expect(block).toMatch(/bubbleIn/);
+    expect(block).toMatch(/\.progress-bar-fill/);
+    expect(block).toMatch(/progressPulse/);
+    expect(block).toMatch(/\.media-container/);
+    expect(block).toMatch(/mediaReveal/);
   });
 });
 

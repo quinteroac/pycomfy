@@ -1,0 +1,66 @@
+{
+  "iteration": "000047",
+  "prd_index": "003",
+  "generated_at": "2026-04-07T21:02:49.879Z",
+  "executive_summary": "The implementation for PRD-003 (Frontend Install CLI) is largely complete and all 46 unit tests pass. US-001, US-002, and US-003 are fully satisfied. FR-1 through FR-5 comply. FR-2 deviates from the spec by using `urllib.request` (stdlib) instead of `httpx`, though behavior is equivalent. FR-7 (CI workflow extension) is absent — the release-cli.yml workflow was not updated to build the Bun frontend or package the `parallax-frontend-{version}.tar.gz` archive.",
+  "verification_by_fr": [
+    {
+      "frId": "FR-1",
+      "assessment": "comply",
+      "notes": "`frontend` Typer group added to cli/main.py with `install` and `version` subcommands confirmed in cli/commands/frontend.py."
+    },
+    {
+      "frId": "FR-2",
+      "assessment": "does_not_comply",
+      "notes": "Implementation uses stdlib `urllib.request` instead of `httpx` as specified. No new network dependency was added, and the stated rationale (reusing existing httpx) was not followed. Functionally equivalent but violates the explicit FR constraint."
+    },
+    {
+      "frId": "FR-3",
+      "assessment": "comply",
+      "notes": "Archive extracted to `~/.parallax/frontend/` via tarfile; existing installation is removed before extraction (shutil.rmtree + mkdir)."
+    },
+    {
+      "frId": "FR-4",
+      "assessment": "comply",
+      "notes": "`_write_config_env` upserts `PARALLAX_FRONTEND_PATH=~/.parallax/frontend` into `~/.parallax/config.env` (same file as `parallax install`)."
+    },
+    {
+      "frId": "FR-5",
+      "assessment": "comply",
+      "notes": "`parallax frontend version` reads `~/.parallax/frontend/version.txt` and prints its contents; missing file yields the helpful not-installed message."
+    },
+    {
+      "frId": "FR-6",
+      "assessment": "comply",
+      "notes": "The implementation resolves the download URL via the GitHub Releases API (`browser_download_url`), which produces a URL matching the specified pattern `https://github.com/{owner}/{repo}/releases/download/v{version}/parallax-frontend-{version}.tar.gz`. The asset name filter (`parallax-frontend-{version}.tar.gz`) is applied explicitly in `_find_frontend_asset`."
+    },
+    {
+      "frId": "FR-7",
+      "assessment": "does_not_comply",
+      "notes": "`.github/workflows/release-cli.yml` was not extended. There are no steps to install Bun, run `bun run build` in the `frontend/` directory, package the output as `parallax-frontend-{version}.tar.gz`, or upload it as a release asset."
+    }
+  ],
+  "verification_by_us": [
+    {
+      "usId": "US-001",
+      "assessment": "comply",
+      "notes": "All 6 ACs verified by tests and code inspection. AC01: GitHub API call confirmed. AC02: extraction + rmtree replace confirmed. AC03: config.env upsert confirmed. AC04: success echo confirmed. AC05: error paths with exit(1) and cleanup confirmed. AC06: second-run overwrite confirmed."
+    },
+    {
+      "usId": "US-002",
+      "assessment": "comply",
+      "notes": "All 3 ACs verified. AC01: --version/-v option accepted. AC02: HTTPError on 404 prints GitHub message and exits non-zero. AC03: omitting --version fetches latest via /releases/latest endpoint."
+    },
+    {
+      "usId": "US-003",
+      "assessment": "comply",
+      "notes": "Both ACs verified. AC01: version.txt read and printed. AC02: missing frontend prints 'Frontend not installed. Run `parallax frontend install` to install.'"
+    }
+  ],
+  "minor_observations": [
+    "The config.env writer uses `str(frontend_dir)` which expands the full absolute path (e.g. `/home/user/.parallax/frontend`) rather than the tilde-abbreviated `~/.parallax/frontend`. The PRD AC03 says `PARALLAX_FRONTEND_PATH=~/.parallax/frontend`. Functionally this is correct, but users inspecting config.env will see the expanded path.",
+    "FR-2 uses urllib.request (no external dep) which is actually more portable and lighter than httpx for simple GET downloads. A deliberate PRD change to allow urllib.request would be cleaner than leaving FR-2 as non-compliant.",
+    "No test covers the `tarfile.extractall` failure branch (AC05 partial-install cleanup after extraction error). Consider adding a test that mocks a corrupt archive."
+  ],
+  "conclusions_and_recommendations": "The prototype satisfies all three user stories and passes all 46 tests. The two FR non-compliances are: (1) FR-2 using urllib.request instead of httpx — recommend updating the PRD to reflect the actual implementation choice since it achieves the same result without adding a dependency; (2) FR-7 CI workflow not implemented — this is a genuine gap that must be addressed before a release can actually provide frontend archive assets. Recommended refactor actions: (a) Add a `build-frontend` CI job to release-cli.yml that runs `bun install && bun run build` in `frontend/`, creates the `parallax-frontend-{version}.tar.gz` archive with `dist/` contents at root plus a `version.txt`, and uploads it as a release asset; (b) Optionally relax FR-2 to allow urllib.request."
+}

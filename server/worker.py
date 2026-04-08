@@ -68,7 +68,9 @@ async def _run_worker(job_id: str) -> None:
                 if progress.output is not None:
                     last_output = progress.output
             except Exception:
-                pass  # not valid PythonProgress JSON — stream as plain text
+                # Not valid PythonProgress JSON — treat as plain output path if it looks like a file
+                if line.startswith("/") and Path(line).exists():
+                    last_output = line
 
         assert proc.stderr is not None
         stderr_content = proc.stderr.read()

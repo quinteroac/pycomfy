@@ -63,6 +63,22 @@ function mockFetchWithJobId(jobId = "job-harden") {
   );
 }
 
+// ── AC01: Shift+Enter does not submit ─────────────────────────────────────────
+
+describe("US-003-AC01 — Shift+Enter newline (no submit)", () => {
+  it("does not call fetch when Shift+Enter is pressed", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    const user = userEvent.setup();
+    render(<App />);
+
+    const textarea = screen.getByTestId("prompt-input");
+    await user.click(textarea);
+    await user.type(textarea, "hello{shift>}{enter}{/shift}");
+
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+});
+
 // ── AC01: Long prompts don't break layout ─────────────────────────────────────
 
 describe("US-003-AC01 — long prompt handling", () => {
@@ -109,18 +125,18 @@ describe("US-003-AC01 — long prompt handling", () => {
 
 // ── AC02: SSE timeout warning after 30s ───────────────────────────────────────
 
-describe("US-003-AC02 — SSE 30s timeout", () => {
-  it("shows timeout warning when no SSE events arrive for 30 seconds", async () => {
+describe("US-003-AC02 — SSE 10m timeout", () => {
+  it("shows timeout warning when no SSE events arrive for 10 minutes", async () => {
     mockFetchWithJobId("job-timeout");
 
-    // Intercept the 30s timeout so we can trigger it manually in the test
+    // Intercept the 10m timeout so we can trigger it manually in the test
     let capturedTimeoutFn: (() => void) | null = null;
     const originalSetTimeout = globalThis.setTimeout;
     const originalClearTimeout = globalThis.clearTimeout;
 
     vi.spyOn(globalThis, "setTimeout").mockImplementation(
       (fn: TimerHandler, delay?: number, ...args: unknown[]) => {
-        if (delay === 30_000) {
+        if (delay === 600_000) {
           capturedTimeoutFn = fn as () => void;
           return 99999 as unknown as ReturnType<typeof setTimeout>;
         }
@@ -163,7 +179,7 @@ describe("US-003-AC02 — SSE 30s timeout", () => {
     });
   });
 
-  it("timeout warning message mentions 30 seconds", async () => {
+  it("timeout warning message mentions 10 minutes", async () => {
     mockFetchWithJobId("job-timeout-msg");
 
     let capturedTimeoutFn: (() => void) | null = null;
@@ -172,7 +188,7 @@ describe("US-003-AC02 — SSE 30s timeout", () => {
 
     vi.spyOn(globalThis, "setTimeout").mockImplementation(
       (fn: TimerHandler, delay?: number, ...args: unknown[]) => {
-        if (delay === 30_000) {
+        if (delay === 600_000) {
           capturedTimeoutFn = fn as () => void;
           return 99999 as unknown as ReturnType<typeof setTimeout>;
         }
@@ -208,12 +224,12 @@ describe("US-003-AC02 — SSE 30s timeout", () => {
 
     await waitFor(() => {
       expect(screen.getByTestId("bubble-assistant")).toHaveTextContent(
-        /30 seconds/i
+        /10 minutes/i
       );
     });
   });
 
-  it("sets up a 30-second timeout when EventSource is created", async () => {
+  it("sets up a 10-minute timeout when EventSource is created", async () => {
     mockFetchWithJobId("job-timeout-setup");
 
     const originalSetTimeout = globalThis.setTimeout;
@@ -241,7 +257,7 @@ describe("US-003-AC02 — SSE 30s timeout", () => {
       expect(MockEventSource.instances.length).toBeGreaterThan(0)
     );
 
-    expect(timeoutDelays).toContain(30_000);
+    expect(timeoutDelays).toContain(600_000);
   });
 });
 

@@ -113,6 +113,24 @@ describe("App — US-002 Image Upload integration", () => {
     expect(fd.get("pipeline")).toBe("i2v");
   });
 
+  // ── AC04b: sends application/json when no image is attached ──────────────
+
+  it("AC04b: sends JSON body with Content-Type application/json for image media type (no image)", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.type(screen.getByTestId("prompt-input"), "a sunset");
+    await user.click(screen.getByRole("button", { name: "Generate" }));
+
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    const [, options] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(typeof options.body).toBe("string");
+    const parsed = JSON.parse(options.body as string);
+    expect(parsed.media_type).toBe("image");
+    expect(parsed.prompt).toBe("a sunset");
+    expect(options.headers?.["Content-Type"]).toBe("application/json");
+  });
+
   // ── AC05: validation — no file + requires image → error shown ─────────────
 
   it("AC05: shows inline error when submitting without image on i2v", async () => {
