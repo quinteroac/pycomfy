@@ -18,22 +18,18 @@ print(check_runtime())
 
 ## Monorepo packages
 
-This repo contains the core Python library plus a set of TypeScript application packages built on top of it.
+This repo contains the core Python library plus a set of Python application packages built on top of it.
 
 | Package | Language | Description | Docs |
 |---------|----------|-------------|------|
 | `comfy_diffusion` | Python | Core inference library (this repo) | [docs/comfy_diffusion.md](docs/comfy_diffusion.md) |
 | `server/` | Python | FastAPI worker — HTTP interface to the core on `:5000` | [docs/server.md](docs/server.md) |
-| `cli/` | Python | Standalone binary CLI — `parallax install / mcp install / ms install` | [docs/parallax_cli.md](docs/parallax_cli.md) |
+| `cli/` | Python | Standalone binary CLI — `parallax install / comfyui / create / edit / …` | [docs/parallax_cli.md](docs/parallax_cli.md) |
 | `mcp/` | Python | FastMCP server for Claude Desktop — registered via `parallax mcp install` | [docs/parallax_mcp.md](docs/parallax_mcp.md) |
-| `@parallax/ms` | TypeScript | Elysia gateway on `:3000`, proxies jobs to `server/` | [docs/parallax_ms.md](docs/parallax_ms.md) |
-| `@parallax/cli` | TypeScript | Bun CLI — `parallax generate`, `parallax edit`, … | [docs/parallax_cli.md](docs/parallax_cli.md) |
-| `@parallax/mcp` | TypeScript | MCP server for Claude — tools that call `@parallax/ms` | [docs/parallax_mcp.md](docs/parallax_mcp.md) |
-| `@parallax/sdk` | TypeScript | Shared request/response types across all TS packages | [docs/parallax_sdk.md](docs/parallax_sdk.md) |
 
 Request flow:
 ```
-parallax_cli / parallax_mcp  →  @parallax/ms (:3000)  →  server/FastAPI (:5000)  →  comfy_diffusion
+parallax_cli / parallax_mcp  →  server/FastAPI (:5000)  →  comfy_diffusion
 ```
 
 ---
@@ -64,15 +60,16 @@ parallax install
 
 ### Full setup flow
 
-After the binary is installed, three installer subcommands bootstrap the complete stack in order:
+After the binary is installed, run these installer subcommands in order to bootstrap the complete stack:
 
 | Command | What it does |
 |---------|-------------|
 | `parallax install` | Creates `~/.parallax/env`, installs `comfy-diffusion` + torch via `uv`, and bootstraps the ComfyUI runtime. Pass `--cpu` for CPU-only environments. |
 | `parallax mcp install` | Registers the Parallax MCP server in Claude Desktop (`~/Library/Application Support/Claude/…` on macOS, `%APPDATA%\Claude\…` on Windows, `~/.config/claude/…` on Linux). Restart Claude Desktop to apply. |
 | `parallax ms install` | Registers the inference server as a systemd user service (Linux) or launchd agent (macOS) so it starts automatically on boot. Prints the service URL on success. |
+| `parallax frontend install` | Downloads and installs the pre-built web UI to `~/.parallax/frontend/`. |
 
-All three commands are **idempotent** — re-running them detects existing state and skips or updates gracefully. Add `--verbose` to any command to stream subprocess output in real time.
+All commands are **idempotent** — re-running them detects existing state and skips or updates gracefully. Add `--verbose` to any command to stream subprocess output in real time.
 
 The install base directory defaults to `~/.parallax/`. Override with `PARALLAX_HOME=/custom/path parallax install`.
 
@@ -221,7 +218,6 @@ to import.
 
 ---
 
-
 ## Installation
 
 Requires Python 3.12+. ComfyUI is vendored inside the package — no separate ComfyUI installation needed.
@@ -325,6 +321,238 @@ uv pip install torch torchvision torchaudio --index-url https://download.pytorch
 ```
 
 > **Note:** `uv.lock` pins the CPU variant of torch so that CI (no GPU) can run `uv sync` reproducibly. GPU users replace torch after syncing with the command above.
+
+---
+
+## parallax CLI reference
+
+The `parallax` binary exposes the full stack as a unified CLI. All subcommands support `--help`.
+
+### `parallax install`
+
+Bootstraps the runtime to `~/.parallax/env`.
+
+```bash
+parallax install [--cpu] [--upgrade] [--verbose]
+```
+
+| Flag | Description |
+|------|-------------|
+| `--cpu` | Install CPU-only torch (no CUDA) |
+| `--upgrade` | Upgrade an existing installation |
+| `--verbose` | Stream full subprocess output |
+
+---
+
+### `parallax comfyui`
+
+Manages the ComfyUI web UI as a background process. Use this when you want the full ComfyUI node-graph interface alongside the CLI.
+
+```bash
+parallax comfyui start   [--port N] [--timeout N] [--open] [--models-dir PATH]
+parallax comfyui stop
+parallax comfyui status
+```
+
+| Subcommand | Description |
+|-----------|-------------|
+| `start` | Launch ComfyUI in the background, write PID to `~/.config/parallax/comfyui.pid` |
+| `stop` | Terminate the running ComfyUI process and remove the PID file |
+| `status` | Print whether ComfyUI is running, the PID, and the port |
+
+**`start` options:**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--port` | `8188` | Port for ComfyUI to listen on |
+| `--timeout` | `30` | Seconds to wait for the server to become ready |
+| `--open` | `false` | Auto-open the URL in the default browser once ready |
+| `--models-dir` | `$PYCOMFY_MODELS_DIR` | Custom models directory |
+
+```bash
+# Start on default port
+parallax comfyui start
+
+# Start on a custom port and open the browser automatically
+parallax comfyui start --port 8189 --open
+
+# Check if it's running
+parallax comfyui status
+# ComfyUI is running (PID 12345, port 8189)
+
+# Stop it
+parallax comfyui stop
+# ComfyUI (PID 12345) stopped.
+```
+
+Logs are written to `~/.config/parallax/comfyui.log`.
+
+---
+
+### `parallax create`
+
+Generates images, videos, and audio.
+
+```bash
+parallax create image  --model MODEL --prompt TEXT [options]
+parallax create video  --model MODEL --prompt TEXT [options]
+parallax create audio  --model MODEL --prompt TEXT [options]
+```
+
+**Image models:** `sdxl`, `anima`, `z_image`, `flux_klein`, `qwen`
+
+**Video models:** `ltx2`, `ltx23`, `wan21`, `wan22`
+
+**Audio models:** `ace_step`
+
+**Common options** (all `create` subcommands):
+
+| Flag | Description |
+|------|-------------|
+| `--prompt` | Text description (required) |
+| `--negative-prompt` | Negative guidance |
+| `--steps` | Sampling steps |
+| `--cfg` | CFG guidance scale |
+| `--seed` | Random seed (default: 0) |
+| `--output` | Output file path |
+| `--models-dir` | Custom models directory |
+| `--async` | Queue job and return immediately with a job ID |
+
+**Video-specific options:**
+
+| Flag | Description |
+|------|-------------|
+| `--input` | Input image for image-to-video |
+| `--audio` | Audio file for audio-conditioned generation (`ltx23` only) |
+| `--width`, `--height`, `--length`, `--fps` | Dimensions and duration |
+
+```bash
+# Text-to-image
+parallax create image --model sdxl --prompt "a portrait of a woman, studio lighting" --output out.png
+
+# Text-to-video
+parallax create video --model ltx2 --prompt "ocean waves at sunset" --output clip.mp4
+
+# Image-to-video with audio conditioning
+parallax create video --model ltx23 --prompt "dancer on stage" --input frame.png --audio music.wav
+
+# Text-to-audio (queued, non-blocking)
+parallax create audio --model ace_step --prompt "lo-fi hip hop beat" --async
+# Job ID: 550e8400-e29b-41d4-a716-446655440000
+```
+
+---
+
+### `parallax edit`
+
+Edits existing images with an instruction prompt.
+
+```bash
+parallax edit image --model MODEL --prompt TEXT --input PATH [options]
+```
+
+**Models:** `flux_9b_kv`, `qwen`
+
+| Flag | Description |
+|------|-------------|
+| `--input` | Input image path (required) |
+| `--subject-image` | Reference subject image (`flux_9b_kv` only) |
+| `--image2`, `--image3` | Additional reference images (`qwen` only) |
+| `--no-lora` | Disable Lightning LoRA (`qwen` only) |
+
+---
+
+### `parallax upscale`
+
+Super-resolution upscaling.
+
+```bash
+parallax upscale image --model MODEL --input PATH [options]
+```
+
+**Models:** `esrgan`, `latent_upscale`
+
+---
+
+### `parallax jobs`
+
+Monitors and manages async inference jobs.
+
+```bash
+parallax jobs list   [--limit N]
+parallax jobs status <job_id>
+parallax jobs watch  <job_id>
+parallax jobs cancel <job_id>
+parallax jobs open   <job_id>
+```
+
+| Subcommand | Description |
+|-----------|-------------|
+| `list` | List the N most recent jobs (default: 20) |
+| `status` | Get status of a specific job |
+| `watch` | Stream job progress in real-time via SSE |
+| `cancel` | Cancel a pending or running job |
+| `open` | Open the job result in the default browser |
+
+Job states: `pending` → `running` → `completed` / `failed` / `cancelled`
+
+---
+
+### `parallax async`
+
+Queues any subcommand as a non-blocking job.
+
+```bash
+parallax async create image --model sdxl --prompt "portrait"
+# Job ID: 550e8400-e29b-41d4-a716-446655440000
+
+parallax jobs watch 550e8400-e29b-41d4-a716-446655440000
+```
+
+---
+
+### `parallax mcp install`
+
+Registers the Parallax MCP server in Claude Desktop.
+
+```bash
+parallax mcp install [--verbose]
+```
+
+Config is written to the platform-appropriate path:
+- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+- Linux: `~/.config/claude/claude_desktop_config.json`
+
+Restart Claude Desktop to apply. Idempotent — safe to re-run.
+
+---
+
+### `parallax ms install`
+
+Registers the inference server as a persistent system service.
+
+```bash
+parallax ms install [--verbose]
+```
+
+- **Linux:** systemd user unit at `~/.config/systemd/user/parallax-ms.service`
+- **macOS:** launchd agent at `~/Library/LaunchAgents/run.parallax.ms.plist`
+
+The service runs the FastAPI server at `http://localhost:5000`. Idempotent.
+
+---
+
+### `parallax frontend install`
+
+Downloads and installs the pre-built web UI.
+
+```bash
+parallax frontend install [--version X.Y.Z] [--verbose]
+parallax frontend version
+```
+
+Installs to `~/.parallax/frontend/` and mounts at `/ui` on the FastAPI server.
 
 ---
 
