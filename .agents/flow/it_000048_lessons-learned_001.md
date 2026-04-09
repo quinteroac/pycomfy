@@ -36,3 +36,18 @@
 - `_terminate_process` is the correct extension point for a future `restart` command — call `stop()` logic then `start()` logic.
 - On Windows, `os.kill(pid, signal.SIGTERM)` is equivalent to `TerminateProcess`; no `ctypes` or `taskkill` subprocess is needed.
 - The `sys.platform` check in `_terminate_process` is intentional documentation — both branches call the same thing, making the cross-platform contract explicit without dead code.
+
+## US-003 — Override Port with `--port`
+
+**Summary:** Added port validation to the existing `start` command in `cli/commands/comfyui.py`. The `--port` option was already wired to the subprocess and URL output; only the AC03 guard (reject ports outside 1–65535) was missing. Added a validation block at the top of the `start` function and wrote 11 tests in `tests/test_cli_comfyui_us003_it000048.py`.
+
+**Key Decisions:**
+- Validation is a simple `if port < 1 or port > 65535` check at the top of `start()`, before any I/O — cheapest possible guard with no dependencies.
+- Error output goes to `err=True` (stderr) to match the existing convention in the file.
+
+**Pitfalls Encountered:**
+- None — AC01 and AC02 were already implemented by US-001; only the validation guard was genuinely new work.
+
+**Useful Context for Future Agents:**
+- The `--port` option default (`_DEFAULT_PORT = 8188`) and the validated range (1–65535) are both enforced in `cli/commands/comfyui.py:start()`. Any future `restart` command that delegates to `start()` will inherit the validation automatically.
+- Typer does not natively validate integer ranges via `typer.Option`; the manual `if` check is intentional and consistent with the project's error-handling pattern (no exceptions for expected failures).

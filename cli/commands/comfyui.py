@@ -14,6 +14,12 @@ US-002 acceptance criteria:
   AC03 — if no instance is running, prints informative message and exits with code 0
   AC04 — cross-platform: SIGTERM on Linux/macOS, TerminateProcess on Windows
   AC05 — typecheck / lint passes
+
+US-003 acceptance criteria:
+  AC01 — --port <N> starts ComfyUI on the given port
+  AC02 — printed URL reflects the custom port
+  AC03 — invalid port (< 1 or > 65535) prints error and exits with non-zero code
+  AC04 — typecheck / lint passes
 """
 
 from __future__ import annotations
@@ -120,6 +126,11 @@ def start(
     ] = _READY_TIMEOUT,
 ) -> None:
     """Launch ComfyUI web UI as a background process."""
+    # US-003 AC03 — validate port range
+    if port < 1 or port > 65535:
+        typer.echo(f"Error: invalid port {port}. Must be between 1 and 65535.", err=True)
+        raise typer.Exit(1)
+
     python = _python_path()
     if not python.exists():
         typer.echo("Run `parallax install` first.", err=True)
