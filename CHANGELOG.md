@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [000048] - 2026-04-09
+
+### Added
+- Allow any end user to launch the ComfyUI web interface with a single command.
+- Provide lifecycle management (start, stop, status) consistent with the existing `parallax ms` service pattern.
+- Support port customisation and optional browser auto-open out of the box.
+
 ## [000046] - 2026-04-07
 
 ### Added
