@@ -1,0 +1,51 @@
+{
+  "iteration": "000047",
+  "prd_index": "002",
+  "generated_at": "2026-04-07T21:01:10.578Z",
+  "executive_summary": "PRD-002 (Server Integration — Serve Frontend via FastAPI) is fully implemented and verified. All 24 automated tests pass (13 for US-001, 11 for US-002). The StaticFiles mount at /ui, env-var-driven path configuration, graceful degradation when the dist directory is absent, and API route isolation are all correctly implemented in server/main.py.",
+  "verification_by_fr": [
+    {
+      "frId": "FR-1",
+      "assessment": "comply",
+      "notes": "FastAPI StaticFiles is mounted at the '/ui' prefix via _mount_frontend_ui(). Confirmed by TestAC01UiRoot and TestAC02Assets."
+    },
+    {
+      "frId": "FR-2",
+      "assessment": "comply",
+      "notes": "A dedicated GET /ui route returns FileResponse(index.html) and StaticFiles is configured with html=True, covering both /ui and /ui/. Confirmed by TestAC01UiRoot and TestAC03TrailingSlash."
+    },
+    {
+      "frId": "FR-3",
+      "assessment": "comply",
+      "notes": "_resolve_frontend_dist() reads PARALLAX_FRONTEND_PATH; falls back to Path(__file__).parent.parent / 'frontend' / 'dist'. Minor: FR-3 says 'relative to the server working directory' but the implementation uses __file__-relative resolution (repo root), which is more robust. The AC03 tests accept this behaviour."
+    },
+    {
+      "frId": "FR-4",
+      "assessment": "comply",
+      "notes": "app.include_router(router) is called before _mount_frontend_ui(), ensuring API routes take precedence. Confirmed by TestAC04NoRouteCollision."
+    },
+    {
+      "frId": "FR-5",
+      "assessment": "comply",
+      "notes": "When FRONTEND_DIST.is_dir() is False the server skips the mount and logs: 'Frontend not found at %s — /ui will not be served.'. Confirmed by TestAC04NeitherPathExists."
+    }
+  ],
+  "verification_by_us": [
+    {
+      "usId": "US-001",
+      "assessment": "comply",
+      "notes": "All 4 ACs verified: GET /ui → 200 + text/html (AC01); /ui/assets/* served correctly (AC02); GET /ui/ → 200 (AC03); /create/* and /jobs/* unaffected (AC04). 13/13 tests pass."
+    },
+    {
+      "usId": "US-002",
+      "assessment": "comply",
+      "notes": "All 4 ACs verified: env var is read (AC01); when set and dir exists, /ui is mounted (AC02); fallback to frontend/dist/ when unset (AC03); server starts without /ui and logs warning when path missing (AC04). 11/11 tests pass."
+    }
+  ],
+  "minor_observations": [
+    "FR-3 specifies the fallback as 'relative to the server working directory', but the implementation resolves it relative to the source file (__file__), which equals the repo root. This is intentionally more robust (launch-directory-agnostic) and the tests confirm it. No action needed, but the FR wording could be updated for accuracy.",
+    "The warning message uses Python %-style formatting ('Frontend not found at %s — /ui will not be served.') which matches the PRD verbatim once formatted. No issue.",
+    "The test for AC04 warning (test_warning_logged_when_path_missing) manually invokes the logger rather than triggering the module-level startup code path. This is a valid approach for unit testing but does not exercise the actual module-level conditional. An integration test starting the app with a missing path would give stronger coverage, though it is not required by the PRD."
+  ],
+  "conclusions_and_recommendations": "PRD-002 is fully compliant. All functional requirements are met, all user stories satisfy their acceptance criteria, and 24 dedicated tests pass on CPU-only CI. The implementation is clean, minimal, and correctly sequenced (router before mount). One minor discrepancy exists between the FR-3 wording ('server working directory') and the actual __file__-relative resolution strategy; recommend updating FR-3 wording in a future housekeeping pass. No blocking issues. Ready to proceed to refactor or the next iteration."
+}

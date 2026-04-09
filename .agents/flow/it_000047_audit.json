@@ -1,0 +1,40 @@
+{
+  "iteration": "000047",
+  "prd_index": "001",
+  "generated_at": "2026-04-07T20:58:36.875Z",
+  "refactor_items": [
+    {
+      "id": "R-001",
+      "priority": 1,
+      "title": "Fix content-type switching — send application/json when no image",
+      "description": "App.tsx always sends multipart/form-data regardless of whether an image is attached. FR-3 and FR-4 require application/json when no image is present. Add a conditional branch in handleSubmit: when inputImage is null, build a JSON body with Content-Type: application/json; when inputImage is non-null, use FormData as today.",
+      "affected_files": [
+        "frontend/src/App.tsx",
+        "frontend/src/__tests__/App.test.tsx",
+        "frontend/src/__tests__/HardenUS003.test.tsx"
+      ],
+      "effort": "small"
+    },
+    {
+      "id": "R-002",
+      "priority": 2,
+      "title": "ImageUpload — use label-based file trigger for accessibility",
+      "description": "Replace the button + imperative inputRef.current?.click() pattern with a <label htmlFor> association so the file input is natively linked to its trigger. Improves screen-reader compatibility.",
+      "affected_files": [
+        "frontend/src/components/ImageUpload.tsx",
+        "frontend/src/__tests__/ImageUpload.test.tsx"
+      ],
+      "effort": "small"
+    },
+    {
+      "id": "R-003",
+      "priority": 3,
+      "title": "Add Shift+Enter regression test",
+      "description": "Add a test case that fires a Shift+Enter keydown on the prompt textarea and asserts handleSubmit is not called and textarea value is unchanged.",
+      "affected_files": [
+        "frontend/src/__tests__/HardenUS003.test.tsx"
+      ],
+      "effort": "trivial"
+    }
+  ]
+}

@@ -13,6 +13,7 @@ import typer
 from cli._version import __version__
 from cli.commands.create import app as create_app
 from cli.commands.edit import app as edit_app
+from cli.commands.frontend import app as frontend_app
 from cli.commands.install import install
 from cli.commands.jobs import app as jobs_app
 from cli.commands.mcp import app as mcp_app
@@ -26,6 +27,7 @@ app = typer.Typer(
 
 app.add_typer(create_app, name="create")
 app.add_typer(edit_app,   name="edit")
+app.add_typer(frontend_app, name="frontend")
 app.add_typer(jobs_app,   name="jobs")
 app.add_typer(mcp_app,    name="mcp")
 app.add_typer(ms_app,     name="ms")

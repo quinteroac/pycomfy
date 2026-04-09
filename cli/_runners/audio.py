@@ -7,7 +7,7 @@ from typing import Callable
 MODELS = ["ace_step"]
 
 DEFAULTS: dict[str, dict] = {
-    "ace_step": {"length": 120, "steps": 8, "cfg": 1.0, "bpm": 120},
+    "ace_step": {"length": 120, "steps": 50, "cfg": 5.0, "bpm": 120},
 }
 
 

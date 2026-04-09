@@ -27,9 +27,11 @@ class CreateVideoRequest(BaseModel):
     model: str
     prompt: str
     input: Optional[str] = None
+    pipeline: Optional[str] = None
     width: Optional[int] = None
     height: Optional[int] = None
     length: Optional[int] = None
+    duration: Optional[float] = None
     seed: Optional[int] = None
     steps: Optional[int] = None
     cfg: Optional[float] = None
@@ -41,6 +43,7 @@ class CreateAudioRequest(BaseModel):
     lyrics: Optional[str] = None
     bpm: Optional[int] = None
     length: Optional[float] = None
+    duration: Optional[float] = None
     seed: Optional[int] = None
     steps: Optional[int] = None
 

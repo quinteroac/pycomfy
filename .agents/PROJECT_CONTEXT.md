@@ -4,178 +4,161 @@
 
 ## Conventions
 - Naming: snake_case for files, variables, functions; PascalCase for classes
-- Formatting: no enforced formatter yet — follow PEP 8 conventions
-- Git flow: feature branches per iteration (`feature/it_XXXXXX`), merge to `main` via PR
+- Formatting: no enforced formatter yet — follow PEP 8 conventions; ruff for lint
+- Git flow: feature branches per iteration (`feature/it_XXXXXX`), merge to `master` via PR
 - Workflow: all agent commands via `bun nvst <command>`; all Python via `uv`
 - Language: all generated resources must be in English
 
 ## Monorepo Structure
-This repo is a polyglot monorepo: a Python core library + TypeScript application packages.
+This repo is a Python monorepo: a core library + application layers, all in Python.
 
 ```
 comfy-diffusion/
 ├── comfy_diffusion/       # Python core library (PyPI: comfy-diffusion)
-├── server/                # FastAPI worker — wraps comfy_diffusion, exposes HTTP on :5000
-├── packages/
-│   ├── parallax_sdk/      # @parallax/sdk — shared TypeScript types (request/response contracts)
-│   ├── parallax_ms/       # @parallax/ms  — Elysia gateway on :3000, proxies to server/
-│   ├── parallax_cli/      # @parallax/cli — Bun CLI, talks to parallax_ms
-│   └── parallax_mcp/      # @parallax/mcp — MCP server for Claude, talks to parallax_ms
+├── server/                # FastAPI worker — job queue, SSE progress stream, :5000
+├── cli/                   # Python CLI (Typer) — `parallax` entry point
+├── mcp/                   # Python MCP server (FastMCP) — `parallax-mcp` entry point
+├── parallax/              # Thin shim for `python -m parallax`
+├── install.sh             # One-command Linux/macOS installer
+├── install.ps1            # One-command Windows installer
+├── parallax.spec          # PyInstaller spec — standalone binary (no Python required)
 └── docs/                  # Per-package documentation
 ```
 
-Request flow: `parallax_cli / parallax_mcp → parallax_ms (:3000) → server/FastAPI (:5000) → comfy_diffusion`
+Request flow: `parallax CLI / parallax-mcp → server/ FastAPI (:5000) → comfy_diffusion`
 
 ## Tech Stack
-### Python (comfy_diffusion + server/)
+### Python (comfy_diffusion + server/ + cli/ + mcp/)
 - Language: Python 3.12+
 - Runtime: CPython
-- Frameworks: FastAPI + uvicorn (server/), none (core library)
+- Frameworks: FastAPI + uvicorn (server/), Typer (cli/), FastMCP (mcp/), none (core library)
 - Key libraries: torch (optional, via extras), ComfyUI (vendored submodule)
+- Database: SQLite via aiosqlite — job persistence at `~/.config/parallax/jobs.db`
+  (overridden by `PARALLAX_DB_PATH` env var)
 - Package manager: uv (no pip/venv)
-- Build / tooling: pyproject.toml (PEP 621), uv for install/sync/run
+- Build / tooling: pyproject.toml (PEP 621), uv for install/sync/run,
+  PyInstaller + parallax.spec for standalone binary
+- Scripts: `parallax = "cli.main:app"`, `parallax-mcp = "mcp.main:main"`
 
-### TypeScript (packages/)
-- Runtime: Bun
-- Gateway framework: Elysia (parallax_ms)
-- CLI framework: commander (parallax_cli)
-- MCP framework: @modelcontextprotocol/sdk (parallax_mcp)
-- Shared types: @parallax/sdk (workspace:*)
-- Workspace manager: Bun workspaces (package.json root)
+### TypeScript (scripts only)
+- Runtime: Bun — only for version-bump scripts (`scripts/`)
+- No application code in TypeScript; `packages/` no longer exists
 
 ## Code Standards
-- Style: PEP 8, type hints on public API
-- Error handling: `check_runtime()` returns error dicts (no exceptions for expected failures); `python_version` always populated
+- Style: PEP 8, type hints on public API, ruff for lint
+- Error handling: `check_runtime()` returns error dicts (no exceptions for expected failures)
 - Module organisation: src-less layout — `comfy_diffusion/` package at repo root, vendored deps in `vendor/`
 - Forbidden patterns: no hardcoded torch versions; no manual `sys.path` manipulation outside `_runtime.py`; no pip/venv commands; no `torch`/`comfy.*` imports at module top level (lazy import pattern)
-- `path` type annotation: `str | Path` across all loaders — do not change to `str | os.PathLike` without updating all occurrences
+- `path` type annotation: `str | Path` across all loaders
 
 ## Testing Strategy
 - Approach: critical paths only
 - Runner: pytest (via `uv run pytest`)
 - Coverage targets: none enforced
-- Test location: `tests/` at repo root
+- Test location: `tests/` at repo root; test files named `test_<scope>_it<NNNNNN>.py` for iteration tests
 - Constraint: CI is CPU-only — all tests must pass without GPU; use mocks/stubs for model weights
 
 ## Product Architecture
 - comfy-diffusion is a standalone Python library exposing ComfyUI's inference engine as importable modules
-- No server, no UI, no application layer — import and run inference in your own code
-- ComfyUI vendored as git submodule at `vendor/ComfyUI`, pinned to `COMFYUI_PINNED_TAG` in `_runtime.py`
-- `check_runtime()` auto-downloads ComfyUI from GitHub if `vendor/ComfyUI` is missing/empty (idempotent; stdlib only: `urllib.request`, `zipfile`, `shutil`, `pathlib`, `tempfile`)
+- `server/` is a FastAPI application that wraps comfy_diffusion: job queue (aiosqlite), SSE progress stream, REST API for sync and async inference
+- `cli/` is a Typer CLI that talks to `server/` — supports sync and `--async` mode, binary distributionas self-contained executable via PyInstaller
+- `mcp/` is a FastMCP server that exposes inference tools to Claude (calls `server/` endpoints)
+- ComfyUI vendored as git submodule at `vendor/ComfyUI`
+- `parallax install` bootstraps the runtime to `~/.parallax/env`; `parallax ms install` registers server as systemd/launchd service
 
-### Data Flow
-1. Consumer does `import comfy_diffusion`
-2. `comfy_diffusion/__init__.py` adds `vendor/ComfyUI` to `sys.path` (absolute paths from `__file__`)
-3. Consumer calls `check_runtime()` — bootstraps ComfyUI if absent, returns diagnostics dict
-4. ComfyUI internals (e.g. `comfy.model_management`) become importable; consumer uses library API
+### Data Flow (inference)
+1. `parallax create image|video|audio [--async]` → POST to `server/:5000`
+2. `server/` enqueues the job in SQLite, spawns a subprocess via uv
+3. Subprocess imports `comfy_diffusion` pipeline and runs inference
+4. Progress reported via SSE (`/jobs/{id}/stream`); result available at `/jobs/{id}`
 
 ## Modular Structure
 - `comfy_diffusion/_runtime.py`: path management, `COMFYUI_PINNED_TAG`, auto-bootstrap logic
 - `comfy_diffusion/runtime.py`: public `check_runtime()` entry point
 - `comfy_diffusion/models.py`: `ModelManager` — load_checkpoint, load_clip(*paths), load_vae, load_llm, load_upscale_model, load_audio_encoder, load_latent_upscale_model
-- `comfy_diffusion/downloader.py`: `HFModelEntry`, `CivitAIModelEntry`, `URLModelEntry` + `download_models()` — manifest-based model downloader with SHA256 verification
+- `comfy_diffusion/downloader.py`: `HFModelEntry`, `CivitAIModelEntry`, `URLModelEntry` + `download_models()`
 - `comfy_diffusion/conditioning.py`: encode_prompt, advanced/regional/scheduled conditioning (Flux, WAN, LTXV)
 - `comfy_diffusion/sampling.py`: sample(), advanced samplers, custom schedulers, sigma tools
 - `comfy_diffusion/vae.py`: vae_decode/encode (single, tiled, batch variants)
 - `comfy_diffusion/lora.py`: apply_lora, LoRA stacking
-- `comfy_diffusion/controlnet.py`: load_controlnet, apply_controlnet (ControlNetApplyAdvanced, SetUnionControlNetType)
+- `comfy_diffusion/controlnet.py`: load_controlnet, apply_controlnet
 - `comfy_diffusion/latent.py`: latent create/resize/crop/compose/batch utilities
 - `comfy_diffusion/image.py`: image load/save/transform utilities
 - `comfy_diffusion/mask.py`: mask load/convert/grow/feather utilities
 - `comfy_diffusion/audio.py`: LTXV Audio VAE + ACE Step 1.5 text-to-audio
 - `comfy_diffusion/textgen.py`: generate_text(), generate_ltx2_prompt() (LLM/VLM inference)
 - `comfy_diffusion/video.py`: video CFG guidance, model sampling patches (Flux, SD3, AuraFlow)
-- `comfy_diffusion/pipelines/`: hierarchical pipeline library — `image/` (sdxl, anima, z_image, flux_klein, qwen), `video/` (ltx/ltx2, ltx/ltx23, wan/wan21, wan/wan22), `audio/` (ace_step); each module exports `manifest() -> list[ModelEntry]` + `run()`
+- `comfy_diffusion/pipelines/`: hierarchical pipeline library — `image/` (sdxl, anima, z_image, flux_klein, qwen), `video/` (ltx/ltx2, ltx/ltx23, wan/wan21, wan/wan22), `audio/` (ace_step)
+- `server/gateway.py`: APIRouter — inference endpoints (POST /create/*, /jobs/*)
+- `server/main.py`: FastAPI app + CORS middleware
+- `server/job_queue.py`: aiosqlite job store; `PARALLAX_DB_PATH` env override
+- `server/submit.py`: subprocess launcher (uv run) for inference jobs
+- `server/schemas.py`: Pydantic request/response models
+- `cli/main.py`: Typer app — create, edit, jobs, mcp, ms, upscale, install, async
+- `cli/_runners/`: per-media type HTTP call helpers (image, video, audio, edit_image)
+- `cli/commands/install.py`: `parallax install` — bootstraps `~/.parallax/env`
+- `cli/commands/ms.py`: `parallax ms install` — registers server as systemd/launchd service
+- `cli/commands/mcp.py`: `parallax mcp install` — registers MCP server
+- `mcp/main.py`: FastMCP server; tools: create_image, create_video, create_audio, edit_image, upscale_image, get_job_status, wait_for_job
 - `vendor/ComfyUI/`: vendored ComfyUI (submodule or auto-downloaded zip, not edited directly)
 - `tests/`: pytest test files
 
 ## ComfyUI API Notes
 - `clip.encode_from_tokens_scheduled(tokens)` — canonical for text conditioning (mirrors `CLIPTextEncode`)
-- `clip.encode_from_tokens(tokens, return_pooled=True)` — GLIGEN only; do not use for standard encoding
+- `clip.encode_from_tokens(tokens, return_pooled=True)` — GLINGEN only; do not use for standard encoding
 
 ## Public API Pattern
-- Re-exported at package level: `check_runtime`, `apply_lora`; full `vae` surface: `vae_decode`, `vae_decode_tiled`, `vae_decode_batch`, `vae_decode_batch_tiled`, `vae_encode`, `vae_encode_tiled`, `vae_encode_batch`, `vae_encode_batch_tiled`, `vae_encode_for_inpaint`
+- Re-exported at package level: `check_runtime`, `apply_lora`; full `vae` surface
 - All other symbols: explicit submodule imports (e.g. `from comfy_diffusion.conditioning import encode_prompt`)
-- `textgen`, `audio`, `latent`, `image`, `mask`, `video`, `controlnet` — not re-exported at package level
 
 ## Pipeline Authoring Rules
-
-When implementing a pipeline based on a ComfyUI workflow file, follow these rules strictly:
-
 ### 1. Always read the workflow first with the workflow-reader skill
-Before writing any code, run:
 ```bash
 python comfy_diffusion/skills/workflow-reader/tools/workflow.py <workflow.json>
 ```
-This reveals the exact nodes, parameters, connections, execution order, and model downloads. Never assume — always read.
-
 ### 2. The workflow is the source of truth
-- `manifest()` must list **exactly** the files declared in `get_model_downloads()` that belong to **active** (non-bypassed) nodes.
-- HF repos, filenames, and destination directories must match the `url` and `directory` fields in the workflow metadata — not guessed or inferred from model names.
-- `run()` must mirror the node execution order shown by `get_nodes()`. Do not reorder, skip, or combine steps unless the workflow itself does so.
-
+- `manifest()` must list exactly the files from active (non-bypassed) nodes
+- HF repos, filenames, and destination directories must match workflow metadata
+- `run()` must mirror the node execution order
 ### 3. Check node mode before including in manifest or run()
-A node with `mode = "bypassed"` or `"muted"` is **not executed**. Do not add its models to `manifest()` and do not implement its logic in `run()`. This is the most common source of manifest drift.
-
+A node with `mode = "bypassed"` or `"muted"` is not executed.
 ### 4. Sampler, sigmas, and CFG values come from the workflow
-- Sampler name: read from `KSamplerSelect` widget value.
-- Sigmas string: read from `ManualSigmas` widget value.
-- CFG: read from `CFGGuider` widget value.
-- Never substitute defaults from other pipelines without verifying against the workflow.
-
 ### 5. Multi-pass pipelines must implement every pass
-If the workflow contains multiple `SamplerCustomAdvanced` nodes, each is a distinct sampling pass. Implement all of them in order, including any upscaling or image re-injection between passes.
-
-### 6. If a required node is not yet wrapped, implement it first
-Before writing the pipeline, check whether every node used in the workflow has a corresponding function in `comfy_diffusion/`. If a node is missing:
-- Implement it in the appropriate module (`conditioning.py`, `latent.py`, `audio.py`, `video.py`, etc.) following the standard lazy-import pattern.
-- Add it to the module's `__all__`.
-- Do **not** inline raw `comfy.*` calls inside a pipeline file — all ComfyUI node logic belongs in the library modules.
-- Only then proceed to write the pipeline.
-
+### 6. If a required node is not yet wrapped, implement it first in the library
 ### 7. LoRA application order and strength matter
-Check each `LoraLoader` / `LoraLoaderModelOnly` node:
-- `LoraLoaderModelOnly` → `apply_lora(model, clip, path, strength, 0.0)` (clip strength = 0)
+- `LoraLoaderModelOnly` → `apply_lora(model, clip, path, strength, 0.0)`
 - `LoraLoader` → `apply_lora(model, clip, path, strength_model, strength_clip)`
-- Apply in the order given by `order` field. Stack multiple calls when there are multiple LoRA nodes.
 
 ## Implemented Capabilities
-<!-- Updated at the end of each iteration -->
 
-### Summary — it_000001 through it_000024
-- **001** Foundation: `check_runtime()`, `_runtime.py`, ComfyUI path management
-- **002–007** `models`, `conditioning`, `sampling`, `vae` (encode/decode), `lora`
-- **008–010** `vae` tiled + batch variants; advanced samplers, custom schedulers, sigma tools
-- **011–013** `audio` (LTXV VAE + ACE Step conditioning); `conditioning` advanced/regional; `controlnet`
-- **014–017** `latent`, `image`, `mask`, `video` (patches + CFG guidance)
-- **018** Packaging: PEP 621, type stubs, distributable skills
-- **019** `ModelManager.load_clip(*paths)` — variadic CLIP loader
-- **020** `textgen`: `generate_text()`, `generate_ltx2_prompt()` (LLM/VLM)
-- **021** Auto-bootstrap: `check_runtime()` downloads ComfyUI when `vendor/ComfyUI` is absent
-- **022–023** Incremental refinements
-- **024** `downloader.py`: manifest downloader (`HFModelEntry`, `CivitAIModelEntry`, `URLModelEntry`, SHA256, `tqdm`); CivitAI uses REST API directly (no `civitai-py`)
+### it_000001–037 (archived summary)
+- **001–021** Foundation, `check_runtime`, `models`, `conditioning`, `sampling`, `vae`, `lora`, `audio`, `controlnet`, `latent`, `image`, `mask`, `video`, `textgen`, `downloader`, auto-bootstrap
+- **022–026** Upscale model, ComfyUI v0.18.0
+- **027–034** LTX-Video 2, WAN 2.1/2.2, audio encoder; pipelines: ltx2, ltx23 (t2v/i2v/flf2v), wan21, wan22, sdxl, anima, z_image
+- **035** ACE Step, Flux.2 Klein, Qwen layered; pipelines: flux_klein, qwen/layered, audio/ace_step/v1_5
+- **036** `image/qwen/edit_2511` pipeline
+- **037** `examples/qwen_edit_2511.py` CLI example
 
-### it_000025–026 — Upscale Model + ComfyUI v0.18.0
-- `ModelManager.load_upscale_model(path)`, `upscale_models` folder registered
-- ComfyUI submodule updated to `v0.18.0`
+### it_000038–043 — Python Application Layer (replaced TypeScript)
+- TypeScript `packages/parallax_cli`, `packages/parallax_ms`, `packages/parallax_mcp` — **removed in it_000044**
+- Work in these iterations informed the Python rewrite architecture
 
-### it_000027–034 — LTX-Video 2, WAN 2.1/2.2, Audio Encoder
-- `latent`: `ltxv_empty_latent_video`, `ltxv_latent_upsample`, `ltxv_crop_guides`
-- `audio`: `ltxv_concat_av_latent`, `ltxv_separate_av_latent`, `audio_encoder_encode`, `vae_decode_audio`
-- `sampling`: `manual_sigmas`; `conditioning`: `wan22_image_to_video_latent`
-- `ModelManager`: `load_audio_encoder`, `load_latent_upscale_model`
-- Pipelines: `video/ltx/ltx2` (t2v, i2v, distilled, a2v, depth, canny, pose, lora), `video/ltx/ltx23` (t2v, i2v, flf2v, ia2v), `video/wan/wan21` (t2v, i2v, flf2v), `video/wan/wan22` (t2v, i2v, flf2v, s2v, ti2v), `image/sdxl` (t2i, turbo, refiner), `image/anima`, `image/z_image`
+### it_000044 — Python CLI + MCP + Server rewrite
+- `cli/` — Typer CLI: `parallax create image|video|audio`, `edit image`, `upscale`, `jobs`, `async`
+- `mcp/` — FastMCP server: `create_image`, `create_video`, `create_audio`, `edit_image`, `upscale_image`, `get_job_status`, `wait_for_job`
+- `server/` — FastAPI with SQLite job queue, SSE progress stream (`/jobs/{id}/stream`), non-blocking inference via subprocess
+- `parallax async <cmd>` — enqueues any command as async job, returns job ID
 
-### it_000035 — ACE Step + Flux.2 Klein + new library wrappers
-- `latent`: `empty_flux2_latent_image`, `empty_qwen_image_layered_latent_image`
-- `conditioning`: `reference_latent`; `sampling`: `flux_kv_cache`
-- `image`: `image_scale_to_total_pixels`, `image_scale_to_max_dimension`, `get_image_size`
-- Pipelines: `image/flux_klein` (t2i_4b_base/distilled, edit_4b/9b base/distilled, edit_9b_kv), `image/qwen/layered`
-- Pipelines: `audio/ace_step/v1_5` (checkpoint, split, split_4b)
+### it_000045 — Standalone Binary + Installer
+- `parallax.spec` — PyInstaller spec; produces self-contained `parallax` binary (~50 MB, no Python required)
+- `cli/commands/install.py` — `parallax install`: downloads comfy-diffusion runtime to `~/.parallax/env`
+- `cli/commands/ms.py` — `parallax ms install`: registers FastAPI server as systemd (Linux) or launchd (macOS) service
+- `cli/commands/mcp.py` — `parallax mcp install`: registers MCP server
+- `install.sh` / `install.ps1` — one-command installers for Linux/macOS and Windows
+- `.github/workflows/release-cli.yml` — CI builds and publishes binaries on version tags
+- `cli/_version.py` — version constant baked in at PyInstaller build time
 
-### it_000036 — Qwen Image Edit 2511
-- `image/qwen/edit_2511` pipeline — Qwen2.5-VL image editing
-- 4 new library node wrappers across conditioning, latent, sampling, image modules
-
-### it_000037 — Qwen edit_2511 CLI example
-- `examples/qwen_edit_2511.py` — self-contained executable annotating pipeline public API (`manifest()` + `run()`)
+### it_000046 — LTX-23 ia2v + CLI --audio option
+- `comfy_diffusion/pipelines/video/ltx/ltx23/ia2v.py` — image+audio-to-video pipeline (22B dev fp8, two-pass AV)
+- `cli/commands/create.py` — `--audio` option on `parallax create video --model ltx23`
+- Routes to `ia2v` pipeline when `--audio` is provided with `ltx23`

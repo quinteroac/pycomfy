@@ -9,6 +9,7 @@ from server.jobs import JobData
 from server.job_queue import close_queue, get_queue
 
 _WORKER_PATH = Path(__file__).parent / "worker.py"
+_REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _resolve_uv() -> str:
@@ -34,6 +35,7 @@ def submit_job(data: JobData) -> str:
 
     subprocess.Popen(
         [_resolve_uv(), "run", "python", str(_WORKER_PATH), job_id],
+        cwd=str(_REPO_ROOT),
         start_new_session=True,
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,

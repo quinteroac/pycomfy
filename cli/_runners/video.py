@@ -32,9 +32,9 @@ def _ltx23(*, mdir, prompt, image, w, h, n, f, s, c, seed, audio=None, **_):  # 
         return run(models_dir=mdir, prompt=prompt, image=image, audio_path=audio, width=w, height=h, length=n, fps=f, cfg=c, seed=seed)
     if image is not None:
         from comfy_diffusion.pipelines.video.ltx.ltx23.i2v import run
-        return run(models_dir=mdir, prompt=prompt, image=image, width=w, height=h, length=n, fps=f, seed=seed)
+        return run(models_dir=mdir, prompt=prompt, image=image, width=w, height=h, length=n, fps=f, cfg=c, seed=seed)
     from comfy_diffusion.pipelines.video.ltx.ltx23.t2v import run
-    return run(models_dir=mdir, prompt=prompt, width=w, height=h, length=n, fps=f, seed=seed)
+    return run(models_dir=mdir, prompt=prompt, width=w, height=h, length=n, fps=f, cfg=c, seed=seed)
 
 
 def _wan21(*, mdir, prompt, image, w, h, n, f, s, c, seed, **_):  # type: ignore[no-untyped-def]
