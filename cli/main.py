@@ -11,6 +11,7 @@ from typing import Annotated, Optional
 import typer
 
 from cli._version import __version__
+from cli.commands.comfyui import app as comfyui_app
 from cli.commands.create import app as create_app
 from cli.commands.edit import app as edit_app
 from cli.commands.frontend import app as frontend_app
@@ -25,6 +26,7 @@ app = typer.Typer(
     help="Parallax CLI — run ComfyUI-backed inference pipelines from the command line.",
 )
 
+app.add_typer(comfyui_app, name="comfyui")
 app.add_typer(create_app, name="create")
 app.add_typer(edit_app,   name="edit")
 app.add_typer(frontend_app, name="frontend")
