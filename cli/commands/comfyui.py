@@ -27,10 +27,17 @@ US-004 acceptance criteria:
   AC03 — works on Linux, macOS, and Windows
   AC04 — typecheck / lint passes
   AC05 — visually verified in browser: ComfyUI interface loads
+
+US-005 acceptance criteria:
+  AC01 — if running: prints "ComfyUI is running (PID <pid>, port <port>)"
+  AC02 — if not running: prints "ComfyUI is not running" and exits with code 0
+  AC03 — port is read from the PID file metadata (stored alongside PID at start time)
+  AC04 — typecheck / lint passes
 """
 
 from __future__ import annotations
 
+import json
 import os
 import signal
 import subprocess
@@ -85,14 +92,26 @@ def _get_comfyui_main(python: Path) -> Path:
     return main_py
 
 
+def _read_pid_file(pid_file: Path) -> tuple[int, int] | None:
+    """Parse *pid_file* and return ``(pid, port)``, or ``None`` on any error.
+
+    The file is written as JSON ``{"pid": N, "port": N}`` since US-005.
+    """
+    if not pid_file.exists():
+        return None
+    try:
+        data = json.loads(pid_file.read_text(encoding="utf-8"))
+        return int(data["pid"]), int(data["port"])
+    except (ValueError, KeyError, OSError, json.JSONDecodeError, TypeError):
+        return None
+
+
 def _is_running(pid_file: Path) -> bool:
     """Return True if the PID in *pid_file* refers to a live process (AC05)."""
-    if not pid_file.exists():
+    result = _read_pid_file(pid_file)
+    if result is None:
         return False
-    try:
-        pid = int(pid_file.read_text(encoding="utf-8").strip())
-    except (ValueError, OSError):
-        return False
+    pid, _ = result
     try:
         os.kill(pid, 0)
         return True
@@ -157,7 +176,8 @@ def start(
 
     # AC05 — already running guard
     if _is_running(pid_file):
-        pid_str = pid_file.read_text(encoding="utf-8").strip()
+        existing = _read_pid_file(pid_file)
+        pid_str = str(existing[0]) if existing else "unknown"
         typer.echo(
             f"Warning: ComfyUI is already running (PID {pid_str}). "
             "Stop it first before starting a new instance."
@@ -179,9 +199,11 @@ def start(
         stderr=subprocess.DEVNULL,
     )
 
-    # AC03 — write PID file so the process can be tracked
+    # AC03 — write PID file (with port metadata) so the process can be tracked
     pid_file.parent.mkdir(parents=True, exist_ok=True)
-    pid_file.write_text(str(proc.pid), encoding="utf-8")
+    pid_file.write_text(
+        json.dumps({"pid": proc.pid, "port": port}), encoding="utf-8"
+    )
 
     # AC04 — wait for the server to be ready, then print the URL
     typer.echo(f"Starting ComfyUI on port {port}…")
@@ -209,7 +231,8 @@ def stop() -> None:
         typer.echo("No ComfyUI instance is currently running.")
         return
 
-    pid = int(pid_file.read_text(encoding="utf-8").strip())
+    existing = _read_pid_file(pid_file)
+    pid = existing[0] if existing else 0
 
     # US-002 AC01 + AC04 — terminate the process
     try:
@@ -225,3 +248,22 @@ def stop() -> None:
         pass
 
     typer.echo(f"ComfyUI (PID {pid}) stopped.")
+
+
+@app.command("status")
+def status() -> None:
+    """Show whether ComfyUI is currently running and on which port."""
+    pid_file = _pid_file()
+
+    # US-005 AC02 — not running
+    if not _is_running(pid_file):
+        typer.echo("ComfyUI is not running")
+        return
+
+    # US-005 AC01 + AC03 — running: read pid and port from PID file metadata
+    existing = _read_pid_file(pid_file)
+    if existing is None:
+        typer.echo("ComfyUI is not running")
+        return
+    pid, port = existing
+    typer.echo(f"ComfyUI is running (PID {pid}, port {port})")

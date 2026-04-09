@@ -39,7 +39,9 @@ def _run_stop(
     """Invoke ``parallax comfyui stop`` with all I/O mocked."""
     pid_file = tmp_path / "comfyui.pid"
     if is_running:
-        pid_file.write_text(str(pid), encoding="utf-8")
+        import json
+
+        pid_file.write_text(json.dumps({"pid": pid, "port": 8188}), encoding="utf-8")
 
     kwargs: dict = {}
     if terminate_side_effect is not None:

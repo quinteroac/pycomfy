@@ -69,3 +69,24 @@
 - `_open_browser` is the correct extension point if the browser-open behaviour ever needs customisation (e.g. choosing a specific browser profile).
 - `webbrowser.open()` is cross-platform by design (stdlib); no platform conditionals are needed.
 - The `--open` flag is silently ignored when the server does not become ready within the timeout — this is intentional UX (a warning is already printed, no extra error for the browser not opening).
+
+## US-005 — Check Status with `parallax comfyui status`
+
+**Summary:** Added `parallax comfyui status` command to `cli/commands/comfyui.py`. Migrated the PID file format from a raw PID string to JSON `{"pid": N, "port": N}` to satisfy AC03 (port stored alongside PID at start time). Added `_read_pid_file()` helper that returns `(pid, port) | None`. Updated `_is_running()` to use the new helper. Updated `start()` and `stop()` to write/read the JSON format. Wrote 14 tests in `tests/test_cli_comfyui_us005_it000048.py`.
+
+**Key Decisions:**
+- PID file format changed to JSON to store both `pid` and `port` in a single file — no sidecar file needed.
+- `_read_pid_file()` is the single source of truth for parsing the PID file; all other helpers delegate to it.
+- `_is_running()` now delegates to `_read_pid_file()` instead of parsing the file itself — eliminates duplication.
+- `status` command calls `_is_running()` first (cheap check), then `_read_pid_file()` for the port — avoids a double-parse in the not-running path.
+
+**Pitfalls Encountered:**
+- `json.loads("99999")` returns an `int`, not a dict. When the US-004 test wrote a raw PID string (`str(pid)`) to the PID file and `_read_pid_file` tried `data["pid"]` on the int, it raised `TypeError`. Fixed by adding `TypeError` to the except clause in `_read_pid_file`.
+- The US-001 test `test_pid_file_contains_process_pid` asserted `pid_file.read_text().strip() == "77777"` — this broke with the new JSON format. Updated the test to parse JSON and assert `data["pid"] == 77777`.
+- The `_run_start` helpers in US-001 and US-002 tests wrote `str(pid)` to the PID file for the `already_running=True` case. Updated to write valid JSON.
+- The `_is_running` unit tests in US-001 also wrote raw integers — updated all to use JSON format.
+
+**Useful Context for Future Agents:**
+- The PID file at `~/.config/parallax/comfyui.pid` is now always JSON `{"pid": N, "port": N}`. Any future command (e.g., `restart`) must read via `_read_pid_file()` and write via `json.dumps({"pid": ..., "port": ...})`.
+- `_read_pid_file()` returns `None` for any parse error (missing file, bad JSON, wrong type, missing keys) — callers must handle `None`.
+- `TypeError` must be in the except clause of `_read_pid_file` because `json.loads` of a bare integer/string returns a non-dict Python object, making key access raise `TypeError` rather than `KeyError`.

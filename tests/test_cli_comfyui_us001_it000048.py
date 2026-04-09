@@ -63,7 +63,9 @@ def _run_start(
 
     pid_file = tmp_path / "comfyui.pid"
     if already_running:
-        pid_file.write_text(str(pid), encoding="utf-8")
+        import json
+
+        pid_file.write_text(json.dumps({"pid": pid, "port": port}), encoding="utf-8")
     fake_proc = _fake_popen(pid)
 
     with (
@@ -209,8 +211,11 @@ class TestAC03PidFile:
         assert pid_file.exists()
 
     def test_pid_file_contains_process_pid(self, tmp_path: Path) -> None:
+        import json
+
         _, pid_file = _run_start(tmp_path, pid=77777)
-        assert pid_file.read_text().strip() == "77777"
+        data = json.loads(pid_file.read_text())
+        assert data["pid"] == 77777
 
     def test_pid_file_parent_dir_created(self, tmp_path: Path) -> None:
         """Parent dirs for the PID file are created if they don't exist."""
@@ -306,20 +311,26 @@ class TestIsRunning:
         assert _is_running(pid_file) is False
 
     def test_returns_false_when_process_not_found(self, tmp_path: Path) -> None:
+        import json
+
         pid_file = tmp_path / "comfyui.pid"
-        pid_file.write_text("999999999")  # unlikely to exist
+        pid_file.write_text(json.dumps({"pid": 999999999, "port": 8188}))
         with patch("os.kill", side_effect=ProcessLookupError):
             assert _is_running(pid_file) is False
 
     def test_returns_true_when_process_alive(self, tmp_path: Path) -> None:
+        import json
+
         pid_file = tmp_path / "comfyui.pid"
-        pid_file.write_text("1234")
+        pid_file.write_text(json.dumps({"pid": 1234, "port": 8188}))
         with patch("os.kill", return_value=None):
             assert _is_running(pid_file) is True
 
     def test_returns_false_on_permission_error(self, tmp_path: Path) -> None:
+        import json
+
         pid_file = tmp_path / "comfyui.pid"
-        pid_file.write_text("1")
+        pid_file.write_text(json.dumps({"pid": 1, "port": 8188}))
         with patch("os.kill", side_effect=PermissionError):
             assert _is_running(pid_file) is False
 
