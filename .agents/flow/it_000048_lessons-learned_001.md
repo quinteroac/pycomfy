@@ -51,3 +51,21 @@
 **Useful Context for Future Agents:**
 - The `--port` option default (`_DEFAULT_PORT = 8188`) and the validated range (1–65535) are both enforced in `cli/commands/comfyui.py:start()`. Any future `restart` command that delegates to `start()` will inherit the validation automatically.
 - Typer does not natively validate integer ranges via `typer.Option`; the manual `if` check is intentional and consistent with the project's error-handling pattern (no exceptions for expected failures).
+
+## US-004 — Auto-open Browser with `--open`
+
+**Summary:** Added `--open` boolean flag to the existing `start` command in `cli/commands/comfyui.py`. When set and the server becomes ready, calls `_open_browser(url)` which wraps `webbrowser.open()`. Browser is not opened if server times out or if start exits early (already running). Added 7 tests in `tests/test_cli_comfyui_us004_it000048.py`.
+
+**Key Decisions:**
+- Extracted `_open_browser(url)` as a standalone helper to enable clean mocking in tests — same pattern used for `_terminate_process` in US-002.
+- Browser open is gated on `ready=True` to avoid opening a tab pointing at a non-responsive server.
+- Typer boolean flags require `typer.Option("--open")` with a `bool` default of `False`; Typer auto-generates `--no-open` as the inverse.
+
+**Pitfalls Encountered:**
+- `CliRunner(mix_stderr=False)` is not supported in this version of Typer — use `CliRunner()` (no arguments), matching existing test files.
+- The return type annotation `"typer.testing.Result"` (string forward ref) caused an `F821 Undefined name` ruff error because `typer` was not imported in the test file. Fixed by importing `Result` directly from `typer.testing`.
+
+**Useful Context for Future Agents:**
+- `_open_browser` is the correct extension point if the browser-open behaviour ever needs customisation (e.g. choosing a specific browser profile).
+- `webbrowser.open()` is cross-platform by design (stdlib); no platform conditionals are needed.
+- The `--open` flag is silently ignored when the server does not become ready within the timeout — this is intentional UX (a warning is already printed, no extra error for the browser not opening).

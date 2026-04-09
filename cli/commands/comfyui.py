@@ -20,6 +20,13 @@ US-003 acceptance criteria:
   AC02 — printed URL reflects the custom port
   AC03 — invalid port (< 1 or > 65535) prints error and exits with non-zero code
   AC04 — typecheck / lint passes
+
+US-004 acceptance criteria:
+  AC01 — --open opens http://localhost:<port> in the default browser once server is ready
+  AC02 — uses webbrowser.open() (stdlib) — no additional dependency
+  AC03 — works on Linux, macOS, and Windows
+  AC04 — typecheck / lint passes
+  AC05 — visually verified in browser: ComfyUI interface loads
 """
 
 from __future__ import annotations
@@ -31,6 +38,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+import webbrowser
 from pathlib import Path
 from typing import Annotated
 
@@ -114,6 +122,11 @@ def _terminate_process(pid: int) -> None:
         os.kill(pid, signal.SIGTERM)
 
 
+def _open_browser(url: str) -> None:
+    """Open *url* in the default browser (US-004 AC02)."""
+    webbrowser.open(url)
+
+
 @app.command("start")
 def start(
     port: Annotated[
@@ -124,6 +137,10 @@ def start(
         int,
         typer.Option("--timeout", help="Seconds to wait for ComfyUI to become ready."),
     ] = _READY_TIMEOUT,
+    open_browser: Annotated[
+        bool,
+        typer.Option("--open", help="Open the ComfyUI URL in the default browser once ready."),
+    ] = False,
 ) -> None:
     """Launch ComfyUI web UI as a background process."""
     # US-003 AC03 — validate port range
@@ -169,12 +186,16 @@ def start(
     # AC04 — wait for the server to be ready, then print the URL
     typer.echo(f"Starting ComfyUI on port {port}…")
     ready = _wait_until_ready(port, timeout=timeout)
+    url = f"http://localhost:{port}"
     if ready:
-        typer.echo(f"ComfyUI is running at http://localhost:{port}")
+        typer.echo(f"ComfyUI is running at {url}")
+        # US-004 AC01 — open browser if requested and server is ready
+        if open_browser:
+            _open_browser(url)
     else:
         typer.echo(
             f"Warning: ComfyUI did not respond within {timeout}s. "
-            f"It may still be loading — check http://localhost:{port}"
+            f"It may still be loading — check {url}"
         )
 
 
