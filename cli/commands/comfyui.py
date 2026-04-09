@@ -1,18 +1,27 @@
-"""``parallax comfyui start`` — launch ComfyUI web UI as a background process.
+"""``parallax comfyui`` — manage ComfyUI web UI as a background process.
 
-Acceptance criteria implemented:
+US-001 acceptance criteria:
   AC01 — launches ComfyUI using the runtime at ~/.parallax/env
   AC02 — default port 8188
   AC03 — writes PID to ~/.config/parallax/comfyui.pid
   AC04 — prints URL once the server is ready
   AC05 — if already running, prints warning and exits without starting a second instance
   AC06 — typecheck / lint passes
+
+US-002 acceptance criteria:
+  AC01 — reads PID from ~/.config/parallax/comfyui.pid and terminates the process
+  AC02 — PID file removed after successful stop
+  AC03 — if no instance is running, prints informative message and exits with code 0
+  AC04 — cross-platform: SIGTERM on Linux/macOS, TerminateProcess on Windows
+  AC05 — typecheck / lint passes
 """
 
 from __future__ import annotations
 
 import os
+import signal
 import subprocess
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -90,6 +99,15 @@ def _wait_until_ready(port: int, timeout: int = _READY_TIMEOUT) -> bool:
     return False
 
 
+def _terminate_process(pid: int) -> None:
+    """Terminate a process: SIGTERM on POSIX, TerminateProcess on Windows (US-002 AC04)."""
+    if sys.platform == "win32":
+        # On Windows, os.kill with SIGTERM calls TerminateProcess via the CRT.
+        os.kill(pid, signal.SIGTERM)
+    else:
+        os.kill(pid, signal.SIGTERM)
+
+
 @app.command("start")
 def start(
     port: Annotated[
@@ -147,3 +165,31 @@ def start(
             f"Warning: ComfyUI did not respond within {timeout}s. "
             f"It may still be loading — check http://localhost:{port}"
         )
+
+
+@app.command("stop")
+def stop() -> None:
+    """Stop the running ComfyUI process."""
+    pid_file = _pid_file()
+
+    # US-002 AC03 — no instance running
+    if not _is_running(pid_file):
+        typer.echo("No ComfyUI instance is currently running.")
+        return
+
+    pid = int(pid_file.read_text(encoding="utf-8").strip())
+
+    # US-002 AC01 + AC04 — terminate the process
+    try:
+        _terminate_process(pid)
+    except (ProcessLookupError, PermissionError) as exc:
+        typer.echo(f"Error: could not terminate process {pid}: {exc}", err=True)
+        raise typer.Exit(1)
+
+    # US-002 AC02 — remove PID file after successful stop
+    try:
+        pid_file.unlink()
+    except OSError:
+        pass
+
+    typer.echo(f"ComfyUI (PID {pid}) stopped.")

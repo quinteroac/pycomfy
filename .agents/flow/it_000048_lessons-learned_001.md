@@ -19,3 +19,20 @@
 - The PID file lives at `~/.config/parallax/comfyui.pid` — future `stop`/`restart` commands should use the same `_pid_file()` helper from `cli/commands/comfyui.py`.
 - The `_DEFAULT_PORT = 8188` constant is canonical for ComfyUI; the inference server runs on port 5000. Do not mix them.
 - When `_wait_until_ready` polls `http://localhost:<port>`, it swallows `urllib.error.URLError` and `OSError` — this is intentional since the server may refuse connections during startup.
+
+## US-002 — Stop ComfyUI
+
+**Summary:** Added `parallax comfyui stop` command to the existing `cli/commands/comfyui.py` module. The command reads the PID from `~/.config/parallax/comfyui.pid`, terminates the process, removes the PID file, and prints a confirmation. If no instance is running, it prints an informative message and exits 0.
+
+**Key Decisions:**
+- Extracted `_terminate_process(pid)` as a standalone helper for easy mocking in tests and to document the cross-platform intent: `os.kill(pid, signal.SIGTERM)` on both POSIX and Windows — Python's `os.kill` internally calls `TerminateProcess` on Windows when given `SIGTERM`.
+- Reused the existing `_is_running()` and `_pid_file()` helpers — no duplication required.
+- PID file removal uses `pid_file.unlink()` inside a `try/except OSError` for best-effort cleanup that won't crash if the file was already removed by another process.
+
+**Pitfalls Encountered:**
+- The test helper `_run_stop` patches `_terminate_process` at the module level; without this the real `os.kill` would be called with a fake PID and raise `ProcessLookupError`, masking the actual test logic.
+
+**Useful Context for Future Agents:**
+- `_terminate_process` is the correct extension point for a future `restart` command — call `stop()` logic then `start()` logic.
+- On Windows, `os.kill(pid, signal.SIGTERM)` is equivalent to `TerminateProcess`; no `ctypes` or `taskkill` subprocess is needed.
+- The `sys.platform` check in `_terminate_process` is intentional documentation — both branches call the same thing, making the cross-platform contract explicit without dead code.
